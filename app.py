@@ -3,33 +3,23 @@ import pandas as pd
 import os
 from datetime import date
 
+# -----------------------------------------
+# CONFIGURACIÓN BÁSICA
+# -----------------------------------------
 st.set_page_config(page_title="Asistencia Centros Barriales", layout="wide")
 
 CENTROS = ["Nudo a Nudo", "Casa Maranatha", "Calle Belén"]
 
-# Espacios por centro (podés agregar/sacar tranquilo)
-ESPACIOS_POR_CENTRO = {
-    "Casa Maranatha": [
-        "Taller de costura",
-        "Apoyo escolar primaria",
-        "Apoyo escolar secundaria",
-        "FINES",
-        "Espacio Joven",
-        "La Ronda",
-        "Otros"
-    ],
-    "Calle Belén": [
-        "Centro abierto",
-        "Talleres",
-        "Apoyo escolar",
-        "Otros"
-    ],
-    "Nudo a Nudo": [
-        "Espacio general",
-        "Talleres",
-        "Otros"
-    ]
-}
+# Sólo definimos espacios para Casa Maranatha
+ESPACIOS_MARANATHA = [
+    "Taller de costura",
+    "Apoyo escolar primaria",
+    "Apoyo escolar secundaria",
+    "FINES",
+    "Espacio Joven",
+    "La Ronda",
+    "Otros"
+]
 
 TURNOS = ["Mañana", "Tarde", "Noche", "Continuo"]
 
@@ -37,7 +27,9 @@ PERSONAS_FILE = "personas.csv"
 RESUMEN_FILE = "resumen_diario.csv"
 
 
-# ---------- AUXILIARES ----------
+# -----------------------------------------
+# FUNCIONES AUXILIARES
+# -----------------------------------------
 def cargar_personas():
     if os.path.exists(PERSONAS_FILE):
         return pd.read_csv(PERSONAS_FILE)
@@ -68,13 +60,15 @@ def guardar_resumen(df: pd.DataFrame):
     df.to_csv(RESUMEN_FILE, index=False)
 
 
-def generar_nuevo_id(df: pd.DataFrame, col: str) -> int:
+def generar_nuevo_id(df: pd.DataFrame, columna: str) -> int:
     if df.empty:
         return 1
-    return int(df[col].max()) + 1
+    return int(df[columna].max()) + 1
 
 
-# ---------- CARGA ----------
+# -----------------------------------------
+# CARGA INICIAL
+# -----------------------------------------
 personas = cargar_personas()
 resumen = cargar_resumen()
 
@@ -87,14 +81,14 @@ st.sidebar.markdown("---")
 st.sidebar.caption("App interna de registro de asistencia\nHogar de Cristo Bahía Blanca")
 
 tab_registro, tab_personas, tab_reportes = st.tabs(
-    ["📅 Registrar día / espacio", "👤 Personas del centro", "📊 Reportes"]
+    ["📅 Registrar día / espacio", "👤 Personas", "📊 Reportes"]
 )
 
-# ======================================================
+# =====================================================
 # TAB 1: REGISTRAR DÍA / ESPACIO
-# ======================================================
+# =====================================================
 with tab_registro:
-    st.subheader("Registrar asistencia de un espacio")
+    st.subheader("Registrar asistencia")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -109,23 +103,27 @@ with tab_registro:
 
     col3, col4, col5 = st.columns(3)
     with col3:
-        espacios = ESPACIOS_POR_CENTRO.get(centro, ["General"])
-        espacio = st.selectbox("Espacio / taller", espacios)
+        # Sólo pedimos espacio si es Casa Maranatha
+        if centro == "Casa Maranatha":
+            espacio = st.selectbox("Espacio / taller", ESPACIOS_MARANATHA)
+        else:
+            espacio = "General"
+            st.markdown("**Espacio:** General (no se divide por espacios en este centro)")
     with col4:
-        turno = st.selectbox("Turno", TURNOS, index=1)  # por defecto Tarde
+        turno = st.selectbox("Turno", TURNOS, index=1)  # Tarde por defecto
     with col5:
         total_presentes = st.number_input(
-            "Total presentes en ese espacio",
+            "Total presentes",
             min_value=0,
             step=1
         )
 
     notas = st.text_area(
         "Notas (opcional)",
-        placeholder="Ej: vinieron 3 nuevos, faltó tal chico, salida, etc."
+        placeholder="Ej: vinieron 3 nuevos, faltó tal chico, actividad especial..."
     )
 
-    if st.button("💾 Guardar registro de este espacio", use_container_width=True):
+    if st.button("💾 Guardar registro", use_container_width=True):
         id_registro = generar_nuevo_id(resumen, "id_registro")
         nueva_fila = {
             "id_registro": id_registro,
@@ -138,7 +136,7 @@ with tab_registro:
         }
         resumen = pd.concat([resumen, pd.DataFrame([nueva_fila])], ignore_index=True)
         guardar_resumen(resumen)
-        st.success("Asistencia del espacio guardada correctamente ✅")
+        st.success("Registro guardado correctamente ✅")
 
     st.markdown("---")
     st.markdown("### Últimos registros de este centro")
@@ -153,9 +151,10 @@ with tab_registro:
         if df_centro.empty:
             st.info("Todavía no hay registros para este centro.")
         else:
-            st.dataframe(df_centro.head(15), use_container_width=True)
+            st.dataframe(df_centro.head(20), use_container_width=True)
 
-            st.markdown("#### Evolución de la asistencia total del centro")
+            # Gráfico de evolución total para ese centro
+            st.markdown("#### Evolución total de la asistencia del centro")
             df_agr = (
                 df_centro.groupby("fecha")["total_presentes"]
                 .sum()
@@ -165,11 +164,11 @@ with tab_registro:
             st.line_chart(df_agr)
 
 
-# ======================================================
-# TAB 2: PERSONAS DEL CENTRO
-# ======================================================
+# =====================================================
+# TAB 2: PERSONAS
+# =====================================================
 with tab_personas:
-    st.subheader("Personas del centro barrial")
+    st.subheader("Personas por centro barrial")
 
     centro_p = st.selectbox(
         "Centro",
@@ -193,6 +192,7 @@ with tab_personas:
         st.metric("Inactivas", inactivas)
 
     st.markdown("### Lista general")
+
     if personas_centro.empty:
         st.info("Todavía no hay personas cargadas en este centro.")
     else:
@@ -253,7 +253,12 @@ with tab_personas:
             ["id_persona", "nombre", "apellido", "edad", "anio_llegada", "activo"]
         ].copy()
 
-        edit_df = st.data_editor(edit_df, num_rows="fixed", hide_index=True, use_container_width=True)
+        edit_df = st.data_editor(
+            edit_df,
+            num_rows="fixed",
+            hide_index=True,
+            use_container_width=True
+        )
 
         if st.button("💾 Guardar cambios en personas"):
             for _, row in edit_df.iterrows():
@@ -265,9 +270,9 @@ with tab_personas:
             st.success("Cambios guardados ✅")
 
 
-# ======================================================
+# =====================================================
 # TAB 3: REPORTES
-# ======================================================
+# =====================================================
 with tab_reportes:
     st.subheader("Reportes generales de asistencia")
 
@@ -297,7 +302,7 @@ with tab_reportes:
         if df.empty:
             st.info("No hay datos para ese filtro.")
         else:
-            # Métricas generales (todo junto)
+            # ---- Métricas globales
             total_dias = df["fecha"].nunique()
             total_presentes = df["total_presentes"].sum()
             promedio_dia = total_presentes / total_dias if total_dias > 0 else 0
@@ -306,36 +311,83 @@ with tab_reportes:
             with m1:
                 st.metric("Días con registros", total_dias)
             with m2:
-                st.metric("Total de personas (suma de todos los espacios)", int(total_presentes))
+                st.metric("Total de personas (suma de todos los espacios)",
+                          int(total_presentes))
             with m3:
                 st.metric("Promedio por día", f"{promedio_dia:.1f}")
 
-            st.markdown("---")
+            st.markdown("### Resumen por centro")
+            resumen_centros = (
+                df.groupby("centro")
+                .agg(
+                    total_presentes=("total_presentes", "sum"),
+                    dias_con_registro=("fecha", "nunique")
+                )
+            )
+            resumen_centros["promedio_por_dia"] = (
+                resumen_centros["total_presentes"] / resumen_centros["dias_con_registro"]
+            ).round(1)
+            st.dataframe(resumen_centros, use_container_width=True)
+
+            # ---- Gráficos generales
             g1, g2 = st.columns(2)
 
-            # Totales por centro
             with g1:
                 st.markdown("#### Total por centro")
                 tot_centro = df.groupby("centro")["total_presentes"].sum()
                 st.bar_chart(tot_centro)
 
-            # Totales por espacio
             with g2:
-                st.markdown("#### Total por espacio (todos los centros elegidos)")
-                tot_espacio = df.groupby("espacio")["total_presentes"].sum().sort_values(ascending=False)
-                st.bar_chart(tot_espacio)
+                st.markdown("#### Evolución en el tiempo (total de centros seleccionados)")
+                df_line = (
+                    df.groupby("fecha")["total_presentes"]
+                    .sum()
+                    .reset_index()
+                    .set_index("fecha")
+                )
+                st.line_chart(df_line)
 
             st.markdown("---")
-            st.markdown("### Detalle por día y espacio")
 
-            df_det = df.sort_values(["fecha", "centro", "espacio"], ascending=[False, True, True])
+            # ---- Foco especial en Casa Maranatha por espacio
+            st.markdown("### Casa Maranatha – Detalle por espacios")
+
+            df_mara = df[df["centro"] == "Casa Maranatha"].copy()
+            if df_mara.empty:
+                st.info("No hay datos de Casa Maranatha en este rango de fechas.")
+            else:
+                resumen_espacios = (
+                    df_mara.groupby("espacio")
+                    .agg(
+                        total_presentes=("total_presentes", "sum"),
+                        dias_con_registro=("fecha", "nunique")
+                    )
+                    .sort_values("total_presentes", ascending=False)
+                )
+                resumen_espacios["promedio_por_dia"] = (
+                    resumen_espacios["total_presentes"] /
+                    resumen_espacios["dias_con_registro"]
+                ).round(1)
+
+                st.dataframe(resumen_espacios, use_container_width=True)
+
+                st.markdown("#### Gráfico: total por espacio (Casa Maranatha)")
+                st.bar_chart(resumen_espacios["total_presentes"])
+
+            st.markdown("---")
+            st.markdown("### Detalle completo (para hoja de cálculo)")
+
+            df_det = df.sort_values(
+                ["fecha", "centro", "espacio"],
+                ascending=[False, True, True]
+            )
             st.dataframe(df_det, use_container_width=True)
 
-            # Descarga
+            # Botón de descarga para Excel / Google Sheets
             csv = df_det.to_csv(index=False).encode("utf-8")
             st.download_button(
-                "⬇️ Descargar reporte (CSV)",
+                "⬇️ Descargar para Excel / Google Sheets (CSV)",
                 data=csv,
-                file_name="reporte_asistencia_centros_y_espacios.csv",
+                file_name="reporte_asistencia_centros.csv",
                 mime="text/csv",
             )
