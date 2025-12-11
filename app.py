@@ -18,14 +18,35 @@ TEXT_DARK = "#1A1A1A"
 # Inyectar CSS para hacerlo más elegante y con identidad
 CUSTOM_CSS = f"""
 <style>
-/* ----- Fondo general ----- */
-body {{
-    background-color: {BG_COLOR};
+/* ----- Fondo general de la app ----- */
+[data-testid="stAppViewContainer"] {{
+    background-color: {BG_COLOR} !important;  /* celestito Hogar */
+    color: {TEXT_DARK} !important;
+}}
+
+[data-testid="stHeader"] {{
+    background-color: {BG_COLOR} !important;
+    color: {TEXT_DARK} !important;
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+}}
+
+/* Para algunos temas oscuros */
+html, body {{
+    background-color: {BG_COLOR} !important;
+    color: {TEXT_DARK} !important;
+}}
+
+/* ----- Sidebar ----- */
+[data-testid="stSidebar"] {{
+    background-color: #F4F6FB !important;   /* clarito, no blanco puro */
+    border-right: 3px solid {PRIMARY_COLOR};
     color: {TEXT_DARK};
 }}
 
-section.main > div {{
-    padding-top: 0.5rem;
+[data-testid="stSidebar"] h1, 
+[data-testid="stSidebar"] h2, 
+[data-testid="stSidebar"] h3 {{
+    color: {PRIMARY_COLOR} !important;
 }}
 
 /* ----- Títulos ----- */
@@ -48,8 +69,8 @@ h1, h2, h3, h4 {{
     border-radius: 999px;
     padding: 0.5rem 1.1rem;
     margin-right: 0.3rem;
-    background-color: white;
-    border: 1px solid rgba(0,0,0,0.1);
+    background-color: #FFFFFF;
+    border: 1px solid rgba(0,0,0,0.12);
     font-weight: 500;
     color: {PRIMARY_COLOR};
 }}
@@ -73,24 +94,22 @@ h1, h2, h3, h4 {{
     color: white;
 }}
 
-/* ----- Sidebar ----- */
-[data-testid="stSidebar"] {{
-    background-color: white;
-    border-right: 3px solid {PRIMARY_COLOR};
-}}
-
 /* ----- Inputs ----- */
 input, select, textarea {{
     border-radius: 6px !important;
 }}
 
-/* ----- Tablas ----- */
+/* ----- Tablas / dataframes ----- */
 [data-testid="stDataFrame"] {{
-    background-color: white;
+    background-color: #FFFFFF;
     border-radius: 8px;
     padding: 0.6rem;
 }}
 
+/* Evitar textos grises raros */
+[data-testid="stMarkdownContainer"] {{
+    color: {TEXT_DARK};
+}}
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
@@ -865,7 +884,7 @@ with tab_reportes:
                 st.bar_chart(tipos_base)
 
             st.markdown("---")
-            st.markmarkdown("### Base de datos de personas")
+            st.markdown("### Base de datos de personas")
 
             centro_personas_bd = st.selectbox(
                 "Centro para ver personas",
@@ -983,6 +1002,6 @@ with tab_global:
 
             with st.expander("Ver registros crudos del año"):
                 st.dataframe(
-                    df_year.sort_values("fecha", descending=False),
+                    df_year.sort_values("fecha", ascending=False),
                     use_container_width=True,
                 )
