@@ -53,14 +53,17 @@ RESUMEN_FILE = "resumen_diario.csv"
 
 
 # -----------------------------------------
-# PERSONAS: nombre, frecuencia, centro
+# PERSONAS: nombre, frecuencia, centro, notas, fecha_alta
 # -----------------------------------------
 def cargar_personas():
-    """Carga personas.csv admitiendo distintos encabezados/sep.
-    Devuelve SIEMPRE columnas: nombre, frecuencia, centro
+    """
+    Carga personas.csv admitiendo distintos encabezados/sep.
+    Devuelve SIEMPRE columnas: nombre, frecuencia, centro, notas, fecha_alta
     """
     if not os.path.exists(PERSONAS_FILE):
-        df_vacio = pd.DataFrame(columns=["nombre", "frecuencia", "centro"])
+        df_vacio = pd.DataFrame(
+            columns=["nombre", "frecuencia", "centro", "notas", "fecha_alta"]
+        )
         df_vacio.to_csv(PERSONAS_FILE, index=False)
         return df_vacio
 
@@ -79,6 +82,9 @@ def cargar_personas():
         except Exception:
             pass
 
+    if df.empty:
+        df = pd.DataFrame()
+
     # 3) Normalizo nombres de columnas
     df.columns = [c.strip().lower() for c in df.columns]
 
@@ -91,20 +97,28 @@ def cargar_personas():
             rename_map[c] = "frecuencia"
         elif "centro" in c:
             rename_map[c] = "centro"
+        elif c in ["notas", "observaciones"]:
+            rename_map[c] = "notas"
+        elif c in ["fecha_alta", "alta", "fechaingreso", "fecha_ingreso"]:
+            rename_map[c] = "fecha_alta"
+
     df = df.rename(columns=rename_map)
 
     # 5) Asegurar columnas
-    for col in ["nombre", "frecuencia", "centro"]:
+    for col in ["nombre", "frecuencia", "centro", "notas", "fecha_alta"]:
         if col not in df.columns:
-            df[col] = ""
+            if col == "notas":
+                df[col] = ""
+            else:
+                df[col] = ""
 
-    # 6) Dejar solo esas 3
-    df = df[["nombre", "frecuencia", "centro"]]
+    # 6) Dejar solo esas 5 en orden
+    df = df[["nombre", "frecuencia", "centro", "notas", "fecha_alta"]]
 
     # 7) Guardar limpio
     df.to_csv(PERSONAS_FILE, index=False)
 
-    # 8) Avisar si no había centro
+    # 8) Aviso si no había centro
     if df["centro"].eq("").all():
         st.warning(
             "El archivo personas.csv no tenía una columna 'centro' clara. "
@@ -121,7 +135,8 @@ def guardar_personas(df: pd.DataFrame):
 
 # -----------------------------------------
 # RESUMEN DIARIO
-# columnas: fecha, centro, espacio, total_presentes, notas, coordinador, tipo_jornada
+# columnas: fecha, centro, espacio, total_presentes, notas,
+#           coordinador, tipo_jornada, cerrado
 # -----------------------------------------
 def cargar_resumen():
     """Carga resumen_diario.csv y se asegura que tenga columnas nuevas."""
@@ -135,6 +150,7 @@ def cargar_resumen():
                 "notas",
                 "coordinador",
                 "tipo_jornada",
+                "cerrado",
             ]
         )
         df.to_csv(RESUMEN_FILE, index=False)
@@ -142,11 +158,14 @@ def cargar_resumen():
 
     df = pd.read_csv(RESUMEN_FILE)
 
-    # Si es un archivo viejo sin columnas nuevas, las agrego
+    # Agregar columnas nuevas si faltan
     if "coordinador" not in df.columns:
         df["coordinador"] = ""
     if "tipo_jornada" not in df.columns:
         df["tipo_jornada"] = "Día habitual"
+    if "cerrado" not in df.columns:
+        # si no existe, asumimos que antes nunca se marcó cerrado
+        df["cerrado"] = False
 
     df.to_csv(RESUMEN_FILE, index=False)
     return df
@@ -206,12 +225,19 @@ if not df_centro_summary.empty:
     ]
 
     total_hoy = int(df_hoy["total_presentes"].sum())
+
     idx_sem = pd.date_range(hace_una_semana, hoy, freq="D")
     serie_sem = (
         df_sem.groupby("fecha")["total_presentes"].sum().reindex(idx_sem, fill_value=0)
     )
-    dias_sin = int((serie_sem == 0).sum())
     total_sem = int(serie_sem.sum())
+
+    # días con algún registro (aunque sea cerrado y 0)
+    fechas_con_reg = set(df_sem["fecha"].dt.date.unique())
+    dias_sin = 0
+    for d in idx_sem:
+        if d.date() not in fechas_con_reg:
+            dias_sin += 1
 else:
     total_hoy = 0
     total_sem = 0
@@ -226,8 +252,13 @@ with c3:
     st.metric("Días sin cargar esta semana", dias_sin)
 
 # ---------- Tabs principales ----------
-tab_registro, tab_personas, tab_reportes = st.tabs(
-    ["📅 Registrar asistencia", "👥 Personas", "📊 Reportes / Base de datos"]
+tab_registro, tab_personas, tab_reportes, tab_global = st.tabs(
+    [
+        "📅 Registrar asistencia",
+        "👥 Personas",
+        "📊 Reportes / Base de datos",
+        "🌍 Tablero global",
+    ]
 )
 
 
@@ -246,7 +277,7 @@ with tab_registro:
     with col2:
         st.write(f"**Coordinador/a:** {coordinador}")
 
-    fecha = st.date_input("Fecha", value=hoy, key="fecha_registro")
+    fecha = st.date_input("Fecha", value=hoy, key="reg_fecha")
 
     col3, col4 = st.columns(2)
     with col3:
@@ -254,7 +285,7 @@ with tab_registro:
             espacio = st.selectbox(
                 "Espacio",
                 ESPACIOS_MARANATHA,
-                key="espacio_maranatha",
+                key="reg_espacio",
             )
         else:
             espacio = "General"
@@ -264,7 +295,7 @@ with tab_registro:
             "Total presentes",
             min_value=0,
             step=1,
-            key="presentes_registro",
+            key="reg_presentes",
         )
 
     col5, col6 = st.columns(2)
@@ -272,24 +303,36 @@ with tab_registro:
         tipo_jornada = st.selectbox(
             "Tipo de día",
             TIPOS_JORNADA,
-            key="tipo_jornada",
+            key="reg_tipo_jornada",
         )
     with col6:
-        notas = st.text_area("Notas (opcional)", key="notas_registro")
+        cerrado = st.checkbox(
+            "Hoy el centro estuvo cerrado / no abrió",
+            key="reg_cerrado",
+        )
+
+    if cerrado:
+        st.info("Marcado como día cerrado: se registrará con 0 presentes.")
+        total_presentes_val = 0
+    else:
+        total_presentes_val = int(total_presentes)
+
+    notas = st.text_area("Notas (opcional)", key="reg_notas")
 
     if st.button(
         "💾 Guardar asistencia",
         use_container_width=True,
-        key="btn_guardar_asistencia",
+        key="reg_btn_guardar",
     ):
         nueva = {
             "fecha": fecha.isoformat(),
             "centro": centro,
             "espacio": espacio,
-            "total_presentes": int(total_presentes),
+            "total_presentes": total_presentes_val,
             "notas": notas.strip(),
             "coordinador": coordinador,
-            "tipo_jornada": tipo_jornada,
+            "tipo_jornada": tipo_jornada if not cerrado else "Centro cerrado / no abrió",
+            "cerrado": cerrado,
         }
         resumen = pd.concat([resumen, pd.DataFrame([nueva])], ignore_index=True)
         guardar_resumen(resumen)
@@ -305,7 +348,7 @@ with tab_registro:
         dfc["fecha"] = pd.to_datetime(dfc["fecha"], errors="coerce")
         dfc = dfc.sort_values("fecha", ascending=False)
 
-        with st.expander("Ver últimos registros"):
+        with st.expander("Ver últimos registros", expanded=False):
             st.dataframe(dfc.head(30), use_container_width=True)
 
         if not dfc.empty:
@@ -325,33 +368,81 @@ with tab_personas:
     st.subheader("Personas de este centro")
 
     centro_p = centro_logueado  # bloqueado al centro elegido en el costado
+    personas_centro = personas[personas["centro"] == centro_p].copy()
 
-    personas_centro = personas[personas["centro"] == centro_p]
+    # Buscador rápido
+    buscador = st.text_input(
+        "Buscar por nombre",
+        key="per_buscador",
+        placeholder="Escribí parte del nombre...",
+    )
+
+    if buscador.strip():
+        personas_centro_filtro = personas_centro[
+            personas_centro["nombre"]
+            .fillna("")
+            .str.contains(buscador.strip(), case=False, na=False)
+        ]
+    else:
+        personas_centro_filtro = personas_centro
 
     st.markdown("### Lista de personas")
-    if personas_centro.empty:
-        st.info("Todavía no hay personas cargadas para este centro.")
+    if personas_centro_filtro.empty:
+        st.info("No se encontraron personas para este centro con ese filtro.")
     else:
-        with st.expander("Ver lista completa", expanded=True):
-            st.dataframe(personas_centro, use_container_width=True)
+        with st.expander("Ver lista filtrada", expanded=True):
+            st.dataframe(
+                personas_centro_filtro[
+                    ["nombre", "frecuencia", "centro", "fecha_alta", "notas"]
+                ],
+                use_container_width=True,
+            )
 
+    # -------- Ficha simple de persona --------
+    st.markdown("---")
+    st.subheader("Ficha de persona")
+
+    nombres_unicos = sorted(personas_centro["nombre"].dropna().unique().tolist())
+    if nombres_unicos:
+        persona_sel = st.selectbox(
+            "Elegí una persona para ver su ficha",
+            ["(Elegir)"] + nombres_unicos,
+            key="per_ficha_sel",
+        )
+        if persona_sel != "(Elegir)":
+            ficha = personas_centro[personas_centro["nombre"] == persona_sel].iloc[0]
+            st.markdown(f"**Nombre:** {ficha['nombre']}")
+            st.markdown(f"**Centro:** {ficha['centro']}")
+            st.markdown(f"**Frecuencia:** {ficha['frecuencia']}")
+            st.markdown(f"**Fecha de alta:** {ficha['fecha_alta'] or '-'}")
+            st.markdown("**Notas / observaciones:**")
+            st.write(ficha["notas"] or "—")
+    else:
+        st.info("Todavía no hay personas cargadas en este centro.")
+
+    # -------- Agregar persona nueva --------
     st.markdown("---")
     st.subheader("Agregar persona nueva")
 
     col1, col2 = st.columns(2)
     with col1:
-        nombre_nuevo = st.text_input("Nombre completo", key="nombre_nuevo")
+        nombre_nuevo = st.text_input("Nombre completo", key="per_nombre_nuevo")
     with col2:
         frecuencia_nueva = st.selectbox(
             "Frecuencia",
             ["Diaria", "Semanal", "Mensual", "No asiste"],
-            key="frecuencia_nueva",
+            key="per_frecuencia_nueva",
         )
+
+    notas_nueva = st.text_area(
+        "Notas / observaciones (opcional)",
+        key="per_notas_nueva",
+    )
 
     if st.button(
         "➕ Agregar persona",
         use_container_width=True,
-        key="btn_agregar_persona",
+        key="per_btn_agregar",
     ):
         if nombre_nuevo.strip() == "":
             st.error("Escribí un nombre.")
@@ -360,6 +451,8 @@ with tab_personas:
                 "nombre": nombre_nuevo.strip(),
                 "frecuencia": frecuencia_nueva,
                 "centro": centro_p,
+                "notas": notas_nueva.strip(),
+                "fecha_alta": hoy.isoformat(),
             }
             personas = pd.concat(
                 [personas, pd.DataFrame([nueva])], ignore_index=True
@@ -367,26 +460,30 @@ with tab_personas:
             guardar_personas(personas)
             st.success("Persona agregada correctamente")
 
+    # -------- Editar personas --------
     st.markdown("---")
     st.subheader("Editar personas de este centro")
 
-    personas_centro = personas[personas["centro"] == centro_p]  # recargar
-    edit = st.data_editor(
-        personas_centro,
-        use_container_width=True,
-        num_rows="dynamic",
-        key="editor_personas",
-    )
+    personas_centro = personas[personas["centro"] == centro_p].copy()  # recargar
+    if personas_centro.empty:
+        st.info("Todavía no hay personas para editar en este centro.")
+    else:
+        edit = st.data_editor(
+            personas_centro,
+            use_container_width=True,
+            num_rows="dynamic",
+            key="per_editor_personas",
+        )
 
-    if st.button(
-        "💾 Guardar cambios",
-        use_container_width=True,
-        key="btn_guardar_personas",
-    ):
-        otras = personas[personas["centro"] != centro_p]
-        personas = pd.concat([otras, edit], ignore_index=True)
-        guardar_personas(personas)
-        st.success("Cambios guardados")
+        if st.button(
+            "💾 Guardar cambios",
+            use_container_width=True,
+            key="per_btn_guardar_cambios",
+        ):
+            otras = personas[personas["centro"] != centro_p]
+            personas = pd.concat([otras, edit], ignore_index=True)
+            guardar_personas(personas)
+            st.success("Cambios guardados")
 
 
 # =====================================================
@@ -402,7 +499,7 @@ with tab_reportes:
             "¿Qué querés ver?",
             ["📅 Hoy / por día", "📆 Esta semana", "📚 Base de datos completa"],
             horizontal=True,
-            key="radio_vista_reportes",
+            key="rep_vista",
         )
 
         df = resumen.copy()
@@ -413,14 +510,14 @@ with tab_reportes:
             col_f1, col_f2 = st.columns(2)
             with col_f1:
                 fecha_sel = st.date_input(
-                    "Fecha", value=hoy, key="fecha_reportes_dia"
+                    "Fecha", value=hoy, key="rep_dia_fecha"
                 )
             with col_f2:
                 centros_sel = st.multiselect(
                     "Centros",
                     CENTROS,
                     default=CENTROS,
-                    key="centros_reportes_dia",
+                    key="rep_dia_centros",
                 )
 
             df_dia = df[
@@ -468,14 +565,24 @@ with tab_reportes:
             with st.expander("Ver registros detallados del día"):
                 st.dataframe(df_dia, use_container_width=True)
 
+            # Resumen por tipo de jornada
+            st.markdown("#### Resumen por tipo de jornada")
+            if not df_dia.empty:
+                tipos = (
+                    df_dia.groupby("tipo_jornada")["total_presentes"]
+                    .sum()
+                    .sort_values(ascending=False)
+                )
+                st.bar_chart(tipos)
+
             # Botón para saltar a vista semanal cuando hay un solo centro
             if len(centros_sel) == 1:
                 if st.button(
                     "Ver semana de este centro",
-                    key="btn_ir_semana_desde_dia",
+                    key="rep_dia_btn_ir_semana",
                 ):
-                    st.session_state["radio_vista_reportes"] = "📆 Esta semana"
-                    st.session_state["centro_semana"] = centros_sel[0]
+                    st.session_state["rep_vista"] = "📆 Esta semana"
+                    st.session_state["rep_sem_centro"] = centros_sel[0]
 
         # ------------------- VISTA SEMANAL -------------------
         elif vista == "📆 Esta semana":
@@ -485,9 +592,9 @@ with tab_reportes:
                     "Centro",
                     CENTROS,
                     index=CENTROS.index(
-                        st.session_state.get("centro_semana", centro_logueado)
+                        st.session_state.get("rep_sem_centro", centro_logueado)
                     ),
-                    key="centro_semana",
+                    key="rep_sem_centro",
                 )
 
                 # Filtro coordinador
@@ -495,14 +602,14 @@ with tab_reportes:
                 coord_sem = st.selectbox(
                     "Coordinador (opcional)",
                     ["Todos"] + coords_centro,
-                    key="coord_semana",
+                    key="rep_sem_coord",
                 )
 
             with col_w2:
                 fin_semana = st.date_input(
                     "Hasta (inclusive)",
                     value=hoy,
-                    key="fin_semana",
+                    key="rep_sem_fin",
                 )
 
             inicio_semana = fin_semana - timedelta(days=6)
@@ -533,9 +640,16 @@ with tab_reportes:
                 )
 
                 total_sem = int(serie.sum())
-                dias_con = int((serie > 0).sum())
-                dias_sin = int((serie == 0).sum())
-                prom_dia = total_sem / 7
+
+                # días con al menos un registro (aunque sea cerrado)
+                fechas_con_reg = set(df_sem["fecha"].dt.date.unique())
+                dias_sin = 0
+                for d in idx:
+                    if d.date() not in fechas_con_reg:
+                        dias_sin += 1
+
+                dias_con = len(idx) - dias_sin
+                prom_dia = total_sem / len(idx) if len(idx) > 0 else 0
 
                 cm1, cm2, cm3, cm4 = st.columns(4)
                 with cm1:
@@ -559,6 +673,15 @@ with tab_reportes:
                 with st.expander("Ver registros crudos de la semana"):
                     st.dataframe(df_sem.sort_values("fecha"), use_container_width=True)
 
+                # Resumen por tipo de jornada en la semana
+                st.markdown("#### Resumen por tipo de jornada (semana)")
+                tipos_sem = (
+                    df_sem.groupby("tipo_jornada")["total_presentes"]
+                    .sum()
+                    .sort_values(ascending=False)
+                )
+                st.bar_chart(tipos_sem)
+
         # ------------------- VISTA BASE COMPLETA -------------------
         else:  # "📚 Base de datos completa"
             st.markdown("### Base de datos de asistencia")
@@ -569,18 +692,18 @@ with tab_reportes:
                     "Centros",
                     CENTROS,
                     default=CENTROS,
-                    key="centros_base",
+                    key="rep_base_centros",
                 )
             with col_b2:
                 fecha_desde = st.date_input(
                     "Desde",
                     value=date(2025, 1, 1),
-                    key="fecha_desde_base",
+                    key="rep_base_desde",
                 )
                 fecha_hasta = st.date_input(
                     "Hasta",
                     value=hoy,
-                    key="fecha_hasta_base",
+                    key="rep_base_hasta",
                 )
             with col_b3:
                 # Filtro coordinador global
@@ -590,7 +713,7 @@ with tab_reportes:
                 coord_base = st.selectbox(
                     "Coordinador (opcional)",
                     ["Todos"] + coords_globales,
-                    key="coord_base",
+                    key="rep_base_coord",
                 )
 
             df_base = df[
@@ -616,8 +739,16 @@ with tab_reportes:
                     df_base.to_csv(index=False).encode("utf-8"),
                     "base_asistencia.csv",
                     "text/csv",
-                    key="btn_descargar_asistencia_base",
+                    key="rep_base_btn_descargar_asistencia",
                 )
+
+                st.markdown("#### Resumen por tipo de jornada (periodo seleccionado)")
+                tipos_base = (
+                    df_base.groupby("tipo_jornada")["total_presentes"]
+                    .sum()
+                    .sort_values(ascending=False)
+                )
+                st.bar_chart(tipos_base)
 
             st.markdown("---")
             st.markdown("### Base de datos de personas")
@@ -626,7 +757,7 @@ with tab_reportes:
                 "Centro para ver personas",
                 ["Todos"] + CENTROS,
                 index=(["Todos"] + CENTROS).index(centro_logueado),
-                key="centro_personas_base",
+                key="rep_base_centro_personas",
             )
 
             if centro_personas_bd == "Todos":
@@ -642,5 +773,99 @@ with tab_reportes:
                 df_personas_bd.to_csv(index=False).encode("utf-8"),
                 "base_personas.csv",
                 "text/csv",
-                key="btn_descargar_personas_base",
+                key="rep_base_btn_descargar_personas",
+            )
+
+
+# =====================================================
+# TAB 4 — TABLERO GLOBAL
+# =====================================================
+with tab_global:
+    st.subheader("Tablero global Hogar de Cristo Bahía Blanca")
+
+    if resumen.empty:
+        st.info("Todavía no hay datos cargados.")
+    else:
+        df = resumen.copy()
+        df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce")
+
+        # Últimos 7 días global
+        fin = hoy
+        inicio = fin - timedelta(days=6)
+        df_sem_global = df[
+            (df["fecha"].dt.date >= inicio) & (df["fecha"].dt.date <= fin)
+        ]
+
+        idx = pd.date_range(inicio, fin, freq="D")
+        serie_global = (
+            df_sem_global.groupby("fecha")["total_presentes"]
+            .sum()
+            .reindex(idx, fill_value=0)
+        )
+
+        total_hoy_global = int(
+            df_sem_global[df_sem_global["fecha"].dt.date == hoy][
+                "total_presentes"
+            ].sum()
+        )
+        total_sem_global = int(serie_global.sum())
+
+        # Centro con más ingresos en la semana
+        if not df_sem_global.empty:
+            tot_por_centro = (
+                df_sem_global.groupby("centro")["total_presentes"]
+                .sum()
+                .sort_values(ascending=False)
+            )
+            centro_top = tot_por_centro.index[0]
+            centro_top_val = int(tot_por_centro.iloc[0])
+        else:
+            centro_top = "-"
+            centro_top_val = 0
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("Total HOY (todos los centros)", total_hoy_global)
+        with c2:
+            st.metric(
+                "Total últimos 7 días (global)",
+                total_sem_global,
+            )
+        with c3:
+            st.metric(
+                "Centro con más ingresos (última semana)",
+                f"{centro_top} ({centro_top_val})",
+            )
+
+        st.markdown("### Evolución global últimos 7 días")
+        st.line_chart(serie_global)
+
+        st.markdown("### Comparación por centro (últimos 7 días)")
+        if not df_sem_global.empty:
+            tot_centro_sem = (
+                df_sem_global.groupby("centro")["total_presentes"]
+                .sum()
+                .sort_values(ascending=False)
+            )
+            st.bar_chart(tot_centro_sem)
+
+        st.markdown("### Resumen global por tipo de jornada (últimos 30 días)")
+        inicio_30 = hoy - timedelta(days=29)
+        df_30 = df[
+            (df["fecha"].dt.date >= inicio_30) & (df["fecha"].dt.date <= hoy)
+        ]
+        if df_30.empty:
+            st.info("No hay datos en los últimos 30 días.")
+        else:
+            tipos_30 = (
+                df_30.groupby("tipo_jornada")["total_presentes"]
+                .sum()
+                .sort_values(ascending=False)
+            )
+            st.bar_chart(tipos_30)
+
+        with st.expander("Ver registros crudos últimos 30 días"):
+            st.dataframe(
+                df_30.sort_values("fecha", ascending=False),
+                use_container_width=True,
             )
