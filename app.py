@@ -4,9 +4,78 @@ import os
 from datetime import date, timedelta
 
 # -----------------------------------------
-# CONFIGURACIÓN BÁSICA
+# CONFIGURACIÓN BÁSICA Y ESTILO
 # -----------------------------------------
 st.set_page_config(page_title="Asistencia Centros Barriales", layout="wide")
+
+# Colores institucionales (CAMBIABLES)
+PRIMARY_COLOR = "#1D7A3C"   # Verde
+ACCENT_COLOR = "#F4B41A"    # Amarillo
+BG_COLOR = "#f8f9fa"        # Fondo claro
+
+# Inyectar CSS para hacerlo más elegante
+CUSTOM_CSS = f"""
+<style>
+body {{
+    background-color: {BG_COLOR};
+}}
+
+section.main > div {{
+    padding-top: 0.5rem;
+}}
+
+h1, h2, h3, h4, h5 {{
+    color: {PRIMARY_COLOR};
+    font-family: "Helvetica", "Arial", sans-serif;
+}}
+
+.stMetric {{
+    background-color: white !important;
+    border-radius: 12px;
+    padding: 0.5rem 0.75rem;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}}
+
+.stTabs [role="tab"] {{
+    border-radius: 999px;
+    padding: 0.4rem 1rem;
+    margin-right: 0.3rem;
+    border: 1px solid rgba(0,0,0,0.08);
+    background-color: white;
+    font-weight: 500;
+}}
+
+.stTabs [aria-selected="true"] {{
+    background-color: {PRIMARY_COLOR};
+    color: white;
+    border-color: {PRIMARY_COLOR};
+}}
+
+.stButton>button {{
+    border-radius: 999px;
+    border: none;
+    padding: 0.4rem 1rem;
+    font-weight: 600;
+    background-color: {PRIMARY_COLOR};
+    color: white;
+}}
+
+.stButton>button:hover {{
+    background-color: #15562A;
+    color: white;
+}}
+
+.sidebar .sidebar-content {{
+    background-color: white;
+}}
+
+[data-testid="stSidebar"] {{
+    background-color: white;
+}}
+
+</style>
+"""
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 CENTROS = ["Nudo a Nudo", "Casa Maranatha", "Calle Belén"]
 
@@ -50,6 +119,7 @@ TIPOS_JORNADA = [
 # Archivos
 PERSONAS_FILE = "personas.csv"
 RESUMEN_FILE = "resumen_diario.csv"
+LOGO_FILE = "logo_hogar.png"
 
 
 # -----------------------------------------
@@ -107,10 +177,7 @@ def cargar_personas():
     # 5) Asegurar columnas
     for col in ["nombre", "frecuencia", "centro", "notas", "fecha_alta"]:
         if col not in df.columns:
-            if col == "notas":
-                df[col] = ""
-            else:
-                df[col] = ""
+            df[col] = ""
 
     # 6) Dejar solo esas 5 en orden
     df = df[["nombre", "frecuencia", "centro", "notas", "fecha_alta"]]
@@ -164,7 +231,6 @@ def cargar_resumen():
     if "tipo_jornada" not in df.columns:
         df["tipo_jornada"] = "Día habitual"
     if "cerrado" not in df.columns:
-        # si no existe, asumimos que antes nunca se marcó cerrado
         df["cerrado"] = False
 
     df.to_csv(RESUMEN_FILE, index=False)
@@ -180,6 +246,10 @@ def guardar_resumen(df: pd.DataFrame):
 # -----------------------------------------
 personas = cargar_personas()
 resumen = cargar_resumen()
+
+# Logo en la barra lateral (si existe)
+if os.path.exists(LOGO_FILE):
+    st.sidebar.image(LOGO_FILE, use_column_width=True)
 
 # ----- Barra lateral: centro + coordinador -----
 st.sidebar.title("Centros Barriales")
@@ -200,9 +270,10 @@ coordinador_logueado = st.sidebar.selectbox(
 st.sidebar.markdown("---")
 st.sidebar.caption("App interna — Hogar de Cristo Bahía Blanca")
 
+# Encabezado principal
 st.markdown(
-    f"### Estás trabajando sobre: **{centro_logueado}**  \n"
-    f"👤 Coordinador/a: **{coordinador_logueado}**"
+    f"## Sistema de Asistencia — Hogar de Cristo Bahía Blanca  \n"
+    f"Estás trabajando sobre: **{centro_logueado}** — 👤 **{coordinador_logueado}**"
 )
 
 # ---------- Mini tablero del centro logueado ----------
@@ -331,7 +402,9 @@ with tab_registro:
             "total_presentes": total_presentes_val,
             "notas": notas.strip(),
             "coordinador": coordinador,
-            "tipo_jornada": tipo_jornada if not cerrado else "Centro cerrado / no abrió",
+            "tipo_jornada": tipo_jornada
+            if not cerrado
+            else "Centro cerrado / no abrió",
             "cerrado": cerrado,
         }
         resumen = pd.concat([resumen, pd.DataFrame([nueva])], ignore_index=True)
@@ -487,7 +560,7 @@ with tab_personas:
 
 
 # =====================================================
-# TAB 3 — REPORTES / BASE DE DATOS
+# TAB 3 — REPORTES / BASE DE DATOS (con filtro por año)
 # =====================================================
 with tab_reportes:
     st.subheader("Reportes y base de datos")
@@ -495,15 +568,23 @@ with tab_reportes:
     if resumen.empty:
         st.info("No hay datos cargados todavía.")
     else:
+        df = resumen.copy()
+        df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce")
+        df["anio"] = df["fecha"].dt.year
+
+        años_disponibles = (
+            df["anio"].dropna().unique().astype(int).tolist()
+            if not df.empty
+            else []
+        )
+        años_disponibles = sorted(años_disponibles, reverse=True)
+
         vista = st.radio(
             "¿Qué querés ver?",
             ["📅 Hoy / por día", "📆 Esta semana", "📚 Base de datos completa"],
             horizontal=True,
             key="rep_vista",
         )
-
-        df = resumen.copy()
-        df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce")
 
         # ------------------- VISTA POR DÍA -------------------
         if vista == "📅 Hoy / por día":
@@ -682,11 +763,11 @@ with tab_reportes:
                 )
                 st.bar_chart(tipos_sem)
 
-        # ------------------- VISTA BASE COMPLETA -------------------
+        # ------------------- VISTA BASE COMPLETA (con filtro por año) -------------------
         else:  # "📚 Base de datos completa"
             st.markdown("### Base de datos de asistencia")
 
-            col_b1, col_b2, col_b3 = st.columns(3)
+            col_b1, col_b2, col_b3, col_b4 = st.columns(4)
             with col_b1:
                 centros_sel = st.multiselect(
                     "Centros",
@@ -715,6 +796,15 @@ with tab_reportes:
                     ["Todos"] + coords_globales,
                     key="rep_base_coord",
                 )
+            with col_b4:
+                if años_disponibles:
+                    año_sel = st.selectbox(
+                        "Año (opcional)",
+                        ["Todos"] + [str(a) for a in años_disponibles],
+                        key="rep_base_year",
+                    )
+                else:
+                    año_sel = "Todos"
 
             df_base = df[
                 (df["centro"].isin(centros_sel))
@@ -724,6 +814,9 @@ with tab_reportes:
 
             if coord_base != "Todos":
                 df_base = df_base[df_base["coordinador"] == coord_base]
+
+            if año_sel != "Todos":
+                df_base = df_base[df_base["anio"] == int(año_sel)]
 
             if df_base.empty:
                 st.info("No hay datos para esos filtros.")
@@ -778,7 +871,7 @@ with tab_reportes:
 
 
 # =====================================================
-# TAB 4 — TABLERO GLOBAL
+# TAB 4 — TABLERO GLOBAL (por año)
 # =====================================================
 with tab_global:
     st.subheader("Tablero global Hogar de Cristo Bahía Blanca")
@@ -788,84 +881,87 @@ with tab_global:
     else:
         df = resumen.copy()
         df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce")
+        df["anio"] = df["fecha"].dt.year
 
-        # Últimos 7 días global
-        fin = hoy
-        inicio = fin - timedelta(days=6)
-        df_sem_global = df[
-            (df["fecha"].dt.date >= inicio) & (df["fecha"].dt.date <= fin)
-        ]
-
-        idx = pd.date_range(inicio, fin, freq="D")
-        serie_global = (
-            df_sem_global.groupby("fecha")["total_presentes"]
-            .sum()
-            .reindex(idx, fill_value=0)
+        años_disponibles = (
+            df["anio"].dropna().unique().astype(int).tolist()
+            if not df.empty
+            else []
         )
+        años_disponibles = sorted(años_disponibles, reverse=True)
 
-        total_hoy_global = int(
-            df_sem_global[df_sem_global["fecha"].dt.date == hoy][
-                "total_presentes"
-            ].sum()
-        )
-        total_sem_global = int(serie_global.sum())
+        if años_disponibles:
+            año_global = st.selectbox(
+                "Año",
+                años_disponibles,
+                index=0,
+                key="global_year",
+            )
+        else:
+            año_global = hoy.year
 
-        # Centro con más ingresos en la semana
-        if not df_sem_global.empty:
+        df_year = df[df["anio"] == año_global].copy()
+
+        if df_year.empty:
+            st.info(f"No hay datos para el año {año_global}.")
+        else:
+            # Serie anual diaria
+            inicio = date(año_global, 1, 1)
+            fin = date(año_global, 12, 31)
+            idx = pd.date_range(inicio, fin, freq="D")
+
+            serie_global = (
+                df_year.groupby("fecha")["total_presentes"]
+                .sum()
+                .reindex(idx, fill_value=0)
+            )
+
+            total_año = int(serie_global.sum())
+            dias_con_reg = int((serie_global > 0).sum())
+            dias_totales = len(idx)
+            prom_diario = total_año / dias_totales if dias_totales > 0 else 0
+
+            # Centro con más ingresos en el año
             tot_por_centro = (
-                df_sem_global.groupby("centro")["total_presentes"]
+                df_year.groupby("centro")["total_presentes"]
                 .sum()
                 .sort_values(ascending=False)
             )
-            centro_top = tot_por_centro.index[0]
-            centro_top_val = int(tot_por_centro.iloc[0])
-        else:
-            centro_top = "-"
-            centro_top_val = 0
+            if not tot_por_centro.empty:
+                centro_top = tot_por_centro.index[0]
+                centro_top_val = int(tot_por_centro.iloc[0])
+            else:
+                centro_top = "-"
+                centro_top_val = 0
 
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.metric("Total HOY (todos los centros)", total_hoy_global)
-        with c2:
-            st.metric(
-                "Total últimos 7 días (global)",
-                total_sem_global,
-            )
-        with c3:
-            st.metric(
-                "Centro con más ingresos (última semana)",
-                f"{centro_top} ({centro_top_val})",
-            )
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.metric(f"Total año {año_global}", total_año)
+            with c2:
+                st.metric("Promedio diario (año)", f"{prom_diario:.1f}")
+            with c3:
+                st.metric(
+                    "Centro con más ingresos (año)",
+                    f"{centro_top} ({centro_top_val})",
+                )
 
-        st.markdown("### Evolución global últimos 7 días")
-        st.line_chart(serie_global)
+            st.markdown(f"### Evolución diaria — año {año_global}")
+            st.line_chart(serie_global)
 
-        st.markdown("### Comparación por centro (últimos 7 días)")
-        if not df_sem_global.empty:
-            tot_centro_sem = (
-                df_sem_global.groupby("centro")["total_presentes"]
+            st.markdown("### Comparación por centro en el año")
+            if not tot_por_centro.empty:
+                st.bar_chart(tot_por_centro)
+
+            st.markdown("### Resumen global por tipo de jornada en el año")
+            tipos_año = (
+                df_year.groupby("tipo_jornada")["total_presentes"]
                 .sum()
                 .sort_values(ascending=False)
             )
-            st.bar_chart(tot_centro_sem)
+            st.bar_chart(tipos_año)
 
-        st.markdown("### Resumen global por tipo de jornada (últimos 30 días)")
-        inicio_30 = hoy - timedelta(days=29)
-        df_30 = df[
-            (df["fecha"].dt.date >= inicio_30) & (df["fecha"].dt.date <= hoy)
-        ]
-        if df_30.empty:
-            st.info("No hay datos en los últimos 30 días.")
-        else:
-            tipos_30 = (
-                df_30.groupby("tipo_jornada")["total_presentes"]
-                .sum()
-                .sort_values(ascending=False)
-            )
-            st.bar_chart(tipos_30)
-
-        with st.expander("Ver registros crudos últimos 30 días"):
-            st.dataframe(
-                df_30.sort_values("fecha", ascending=False),
-                use_container_width=True,
-            )
+            with st.expander("Ver registros crudos del año"):
+                st.dataframe(
+                    df_year.sort_values("fecha", ascending=False),
+                    use_container_width=True,
+                )
