@@ -311,4 +311,7 @@ with tab_reportes:
             st.download_button(
                 "⬇️ Descargar CSV para Google Sheets (ingresos diarios)",
                 df.to_csv(index=False).encode("utf-8"),
-                "reporte_as_
+                "reporte_asistencia.csv",
+                "text/csv",
+                key="btn_descargar_csv"
+            )
