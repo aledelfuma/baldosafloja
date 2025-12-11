@@ -1,4 +1,4 @@
-personas,frecuencia,centro barrial
+personas,frecuencia,centro
 "Acebedo Coca, Reynaldo",Mensual,Calle Bélen
 "Acosta, Carlos Alberto",Diaria,Calle Bélen
 Adrian (Rasta),No asiste,Calle Bélen
@@ -323,4 +323,5 @@ Valeria,No asiste,Calle Bélen
 "Villumilla, Pablo",Diaria,Calle Bélen
 "Zapata, Lucas Nahuel",Semanal,Calle Bélen
 "Zárate, Guillermo Nicolás",No asiste,Calle Bélen
+
 "Zembrano, Juliana",Semanal,Calle Bélen
