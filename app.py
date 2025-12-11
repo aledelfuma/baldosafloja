@@ -21,6 +21,23 @@ ESPACIOS_MARANATHA = [
     "Otros"
 ]
 
+# Coordinadores por centro
+COORDINADORES = {
+    "Calle Belén": [
+        "Natasha Carrari",
+        "Estefanía Eberle",
+        "Martín Pérez Santellán",
+    ],
+    "Nudo a Nudo": [
+        "Camila Prada",
+        "Julieta",
+    ],
+    "Casa Maranatha": [
+        "Florencia",
+        "Guillermina Cazenave",
+    ],
+}
+
 # Archivos
 PERSONAS_FILE = "personas.csv"
 RESUMEN_FILE = "resumen_diario.csv"
@@ -94,13 +111,24 @@ def guardar_personas(df: pd.DataFrame):
 
 
 # -----------------------------------------
-# RESUMEN DIARIO: fecha, centro, espacio, total_presentes, notas
+# RESUMEN DIARIO: fecha, centro, espacio, total_presentes, notas, coordinador
 # -----------------------------------------
 def cargar_resumen():
-    if os.path.exists(RESUMEN_FILE):
-        return pd.read_csv(RESUMEN_FILE)
-    df = pd.DataFrame(columns=["fecha", "centro", "espacio", "total_presentes", "notas"])
-    df.to_csv(RESUMEN_FILE, index=False)
+    """Carga resumen_diario.csv y se asegura que tenga columna 'coordinador'."""
+    if not os.path.exists(RESUMEN_FILE):
+        df = pd.DataFrame(
+            columns=["fecha", "centro", "espacio", "total_presentes", "notas", "coordinador"]
+        )
+        df.to_csv(RESUMEN_FILE, index=False)
+        return df
+
+    df = pd.read_csv(RESUMEN_FILE)
+
+    # Si es un archivo viejo sin 'coordinador', lo agrego vacío
+    if "coordinador" not in df.columns:
+        df["coordinador"] = ""
+        df.to_csv(RESUMEN_FILE, index=False)
+
     return df
 
 
@@ -114,7 +142,7 @@ def guardar_resumen(df: pd.DataFrame):
 personas = cargar_personas()
 resumen = cargar_resumen()
 
-# Barra lateral: acá se elige el centro y queda fijo
+# ----- Barra lateral: centro + coordinador -----
 st.sidebar.title("Centros Barriales")
 centro_logueado = st.sidebar.selectbox(
     "Soy referente de...",
@@ -122,10 +150,21 @@ centro_logueado = st.sidebar.selectbox(
     key="centro_sidebar"
 )
 
+# según centro, elegimos coordinador
+lista_coord = COORDINADORES.get(centro_logueado, ["(sin coordinadores cargados)"])
+coordinador_logueado = st.sidebar.selectbox(
+    "¿Quién está cargando?",
+    lista_coord,
+    key="coord_sidebar"
+)
+
 st.sidebar.markdown("---")
 st.sidebar.caption("App interna — Hogar de Cristo Bahía Blanca")
 
-st.markdown(f"### Estás trabajando sobre: **{centro_logueado}**")
+st.markdown(
+    f"### Estás trabajando sobre: **{centro_logueado}**  \n"
+    f"👤 Coordinador/a: **{coordinador_logueado}**"
+)
 
 tab_registro, tab_personas, tab_reportes = st.tabs(
     ["📅 Registrar asistencia", "👥 Personas", "📊 Reportes / Base de datos"]
@@ -139,12 +178,15 @@ with tab_registro:
     st.subheader("Registrar asistencia para este centro")
 
     centro = centro_logueado  # siempre el de la barra lateral
+    coordinador = coordinador_logueado
 
     col1, col2 = st.columns(2)
     with col1:
         st.write(f"**Centro:** {centro}")
     with col2:
-        fecha = st.date_input("Fecha", value=date.today(), key="fecha_registro")
+        st.write(f"**Coordinador/a:** {coordinador}")
+
+    fecha = st.date_input("Fecha", value=date.today(), key="fecha_registro")
 
     col3, col4 = st.columns(2)
     with col3:
@@ -173,7 +215,8 @@ with tab_registro:
             "centro": centro,
             "espacio": espacio,
             "total_presentes": int(total_presentes),
-            "notas": notas.strip()
+            "notas": notas.strip(),
+            "coordinador": coordinador,
         }
         resumen = pd.concat([resumen, pd.DataFrame([nueva])], ignore_index=True)
         guardar_resumen(resumen)
