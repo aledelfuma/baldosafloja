@@ -21,8 +21,6 @@ ESPACIOS_MARANATHA = [
     "Otros"
 ]
 
-TURNOS = ["Mañana", "Tarde", "Noche", "Continuo"]
-
 PERSONAS_FILE = "personas.csv"
 RESUMEN_FILE = "resumen_diario.csv"
 
@@ -48,9 +46,10 @@ def guardar_personas(df: pd.DataFrame):
 def cargar_resumen():
     if os.path.exists(RESUMEN_FILE):
         return pd.read_csv(RESUMEN_FILE)
+    # OJO: ya no usamos "turno"
     df = pd.DataFrame(columns=[
         "id_registro", "fecha", "centro", "espacio",
-        "turno", "total_presentes", "notas"
+        "total_presentes", "notas"
     ])
     df.to_csv(RESUMEN_FILE, index=False)
     return df
@@ -101,7 +100,7 @@ with tab_registro:
     with col2:
         fecha = st.date_input("Fecha", value=date.today())
 
-    col3, col4, col5 = st.columns(3)
+    col3, col4 = st.columns(2)
     with col3:
         # Sólo pedimos espacio si es Casa Maranatha
         if centro == "Casa Maranatha":
@@ -110,8 +109,6 @@ with tab_registro:
             espacio = "General"
             st.markdown("**Espacio:** General (no se divide por espacios en este centro)")
     with col4:
-        turno = st.selectbox("Turno", TURNOS, index=1)  # Tarde por defecto
-    with col5:
         total_presentes = st.number_input(
             "Total presentes",
             min_value=0,
@@ -130,7 +127,6 @@ with tab_registro:
             "fecha": fecha.isoformat(),
             "centro": centro,
             "espacio": espacio,
-            "turno": turno,
             "total_presentes": int(total_presentes),
             "notas": notas.strip()
         }
