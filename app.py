@@ -62,9 +62,10 @@ def guardar_resumen(df: pd.DataFrame):
 personas = cargar_personas()
 resumen = cargar_resumen()
 
+# Barra lateral: acá se elige el centro y queda fijo
 st.sidebar.title("Centros Barriales")
 centro_logueado = st.sidebar.selectbox(
-    "Seleccioná tu centro",
+    "Soy referente de...",
     CENTROS,
     key="centro_sidebar"
 )
@@ -72,24 +73,25 @@ centro_logueado = st.sidebar.selectbox(
 st.sidebar.markdown("---")
 st.sidebar.caption("App interna — Hogar de Cristo Bahía Blanca")
 
+st.markdown(f"### Estás trabajando sobre: **{centro_logueado}**")
+
 tab_registro, tab_personas, tab_reportes = st.tabs(
     ["📅 Registrar asistencia", "👥 Personas", "📊 Reportes"]
 )
+
 
 # =====================================================
 # TAB 1 — REGISTRO DE ASISTENCIA
 # =====================================================
 with tab_registro:
-    st.subheader("Registrar asistencia por centro / espacio")
+    st.subheader("Registrar asistencia para este centro")
+
+    # el centro SIEMPRE es el de la barra lateral
+    centro = centro_logueado
 
     col1, col2 = st.columns(2)
     with col1:
-        centro = st.selectbox(
-            "Centro",
-            CENTROS,
-            index=CENTROS.index(centro_logueado),
-            key="centro_registro"
-        )
+        st.write(f"**Centro:** {centro}")
     with col2:
         fecha = st.date_input("Fecha", value=date.today(), key="fecha_registro")
 
@@ -127,7 +129,7 @@ with tab_registro:
         st.success("Registro guardado exitosamente ✅")
 
     st.markdown("---")
-    st.subheader("Últimos registros")
+    st.subheader("Últimos registros de este centro")
 
     if resumen.empty:
         st.info("Todavía no hay registros.")
@@ -138,7 +140,7 @@ with tab_registro:
         st.dataframe(dfc.head(20), use_container_width=True)
 
         if not dfc.empty:
-            st.write("### Evolución de asistencia")
+            st.write("### Evolución de asistencia (ingresos diarios)")
             df_chart = (
                 dfc.groupby("fecha")["total_presentes"]
                 .sum()
@@ -151,14 +153,9 @@ with tab_registro:
 # TAB 2 — PERSONAS
 # =====================================================
 with tab_personas:
-    st.subheader("Personas por centro")
+    st.subheader("Personas de este centro")
 
-    centro_p = st.selectbox(
-        "Centro",
-        CENTROS,
-        index=CENTROS.index(centro_logueado),
-        key="centro_personas"
-    )
+    centro_p = centro_logueado  # bloqueado al centro elegido en el costado
 
     personas_centro = personas[personas["centro"] == centro_p]
 
@@ -195,7 +192,7 @@ with tab_personas:
             st.success("Persona agregada correctamente")
 
     st.markdown("---")
-    st.subheader("Editar personas")
+    st.subheader("Editar personas de este centro")
 
     personas_centro = personas[personas["centro"] == centro_p]  # recargar
     edit = st.data_editor(
@@ -217,7 +214,7 @@ with tab_personas:
 # TAB 3 — REPORTES
 # =====================================================
 with tab_reportes:
-    st.subheader("Reportes de asistencia")
+    st.subheader("Reportes de asistencia (para ver el conjunto)")
 
     if resumen.empty:
         st.info("No hay datos cargados todavía.")
@@ -239,7 +236,7 @@ with tab_reportes:
             totales = df.groupby("centro")["total_presentes"].sum()
             st.bar_chart(totales)
 
-            st.markdown("### Evolución total")
+            st.markdown("### Evolución total (ingresos por día)")
             linea = (
                 df.groupby("fecha")["total_presentes"]
                 .sum()
@@ -257,9 +254,11 @@ with tab_reportes:
                 st.info("No hay datos de Casa Maranatha en este rango.")
 
             st.markdown("---")
-            st.subheader("Exportar datos")
+            st.subheader("Exportar datos a hoja de cálculo")
+
+            # Esto lo descargás y lo subís a Google Sheets
             st.download_button(
-                "⬇️ Descargar CSV para Google Sheets",
+                "⬇️ Descargar CSV para Google Sheets (ingresos diarios)",
                 df.to_csv(index=False).encode("utf-8"),
                 "reporte_asistencia.csv",
                 "text/csv",
