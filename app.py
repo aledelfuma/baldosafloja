@@ -30,10 +30,64 @@ RESUMEN_FILE = "resumen_diario.csv"
 # PERSONAS: nombre, frecuencia, centro
 # -----------------------------------------
 def cargar_personas():
-    if os.path.exists(PERSONAS_FILE):
-        return pd.read_csv(PERSONAS_FILE)
-    df = pd.DataFrame(columns=["nombre", "frecuencia", "centro"])
+    """Carga personas.csv admitiendo distintos encabezados/sep.
+    Debe terminar devolviendo SIEMPRE columnas: nombre, frecuencia, centro
+    """
+    if not os.path.exists(PERSONAS_FILE):
+        df_vacio = pd.DataFrame(columns=["nombre", "frecuencia", "centro"])
+        df_vacio.to_csv(PERSONAS_FILE, index=False)
+        return df_vacio
+
+    # 1) Intento normal: separador coma
+    try:
+        df = pd.read_csv(PERSONAS_FILE)
+    except Exception:
+        df = pd.DataFrame()
+
+    # 2) Si no encuentra 'centro', pruebo con separador ;
+    if "centro" not in df.columns:
+        try:
+            df2 = pd.read_csv(PERSONAS_FILE, sep=";")
+            if "centro" in df2.columns:
+                df = df2
+        except Exception:
+            pass
+
+    # 3) Normalizo nombres de columnas (saco espacios y paso a minúsculas)
+    df.columns = [c.strip().lower() for c in df.columns]
+
+    # 4) Intento mapear columnas conocidas a las que usamos
+    rename_map = {}
+    for c in df.columns:
+        if c in ["nombre", "persona", "personas"]:
+            rename_map[c] = "nombre"
+        elif c == "frecuencia":
+            rename_map[c] = "frecuencia"
+        elif "centro" in c:
+            # centro, centros, etc.
+            rename_map[c] = "centro"
+
+    df = df.rename(columns=rename_map)
+
+    # 5) Me aseguro de que existan las 3 columnas
+    for col in ["nombre", "frecuencia", "centro"]:
+        if col not in df.columns:
+            df[col] = ""
+
+    # 6) Me quedo solo con esas 3 columnas, en ese orden
+    df = df[["nombre", "frecuencia", "centro"]]
+
+    # 7) Guardo de nuevo ya “limpio” (opcional pero ayuda para el futuro)
     df.to_csv(PERSONAS_FILE, index=False)
+
+    # 8) Aviso si el archivo venía raro
+    if df["centro"].eq("").all():
+        st.warning(
+            "El archivo personas.csv no tenía una columna 'centro' clara. "
+            "Se creó en blanco. Revisá que la primera fila diga algo como: "
+            "nombre,frecuencia,centro"
+        )
+
     return df
 
 
@@ -86,8 +140,7 @@ tab_registro, tab_personas, tab_reportes = st.tabs(
 with tab_registro:
     st.subheader("Registrar asistencia para este centro")
 
-    # el centro SIEMPRE es el de la barra lateral
-    centro = centro_logueado
+    centro = centro_logueado  # siempre el de la barra lateral
 
     col1, col2 = st.columns(2)
     with col1:
@@ -203,7 +256,6 @@ with tab_personas:
     )
 
     if st.button("💾 Guardar cambios", use_container_width=True, key="btn_guardar_personas"):
-        # Sacamos las filas de ese centro y reemplazamos por el editado
         otras = personas[personas["centro"] != centro_p]
         personas = pd.concat([otras, edit], ignore_index=True)
         guardar_personas(personas)
@@ -256,11 +308,7 @@ with tab_reportes:
             st.markdown("---")
             st.subheader("Exportar datos a hoja de cálculo")
 
-            # Esto lo descargás y lo subís a Google Sheets
             st.download_button(
                 "⬇️ Descargar CSV para Google Sheets (ingresos diarios)",
                 df.to_csv(index=False).encode("utf-8"),
-                "reporte_asistencia.csv",
-                "text/csv",
-                key="btn_descargar_csv"
-            )
+                "reporte_as_
