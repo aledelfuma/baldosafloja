@@ -1,13 +1,9 @@
-import os
-import uuid
-from datetime import date, datetime, timedelta
-
-import pandas as pd
 import streamlit as st
-
+import pandas as pd
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
 
 
 
@@ -187,8 +183,21 @@ def normalize_bool(v):
 # =====================================================
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-
 @st.cache_resource(show_spinner=False)
+def get_sheets_service():
+    sa = dict(st.secrets["gcp_service_account"])
+
+    pk = sa.get("private_key", "")
+    pk = pk.replace("\\n", "\n").strip()
+    if not pk.endswith("\n"):
+        pk += "\n"
+    sa["private_key"] = pk
+
+    creds = Credentials.from_service_account_info(sa, scopes=SCOPES)
+    return build("sheets", "v4", credentials=creds)
+
+def spreadsheet_id():
+    return st.secrets["sheets"]["spreadsheet_id"]
 
 def get_spreadsheet_meta(service, sid):
     try:
@@ -202,6 +211,7 @@ def get_spreadsheet_meta(service, sid):
         except Exception:
             st.write("Body: (no se pudo decodificar)")
         st.stop()
+
 
 
 def spreadsheet_id():
@@ -771,5 +781,6 @@ with tab_admin:
                 restore_asistencia_backup()
                 st.success("Backup restaurado ✅")
                 st.rerun()
+
 
 
