@@ -154,7 +154,7 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 # =========================
 # CSV
 # =========================
-CSV_FALLBACKS = ["data/personas.csv", "personas.csv"]
+CSV_FALLBACKS = ["datapersonas.csv", "personas.csv"]
 
 def find_csv_path():
     for p in CSV_FALLBACKS:
@@ -659,3 +659,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
