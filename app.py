@@ -196,19 +196,17 @@ def get_gspread_client():
 def get_spreadsheet():
     gc = get_gspread_client()
     spreadsheet_id = st.secrets["sheets"]["spreadsheet_id"]
+    sa = dict(st.secrets["gcp_service_account"])
 
-    # DEBUG SEGURO (para resolver PermissionError)
+    st.write("DEBUG → client_email:", sa.get("client_email"))
+    st.write("DEBUG → spreadsheet_id:", spreadsheet_id)
+
     try:
-        sa = dict(st.secrets["gcp_service_account"])
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("Debug Google Sheets")
-        st.sidebar.info(f"client_email en uso:\n{sa.get('client_email', '(faltante)')}")
-        st.sidebar.info(f"spreadsheet_id en uso:\n{spreadsheet_id}")
-        st.sidebar.caption("Si hay PermissionError: compartí el Sheet con ese client_email como EDITOR.")
-    except Exception:
-        pass
-
-    return gc.open_by_key(spreadsheet_id)
+        return gc.open_by_key(spreadsheet_id)
+    except Exception as e:
+        st.error("No se puede abrir la planilla. Esto es PERMISOS o ID.")
+        st.exception(e)
+        st.stop()
 
 
 def get_ws(name: str):
@@ -702,3 +700,4 @@ with tab_admin:
                 restore_asistencia_from_backup()
                 st.success("Backup restaurado ✅")
                 st.rerun()
+
