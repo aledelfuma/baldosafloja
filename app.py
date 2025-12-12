@@ -233,22 +233,20 @@ def get_spreadsheet():
 
         try:
             ws_b = sh_new.add_worksheet(title="asistencia_backup", rows="2000", cols="30")
-        except Exception:
-            ws_b = sh_new.worksheet("asistencia_backup")
-        ensure_headers(ws_b, ASISTENCIA_COLS)
+       except Exception as e:
+    st.error("Error creando planilla con el BOT.")
+    st.write("Tipo:", type(e).__name__)
+    st.write("Args:", getattr(e, "args", None))
+    try:
+        import json
+        if hasattr(e, "response") and e.response is not None:
+            st.write("HTTP status:", e.response.status_code)
+            st.write("HTTP text:", e.response.text)
+    except Exception:
+        pass
+    st.exception(e)
+    st.stop()
 
-        # Compartir al humano (tu mail) como editor
-        owner_email = st.secrets.get("app", {}).get("owner_email")
-        if owner_email:
-            sh_new.share(owner_email, perm_type="user", role="writer")
-
-        st.success("✅ Listo. Se creó una planilla nueva y ya está lista para usar.")
-        st.write("📌 NUEVO spreadsheet_id (copiá y pegá en secrets):")
-        st.code(sh_new.id)
-        st.write("🔗 Link:")
-        st.write(sh_new.url)
-
-        st.stop()
 
 
 
@@ -745,6 +743,7 @@ with tab_admin:
                 restore_asistencia_from_backup()
                 st.success("Backup restaurado ✅")
                 st.rerun()
+
 
 
 
