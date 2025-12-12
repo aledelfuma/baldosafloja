@@ -148,9 +148,35 @@ ASISTENCIA_COLS = [
 ]
 PERSONAS_COLS = ["nombre","frecuencia","centro","notas","fecha_alta"]
 
+
 @st.cache_resource(show_spinner=False)
 def get_gspread_client():
+    """
+    Crea el cliente de Google Sheets desde secrets.
+    Incluye FIX robusto para private_key (evita errores pyasn1).
+    """
     sa = dict(st.secrets["gcp_service_account"])
+
+    pk = sa.get("private_key", "")
+    if not pk:
+        raise ValueError("Falta 'private_key' en secrets[gcp_service_account].")
+
+    # FIX: convertir "\\n" -> "\n" (muy común en Streamlit Secrets)
+    pk = pk.replace("\\n", "\n").strip()
+
+    # asegurar encabezados
+    if "-----BEGIN PRIVATE KEY-----" not in pk or "-----END PRIVATE KEY-----" not in pk:
+        raise ValueError(
+            "La 'private_key' no contiene BEGIN/END PRIVATE KEY. "
+            "Pegala desde el JSON original del service account."
+        )
+
+    # asegurar que termina en salto de línea
+    if not pk.endswith("\n"):
+        pk += "\n"
+
+    sa["private_key"] = pk
+
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
@@ -158,32 +184,33 @@ def get_gspread_client():
     creds = Credentials.from_service_account_info(sa, scopes=scopes)
     return gspread.authorize(creds)
 
+
 def get_spreadsheet():
     gc = get_gspread_client()
     spreadsheet_id = st.secrets["sheets"]["spreadsheet_id"]
     return gc.open_by_key(spreadsheet_id)
+
 
 def get_ws(name: str):
     sh = get_spreadsheet()
     try:
         return sh.worksheet(name)
     except Exception:
-        # si no existe, creamos
         return sh.add_worksheet(title=name, rows="2000", cols="30")
 
+
 def df_from_ws(ws, required_cols):
-    # Lee todo como records
     records = ws.get_all_records()
     if not records:
         return pd.DataFrame(columns=required_cols)
     df = pd.DataFrame(records)
-    # Normalizar columnas
     df.columns = [c.strip() for c in df.columns]
     for c in required_cols:
         if c not in df.columns:
             df[c] = ""
     df = df[required_cols]
     return df
+
 
 def write_df_to_ws(ws, df: pd.DataFrame, cols_order):
     df2 = df.copy()
@@ -192,10 +219,10 @@ def write_df_to_ws(ws, df: pd.DataFrame, cols_order):
             df2[c] = ""
     df2 = df2[cols_order]
 
-    # convert to values
     values = [cols_order] + df2.astype(str).fillna("").values.tolist()
     ws.clear()
     ws.update("A1", values)
+
 
 def append_row_ws(ws, row_dict, cols_order):
     row = []
@@ -204,17 +231,21 @@ def append_row_ws(ws, row_dict, cols_order):
         row.append("" if v is None else str(v))
     ws.append_row(row, value_input_option="USER_ENTERED")
 
+
 def now_ts():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+
 def new_id():
     return str(uuid.uuid4())
+
 
 def backup_asistencia_to_sheet():
     ws_main = get_ws(ASISTENCIA_SHEET)
     ws_bak = get_ws(ASISTENCIA_BACKUP_SHEET)
     df_main = df_from_ws(ws_main, ASISTENCIA_COLS)
     write_df_to_ws(ws_bak, df_main, ASISTENCIA_COLS)
+
 
 def restore_asistencia_from_backup():
     ws_main = get_ws(ASISTENCIA_SHEET)
@@ -315,7 +346,6 @@ ws_backup = get_ws(ASISTENCIA_BACKUP_SHEET)
 asistencia = df_from_ws(ws_asistencia, ASISTENCIA_COLS)
 personas = df_from_ws(ws_personas, PERSONAS_COLS)
 
-# Tipos
 if not asistencia.empty:
     asistencia["total_presentes"] = pd.to_numeric(asistencia["total_presentes"], errors="coerce").fillna(0).astype(int)
     asistencia["cerrado"] = asistencia["cerrado"].astype(str).str.lower().isin(["true","1","yes","si","sí"])
@@ -407,12 +437,9 @@ with tab_registro:
     notas = st.text_area("Notas (opcional)", key="quick_notas")
 
     cbtn1, cbtn2 = st.columns(2)
-
     with cbtn1:
         if st.button("💾 Guardar asistencia", use_container_width=True, key="quick_guardar"):
-            # backup para deshacer
             backup_asistencia_to_sheet()
-
             nueva = {
                 "id_registro": new_id(),
                 "fecha": fecha.isoformat(),
@@ -434,7 +461,6 @@ with tab_registro:
     with cbtn2:
         if st.button("🚫 Marcar como CERRADO (0 presentes)", use_container_width=True, key="quick_cerrado"):
             backup_asistencia_to_sheet()
-
             nueva = {
                 "id_registro": new_id(),
                 "fecha": fecha.isoformat(),
@@ -470,11 +496,10 @@ with tab_registro:
         st.line_chart(serie)
 
 # =====================================================
-# TAB 2 — HISTORIAL EDITABLE + DESHACER (backup sheet)
+# TAB 2 — HISTORIAL EDITABLE + DESHACER
 # =====================================================
 with tab_historial:
     st.subheader("Historial del centro (editar)")
-
     st.caption("Antes de guardar cambios, se hace backup en la hoja `asistencia_backup`. Podés deshacer con 1 click.")
 
     asistencia2 = df_from_ws(ws_asistencia, ASISTENCIA_COLS)
@@ -491,11 +516,9 @@ with tab_historial:
     if dfx.empty:
         st.info("No hay registros todavía.")
     else:
-        st.write("### Editar últimos 60 registros")
         edited = st.data_editor(dfx, use_container_width=True, num_rows="fixed", key="hist_editor")
 
         csave, cundo = st.columns(2)
-
         with csave:
             if st.button("💾 Guardar cambios del historial", use_container_width=True, key="hist_save"):
                 backup_asistencia_to_sheet()
@@ -505,17 +528,14 @@ with tab_historial:
                 ed = edited.copy()
                 ed["id_registro"] = ed["id_registro"].astype(str)
 
-                # Auditoría de edición
                 ed["timestamp"] = now_ts()
                 ed["cargado_por"] = user
                 ed["accion"] = "editar"
 
-                # Merge por id_registro
                 base_ids = set(ed["id_registro"].tolist())
                 base_not = base[~base["id_registro"].isin(base_ids)].copy()
                 merged = pd.concat([base_not, ed], ignore_index=True)
 
-                # Normalizar a strings para Sheets
                 merged = merged[ASISTENCIA_COLS].copy()
                 write_df_to_ws(ws_asistencia, merged, ASISTENCIA_COLS)
 
@@ -529,7 +549,7 @@ with tab_historial:
                 st.rerun()
 
 # =====================================================
-# TAB 3 — PERSONAS (simple)
+# TAB 3 — PERSONAS
 # =====================================================
 with tab_personas:
     st.subheader(f"Personas — {centro_logueado}")
@@ -581,7 +601,6 @@ with tab_personas:
     else:
         edited_p = st.data_editor(dfp2, use_container_width=True, num_rows="dynamic", key="per_editor")
         if st.button("💾 Guardar cambios de personas", use_container_width=True, key="per_save"):
-            # reescribimos TODA la hoja personas (simple y confiable)
             otras = personas2[personas2["centro"] != centro_logueado].copy()
             out = pd.concat([otras, edited_p], ignore_index=True)
             write_df_to_ws(ws_personas, out, PERSONAS_COLS)
