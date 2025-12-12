@@ -11,56 +11,38 @@ st.set_page_config(page_title="Asistencia Centros Barriales", layout="wide")
 # Colores institucionales Hogar de Cristo
 PRIMARY_COLOR = "#004E7B"   # Azul Hogar
 ACCENT_COLOR = "#63296C"    # Violeta Hogar
-BG_COLOR = "#EAF2F6"        # Fondo azul muy claro
-CARD_BG = "#F5EFF7"         # Fondo violeta muy claro
+BG_COLOR = "#EAF2F6"        # (no lo usamos ahora, pero lo dejo por si después hacemos modo claro)
+CARD_BG = "#F5EFF7"
 TEXT_DARK = "#1A1A1A"
 
-# Inyectar CSS para hacerlo más elegante y con identidad
+# Inyectar CSS (manteniendo fondo oscuro de Streamlit)
 CUSTOM_CSS = f"""
 <style>
-/* ----- Fondo general de la app ----- */
-[data-testid="stAppViewContainer"] {{
-    background-color: {BG_COLOR} !important;  /* celestito Hogar */
-    color: {TEXT_DARK} !important;
-}}
-
-[data-testid="stHeader"] {{
-    background-color: {BG_COLOR} !important;
-    color: {TEXT_DARK} !important;
-    border-bottom: 1px solid rgba(0,0,0,0.06);
-}}
-
-/* Para algunos temas oscuros */
-html, body {{
-    background-color: {BG_COLOR} !important;
-    color: {TEXT_DARK} !important;
-}}
 
 /* ----- Sidebar ----- */
 [data-testid="stSidebar"] {{
-    background-color: #F4F6FB !important;   /* clarito, no blanco puro */
+    background-color: #111827 !important; /* gris oscuro suave */
     border-right: 3px solid {PRIMARY_COLOR};
-    color: {TEXT_DARK};
 }}
 
-[data-testid="stSidebar"] h1, 
-[data-testid="stSidebar"] h2, 
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
 [data-testid="stSidebar"] h3 {{
     color: {PRIMARY_COLOR} !important;
 }}
 
 /* ----- Títulos ----- */
 h1, h2, h3, h4 {{
-    color: {PRIMARY_COLOR};
+    color: {PRIMARY_COLOR} !important;
     font-family: "Helvetica", "Arial", sans-serif;
 }}
 
-/* ----- Métricas (tarjetitas) ----- */
+/* ----- Métricas ----- */
 .stMetric {{
-    background-color: {CARD_BG} !important;
+    background-color: #1f2633 !important; /* cajitas oscuras */
     border-radius: 12px;
     padding: 0.75rem 1rem;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
     border-left: 6px solid {ACCENT_COLOR};
 }}
 
@@ -69,11 +51,12 @@ h1, h2, h3, h4 {{
     border-radius: 999px;
     padding: 0.5rem 1.1rem;
     margin-right: 0.3rem;
-    background-color: #FFFFFF;
-    border: 1px solid rgba(0,0,0,0.12);
+    background-color: #1f2633;
+    border: 1px solid rgba(255,255,255,0.15);
     font-weight: 500;
-    color: {PRIMARY_COLOR};
+    color: #d1d5db;
 }}
+
 .stTabs [aria-selected="true"] {{
     background-color: {PRIMARY_COLOR};
     color: white !important;
@@ -83,33 +66,25 @@ h1, h2, h3, h4 {{
 /* ----- Botones ----- */
 .stButton>button {{
     border-radius: 999px;
-    border: none;
     padding: 0.45rem 1.2rem;
-    font-weight: 600;
     background-color: {PRIMARY_COLOR};
     color: white;
+    font-weight: 600;
+    border: none;
 }}
+
 .stButton>button:hover {{
     background-color: {ACCENT_COLOR};
     color: white;
 }}
 
-/* ----- Inputs ----- */
-input, select, textarea {{
-    border-radius: 6px !important;
-}}
-
-/* ----- Tablas / dataframes ----- */
+/* ----- Tablas ----- */
 [data-testid="stDataFrame"] {{
-    background-color: #FFFFFF;
+    background-color: #111827 !important;
     border-radius: 8px;
     padding: 0.6rem;
 }}
 
-/* Evitar textos grises raros */
-[data-testid="stMarkdownContainer"] {{
-    color: {TEXT_DARK};
-}}
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
