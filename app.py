@@ -4,6 +4,10 @@ import os
 import uuid
 from datetime import date, timedelta, datetime
 
+import gspread
+from google.oauth2.service_account import Credentials
+
+
 # =====================================================
 # CONFIG
 # =====================================================
@@ -14,7 +18,6 @@ ACCENT_COLOR = "#63296C"
 
 CUSTOM_CSS = f"""
 <style>
-/* ----- Sidebar ----- */
 [data-testid="stSidebar"] {{
     background-color: #111827 !important;
     border-right: 3px solid {PRIMARY_COLOR};
@@ -24,14 +27,10 @@ CUSTOM_CSS = f"""
 [data-testid="stSidebar"] h3 {{
     color: {PRIMARY_COLOR} !important;
 }}
-
-/* ----- Títulos ----- */
 h1, h2, h3, h4 {{
     color: {PRIMARY_COLOR} !important;
     font-family: "Helvetica", "Arial", sans-serif;
 }}
-
-/* ----- Métricas ----- */
 .stMetric {{
     background-color: #1f2633 !important;
     border-radius: 12px;
@@ -39,8 +38,6 @@ h1, h2, h3, h4 {{
     box-shadow: 0 2px 6px rgba(0,0,0,0.4);
     border-left: 6px solid {ACCENT_COLOR};
 }}
-
-/* ----- Tabs ----- */
 .stTabs [role="tab"] {{
     border-radius: 999px;
     padding: 0.5rem 1.1rem;
@@ -55,8 +52,6 @@ h1, h2, h3, h4 {{
     color: white !important;
     border-color: {PRIMARY_COLOR};
 }}
-
-/* ----- Botones ----- */
 .stButton>button {{
     border-radius: 999px;
     padding: 0.45rem 1.2rem;
@@ -69,8 +64,6 @@ h1, h2, h3, h4 {{
     background-color: {ACCENT_COLOR};
     color: white;
 }}
-
-/* ----- Tablas ----- */
 [data-testid="stDataFrame"] {{
     background-color: #111827 !important;
     border-radius: 8px;
@@ -80,9 +73,6 @@ h1, h2, h3, h4 {{
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# =====================================================
-# CONSTANTES
-# =====================================================
 CENTROS = ["Nudo a Nudo", "Casa Maranatha", "Calle Belén"]
 
 ESPACIOS_MARANATHA = [
@@ -109,19 +99,14 @@ TIPOS_JORNADA = [
     "Otra",
 ]
 
-PERSONAS_FILE = "personas.csv"
-RESUMEN_FILE = "resumen_diario.csv"
-RESUMEN_BACKUP_FILE = "resumen_diario_backup.csv"
 LOGO_FILE = "logo_hogar.png"
 
+
 # =====================================================
-# USUARIOS / ROLES (1)
-# - Si tenés secrets.toml, lo toma.
-# - Si no, usa defaults.
+# USERS / ROLES (si no ponés secrets users, usa defaults)
 # =====================================================
 DEFAULT_USERS = {
     "admin": {"password": "hogar", "role": "admin", "centers": ["*"]},
-    # Coordinadores (password simple por defecto: "hogar")
     "natasha": {"password": "hogar", "role": "coord", "centers": ["Calle Belén"]},
     "estefania": {"password": "hogar", "role": "coord", "centers": ["Calle Belén"]},
     "martin": {"password": "hogar", "role": "coord", "centers": ["Calle Belén"]},
@@ -133,10 +118,6 @@ DEFAULT_USERS = {
 
 def load_users():
     try:
-        # secrets.toml esperado:
-        # [users]
-        # admin = {password="...", role="admin", centers=["*"]}
-        # ...
         if "users" in st.secrets:
             raw = st.secrets["users"]
             users = {}
@@ -153,116 +134,75 @@ def load_users():
 
 USERS = load_users()
 
+
 # =====================================================
-# HELPERS CSV
+# GOOGLE SHEETS (DB)
 # =====================================================
-def ensure_personas_file():
-    if not os.path.exists(PERSONAS_FILE):
-        df = pd.DataFrame(columns=["nombre", "frecuencia", "centro", "notas", "fecha_alta"])
-        df.to_csv(PERSONAS_FILE, index=False)
+ASISTENCIA_SHEET = "asistencia"
+PERSONAS_SHEET = "personas"
+ASISTENCIA_BACKUP_SHEET = "asistencia_backup"
 
-def ensure_resumen_file():
-    if not os.path.exists(RESUMEN_FILE):
-        df = pd.DataFrame(columns=[
-            "id_registro",
-            "fecha",
-            "centro",
-            "espacio",
-            "total_presentes",
-            "notas",
-            "coordinador",
-            "tipo_jornada",
-            "cerrado",
-            "timestamp",
-            "cargado_por",
-            "accion",
-        ])
-        df.to_csv(RESUMEN_FILE, index=False)
+ASISTENCIA_COLS = [
+    "id_registro","fecha","centro","espacio","total_presentes","notas","coordinador",
+    "tipo_jornada","cerrado","timestamp","cargado_por","accion"
+]
+PERSONAS_COLS = ["nombre","frecuencia","centro","notas","fecha_alta"]
 
-def cargar_personas():
-    ensure_personas_file()
-    try:
-        df = pd.read_csv(PERSONAS_FILE)
-    except Exception:
-        df = pd.DataFrame(columns=["nombre", "frecuencia", "centro", "notas", "fecha_alta"])
-
-    df.columns = [c.strip().lower() for c in df.columns]
-    # normalizar
-    if "nombre" not in df.columns:
-        # intenta mapear si venía como "personas"
-        if "personas" in df.columns:
-            df = df.rename(columns={"personas": "nombre"})
-        else:
-            df["nombre"] = ""
-
-    for col in ["frecuencia", "centro", "notas", "fecha_alta"]:
-        if col not in df.columns:
-            df[col] = ""
-
-    df = df[["nombre", "frecuencia", "centro", "notas", "fecha_alta"]]
-    df.to_csv(PERSONAS_FILE, index=False)
-    return df
-
-def guardar_personas(df: pd.DataFrame):
-    df.to_csv(PERSONAS_FILE, index=False)
-
-def cargar_resumen():
-    ensure_resumen_file()
-    try:
-        df = pd.read_csv(RESUMEN_FILE)
-    except Exception:
-        df = pd.DataFrame(columns=[
-            "id_registro","fecha","centro","espacio","total_presentes","notas",
-            "coordinador","tipo_jornada","cerrado","timestamp","cargado_por","accion"
-        ])
-
-    # asegurar columnas nuevas (8 auditoría)
-    needed = [
-        "id_registro","fecha","centro","espacio","total_presentes","notas",
-        "coordinador","tipo_jornada","cerrado","timestamp","cargado_por","accion"
+@st.cache_resource(show_spinner=False)
+def get_gspread_client():
+    sa = dict(st.secrets["gcp_service_account"])
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
     ]
-    for c in needed:
+    creds = Credentials.from_service_account_info(sa, scopes=scopes)
+    return gspread.authorize(creds)
+
+def get_spreadsheet():
+    gc = get_gspread_client()
+    spreadsheet_id = st.secrets["sheets"]["spreadsheet_id"]
+    return gc.open_by_key(spreadsheet_id)
+
+def get_ws(name: str):
+    sh = get_spreadsheet()
+    try:
+        return sh.worksheet(name)
+    except Exception:
+        # si no existe, creamos
+        return sh.add_worksheet(title=name, rows="2000", cols="30")
+
+def df_from_ws(ws, required_cols):
+    # Lee todo como records
+    records = ws.get_all_records()
+    if not records:
+        return pd.DataFrame(columns=required_cols)
+    df = pd.DataFrame(records)
+    # Normalizar columnas
+    df.columns = [c.strip() for c in df.columns]
+    for c in required_cols:
         if c not in df.columns:
             df[c] = ""
-
-    # tipos
-    df["total_presentes"] = pd.to_numeric(df["total_presentes"], errors="coerce").fillna(0).astype(int)
-    df["cerrado"] = df["cerrado"].astype(str).str.lower().isin(["true", "1", "yes", "si", "sí"])
-    df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce")
-    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-
-    # guardar limpio
-    df.to_csv(RESUMEN_FILE, index=False)
+    df = df[required_cols]
     return df
 
-def backup_resumen():
-    if os.path.exists(RESUMEN_FILE):
-        try:
-            with open(RESUMEN_FILE, "rb") as fsrc:
-                data = fsrc.read()
-            with open(RESUMEN_BACKUP_FILE, "wb") as fdst:
-                fdst.write(data)
-            return True
-        except Exception:
-            return False
-    return False
+def write_df_to_ws(ws, df: pd.DataFrame, cols_order):
+    df2 = df.copy()
+    for c in cols_order:
+        if c not in df2.columns:
+            df2[c] = ""
+    df2 = df2[cols_order]
 
-def restore_backup():
-    if os.path.exists(RESUMEN_BACKUP_FILE):
-        try:
-            with open(RESUMEN_BACKUP_FILE, "rb") as fsrc:
-                data = fsrc.read()
-            with open(RESUMEN_FILE, "wb") as fdst:
-                fdst.write(data)
-            return True
-        except Exception:
-            return False
-    return False
+    # convert to values
+    values = [cols_order] + df2.astype(str).fillna("").values.tolist()
+    ws.clear()
+    ws.update("A1", values)
 
-def guardar_resumen(df: pd.DataFrame):
-    df_out = df.copy()
-    # estandarizar a CSV
-    df_out.to_csv(RESUMEN_FILE, index=False)
+def append_row_ws(ws, row_dict, cols_order):
+    row = []
+    for c in cols_order:
+        v = row_dict.get(c, "")
+        row.append("" if v is None else str(v))
+    ws.append_row(row, value_input_option="USER_ENTERED")
 
 def now_ts():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -270,8 +210,21 @@ def now_ts():
 def new_id():
     return str(uuid.uuid4())
 
+def backup_asistencia_to_sheet():
+    ws_main = get_ws(ASISTENCIA_SHEET)
+    ws_bak = get_ws(ASISTENCIA_BACKUP_SHEET)
+    df_main = df_from_ws(ws_main, ASISTENCIA_COLS)
+    write_df_to_ws(ws_bak, df_main, ASISTENCIA_COLS)
+
+def restore_asistencia_from_backup():
+    ws_main = get_ws(ASISTENCIA_SHEET)
+    ws_bak = get_ws(ASISTENCIA_BACKUP_SHEET)
+    df_bak = df_from_ws(ws_bak, ASISTENCIA_COLS)
+    write_df_to_ws(ws_main, df_bak, ASISTENCIA_COLS)
+
+
 # =====================================================
-# LOGIN / SESIÓN (1)
+# LOGIN
 # =====================================================
 def is_logged_in():
     return st.session_state.get("logged_in", False)
@@ -289,11 +242,6 @@ if "logged_in" not in st.session_state:
     st.session_state["user"] = None
     st.session_state["user_meta"] = None
 
-# =====================================================
-# LOAD DATA
-# =====================================================
-personas = cargar_personas()
-resumen = cargar_resumen()
 
 # =====================================================
 # SIDEBAR: LOGO + LOGIN
@@ -317,39 +265,31 @@ if not is_logged_in():
             st.sidebar.error("Usuario o contraseña incorrectos.")
     st.stop()
 
-# logout
-st.sidebar.success(f"Conectado como: {st.session_state['user']}")
+user = st.session_state["user"]
+user_meta = st.session_state["user_meta"] or {}
+role = user_meta.get("role", "coord")
+allowed_centers = user_meta.get("centers", [])
+
+st.sidebar.success(f"Conectado como: {user}")
 if st.sidebar.button("Salir", use_container_width=True):
     st.session_state["logged_in"] = False
     st.session_state["user"] = None
     st.session_state["user_meta"] = None
     st.rerun()
 
-user = st.session_state["user"]
-user_meta = st.session_state["user_meta"] or {}
-role = user_meta.get("role", "coord")
-allowed_centers = user_meta.get("centers", [])
-
 st.sidebar.markdown("---")
 st.sidebar.subheader("Centro / Coordinador")
 
-# Centro: admin puede elegir cualquiera, coordinador queda bloqueado
 if role == "admin":
     centro_logueado = st.sidebar.selectbox("Centro", CENTROS, key="centro_sidebar")
 else:
-    # primer centro permitido
     centro_logueado = allowed_centers[0] if allowed_centers else CENTROS[0]
     st.sidebar.write(f"Centro asignado: **{centro_logueado}**")
 
-# Coordinador: lista por centro (admin y coord eligen dentro del centro)
-lista_coord = COORDINADORES.get(centro_logueado, [])
-if not lista_coord:
-    lista_coord = ["(sin coordinadores cargados)"]
+lista_coord = COORDINADORES.get(centro_logueado, []) or ["(sin coordinadores cargados)"]
 
-# si no es admin, default a uno coherente con usuario (si coincide)
 default_coord = lista_coord[0]
 if role != "admin":
-    # pequeño intento: si el user está en la lista por nombre parecido
     for c in lista_coord:
         if user.lower() in c.lower().replace(" ", "") or user.lower() in c.lower():
             default_coord = c
@@ -364,17 +304,33 @@ coordinador_logueado = st.sidebar.selectbox(
 
 st.sidebar.caption("App interna — Hogar de Cristo Bahía Blanca")
 
+
 # =====================================================
-# HEADER
+# LOAD DATA (desde Sheets)
+# =====================================================
+ws_asistencia = get_ws(ASISTENCIA_SHEET)
+ws_personas = get_ws(PERSONAS_SHEET)
+ws_backup = get_ws(ASISTENCIA_BACKUP_SHEET)
+
+asistencia = df_from_ws(ws_asistencia, ASISTENCIA_COLS)
+personas = df_from_ws(ws_personas, PERSONAS_COLS)
+
+# Tipos
+if not asistencia.empty:
+    asistencia["total_presentes"] = pd.to_numeric(asistencia["total_presentes"], errors="coerce").fillna(0).astype(int)
+    asistencia["cerrado"] = asistencia["cerrado"].astype(str).str.lower().isin(["true","1","yes","si","sí"])
+    asistencia["fecha"] = pd.to_datetime(asistencia["fecha"], errors="coerce")
+    asistencia["timestamp"] = pd.to_datetime(asistencia["timestamp"], errors="coerce")
+
+
+# =====================================================
+# HEADER + ALERTAS OLVIDO
 # =====================================================
 st.markdown(
     f"## Sistema de Asistencia — Hogar de Cristo Bahía Blanca  \n"
     f"Centro: **{centro_logueado}** — 👤 **{coordinador_logueado}** — Rol: **{role}**"
 )
 
-# =====================================================
-# (2) ALERTAS DE OLVIDO: HOY + ÚLTIMOS 7 DÍAS
-# =====================================================
 hoy = date.today()
 hace_una_semana = hoy - timedelta(days=6)
 
@@ -388,14 +344,13 @@ faltan_hoy = []
 faltan_semana = []
 
 for c in CENTROS:
-    dfh = registros_por_fecha(resumen, c, hoy)
+    dfh = registros_por_fecha(asistencia, c, hoy)
     if dfh.empty:
         faltan_hoy.append(c)
 
-    # para semana: consideramos “faltante” si NO tiene NINGÚN registro en los 7 días
-    dfs = resumen[(resumen["centro"] == c) &
-                  (resumen["fecha"].dt.date >= hace_una_semana) &
-                  (resumen["fecha"].dt.date <= hoy)]
+    dfs = asistencia[(asistencia["centro"] == c) &
+                     (asistencia["fecha"].dt.date >= hace_una_semana) &
+                     (asistencia["fecha"].dt.date <= hoy)]
     if dfs.empty:
         faltan_semana.append(c)
 
@@ -405,10 +360,9 @@ with a1:
 with a2:
     st.metric("Centros sin carga (7 días)", len(faltan_semana))
 with a3:
-    # mini resumen centro actual (últimos 7 días)
-    dfc = resumen[(resumen["centro"] == centro_logueado) &
-                  (resumen["fecha"].dt.date >= hace_una_semana) &
-                  (resumen["fecha"].dt.date <= hoy)]
+    dfc = asistencia[(asistencia["centro"] == centro_logueado) &
+                     (asistencia["fecha"].dt.date >= hace_una_semana) &
+                     (asistencia["fecha"].dt.date <= hoy)]
     total_7 = int(dfc["total_presentes"].sum()) if not dfc.empty else 0
     st.metric(f"{centro_logueado} (7 días)", total_7)
 
@@ -416,6 +370,7 @@ if faltan_hoy:
     st.error("⚠️ Falta cargar HOY: " + ", ".join(faltan_hoy))
 if faltan_semana:
     st.warning("ℹ️ Sin registros en los últimos 7 días: " + ", ".join(faltan_semana))
+
 
 # =====================================================
 # TABS
@@ -431,23 +386,20 @@ tab_registro, tab_historial, tab_personas, tab_reportes, tab_admin = st.tabs(
 )
 
 # =====================================================
-# TAB 1 — (3) CARGA RÁPIDA + (2) MARCAR CERRADO RÁPIDO
+# TAB 1 — CARGA RÁPIDA + CERRADO
 # =====================================================
 with tab_registro:
     st.subheader("Carga rápida")
 
     colx1, colx2, colx3 = st.columns([1.2, 1.2, 1])
-
     with colx1:
         fecha = st.date_input("Fecha", value=hoy, key="quick_fecha")
-
     with colx2:
         if centro_logueado == "Casa Maranatha":
             espacio = st.selectbox("Espacio (Maranatha)", ESPACIOS_MARANATHA, key="quick_espacio")
         else:
             espacio = "General"
             st.info("Este centro carga en modo General (sin espacios).")
-
     with colx3:
         tipo_jornada = st.selectbox("Tipo de día", TIPOS_JORNADA, key="quick_tipo")
 
@@ -455,153 +407,136 @@ with tab_registro:
     notas = st.text_area("Notas (opcional)", key="quick_notas")
 
     cbtn1, cbtn2 = st.columns(2)
+
     with cbtn1:
         if st.button("💾 Guardar asistencia", use_container_width=True, key="quick_guardar"):
-            # Permiso: coordinador SOLO su centro (ya bloqueado), admin puede todo
-            ok_backup = backup_resumen()
+            # backup para deshacer
+            backup_asistencia_to_sheet()
 
             nueva = {
                 "id_registro": new_id(),
-                "fecha": pd.to_datetime(fecha),
+                "fecha": fecha.isoformat(),
                 "centro": centro_logueado,
                 "espacio": espacio,
                 "total_presentes": int(presentes),
                 "notas": (notas or "").strip(),
                 "coordinador": coordinador_logueado,
                 "tipo_jornada": tipo_jornada,
-                "cerrado": False,
-                "timestamp": pd.to_datetime(now_ts()),
+                "cerrado": "FALSE",
+                "timestamp": now_ts(),
                 "cargado_por": user,
                 "accion": "crear",
             }
-
-            resumen2 = pd.concat([resumen, pd.DataFrame([nueva])], ignore_index=True)
-            guardar_resumen(resumen2)
-            resumen = cargar_resumen()
-            st.success("Guardado ✅" + (" (backup ok)" if ok_backup else " (sin backup)"))
+            append_row_ws(ws_asistencia, nueva, ASISTENCIA_COLS)
+            st.success("Guardado ✅")
+            st.rerun()
 
     with cbtn2:
         if st.button("🚫 Marcar como CERRADO (0 presentes)", use_container_width=True, key="quick_cerrado"):
-            ok_backup = backup_resumen()
+            backup_asistencia_to_sheet()
 
             nueva = {
                 "id_registro": new_id(),
-                "fecha": pd.to_datetime(fecha),
+                "fecha": fecha.isoformat(),
                 "centro": centro_logueado,
                 "espacio": espacio,
                 "total_presentes": 0,
                 "notas": (notas or "").strip() or "Centro cerrado / no abrió",
                 "coordinador": coordinador_logueado,
                 "tipo_jornada": "Centro cerrado / no abrió",
-                "cerrado": True,
-                "timestamp": pd.to_datetime(now_ts()),
+                "cerrado": "TRUE",
+                "timestamp": now_ts(),
                 "cargado_por": user,
                 "accion": "cerrado",
             }
-
-            resumen2 = pd.concat([resumen, pd.DataFrame([nueva])], ignore_index=True)
-            guardar_resumen(resumen2)
-            resumen = cargar_resumen()
-            st.success("Registrado como cerrado ✅" + (" (backup ok)" if ok_backup else " (sin backup)"))
+            append_row_ws(ws_asistencia, nueva, ASISTENCIA_COLS)
+            st.success("Registrado como cerrado ✅")
+            st.rerun()
 
     st.markdown("---")
     st.write("### Vista rápida: últimos 14 días (este centro)")
-    dfc = resumen[resumen["centro"] == centro_logueado].copy()
-    dfc = dfc.dropna(subset=["fecha"])
-    dfc = dfc[dfc["fecha"].dt.date >= (hoy - timedelta(days=13))]
-    dfc = dfc.sort_values("fecha", ascending=True)
+    asistencia2 = df_from_ws(ws_asistencia, ASISTENCIA_COLS)
+    if not asistencia2.empty:
+        asistencia2["fecha"] = pd.to_datetime(asistencia2["fecha"], errors="coerce")
+        asistencia2["total_presentes"] = pd.to_numeric(asistencia2["total_presentes"], errors="coerce").fillna(0).astype(int)
 
+    dfc = asistencia2[asistencia2["centro"] == centro_logueado].copy() if not asistencia2.empty else pd.DataFrame()
     if dfc.empty:
         st.info("Todavía no hay registros para mostrar.")
     else:
+        dfc = dfc.dropna(subset=["fecha"])
+        dfc = dfc[dfc["fecha"].dt.date >= (hoy - timedelta(days=13))]
         serie = dfc.groupby("fecha")["total_presentes"].sum().sort_index()
         st.line_chart(serie)
 
 # =====================================================
-# TAB 2 — (4) HISTORIAL EDITABLE + BACKUP + DESHACER
+# TAB 2 — HISTORIAL EDITABLE + DESHACER (backup sheet)
 # =====================================================
 with tab_historial:
     st.subheader("Historial del centro (editar)")
 
-    st.caption("Tip: antes de guardar cambios, la app crea un backup automático. Podés deshacer con 1 click.")
+    st.caption("Antes de guardar cambios, se hace backup en la hoja `asistencia_backup`. Podés deshacer con 1 click.")
 
-    # historial del centro
-    dfx = resumen[resumen["centro"] == centro_logueado].copy()
-    dfx = dfx.dropna(subset=["fecha"])
-    dfx = dfx.sort_values("fecha", ascending=False).head(60)
+    asistencia2 = df_from_ws(ws_asistencia, ASISTENCIA_COLS)
+    if not asistencia2.empty:
+        asistencia2["fecha"] = pd.to_datetime(asistencia2["fecha"], errors="coerce")
+        asistencia2["timestamp"] = pd.to_datetime(asistencia2["timestamp"], errors="coerce")
+        asistencia2["total_presentes"] = pd.to_numeric(asistencia2["total_presentes"], errors="coerce").fillna(0).astype(int)
+        asistencia2["cerrado"] = asistencia2["cerrado"].astype(str).str.lower().isin(["true","1","yes","si","sí"])
+
+    dfx = asistencia2[asistencia2["centro"] == centro_logueado].copy() if not asistencia2.empty else pd.DataFrame()
+    dfx = dfx.dropna(subset=["fecha"]) if not dfx.empty else dfx
+    dfx = dfx.sort_values("fecha", ascending=False).head(60) if not dfx.empty else dfx
 
     if dfx.empty:
         st.info("No hay registros todavía.")
     else:
-        # columnas editables básicas (no tocar auditoría ni id)
-        cols_show = [
-            "id_registro","fecha","centro","espacio","total_presentes","notas",
-            "coordinador","tipo_jornada","cerrado","timestamp","cargado_por","accion"
-        ]
-        dfx = dfx[cols_show]
-
         st.write("### Editar últimos 60 registros")
-        edited = st.data_editor(
-            dfx,
-            use_container_width=True,
-            num_rows="fixed",
-            key="hist_editor",
-        )
+        edited = st.data_editor(dfx, use_container_width=True, num_rows="fixed", key="hist_editor")
 
         csave, cundo = st.columns(2)
 
         with csave:
             if st.button("💾 Guardar cambios del historial", use_container_width=True, key="hist_save"):
-                ok_backup = backup_resumen()
+                backup_asistencia_to_sheet()
 
-                # Permisos: coord solo puede editar registros de su centro (ya filtrado)
-                # Guardamos cambios haciendo merge por id_registro
-                base = resumen.copy()
-                base_ids = set(edited["id_registro"].astype(str).tolist())
-
-                # actualizamos filas editadas por id
+                base = asistencia2.copy()
                 base["id_registro"] = base["id_registro"].astype(str)
                 ed = edited.copy()
                 ed["id_registro"] = ed["id_registro"].astype(str)
 
-                # set auditoría para "editar"
-                ed["timestamp"] = pd.to_datetime(now_ts())
+                # Auditoría de edición
+                ed["timestamp"] = now_ts()
                 ed["cargado_por"] = user
                 ed["accion"] = "editar"
 
-                # merge: reemplazar filas que coinciden
-                base_not = base[~base["id_registro"].isin(base_ids)]
+                # Merge por id_registro
+                base_ids = set(ed["id_registro"].tolist())
+                base_not = base[~base["id_registro"].isin(base_ids)].copy()
                 merged = pd.concat([base_not, ed], ignore_index=True)
 
-                # normalizar tipos
-                merged["fecha"] = pd.to_datetime(merged["fecha"], errors="coerce")
-                merged["timestamp"] = pd.to_datetime(merged["timestamp"], errors="coerce")
-                merged["total_presentes"] = pd.to_numeric(merged["total_presentes"], errors="coerce").fillna(0).astype(int)
-                merged["cerrado"] = merged["cerrado"].astype(str).str.lower().isin(["true","1","yes","si","sí"])
+                # Normalizar a strings para Sheets
+                merged = merged[ASISTENCIA_COLS].copy()
+                write_df_to_ws(ws_asistencia, merged, ASISTENCIA_COLS)
 
-                guardar_resumen(merged)
-                resumen = cargar_resumen()
-                st.success("Cambios guardados ✅" + (" (backup ok)" if ok_backup else " (sin backup)"))
+                st.success("Cambios guardados ✅")
                 st.rerun()
 
         with cundo:
             if st.button("↩️ Deshacer (restaurar backup)", use_container_width=True, key="hist_undo"):
-                ok = restore_backup()
-                if ok:
-                    resumen = cargar_resumen()
-                    st.success("Backup restaurado ✅")
-                    st.rerun()
-                else:
-                    st.error("No hay backup para restaurar (o falló la restauración).")
+                restore_asistencia_from_backup()
+                st.success("Backup restaurado ✅")
+                st.rerun()
 
 # =====================================================
-# TAB 3 — PERSONAS (simple, sin el punto 6)
+# TAB 3 — PERSONAS (simple)
 # =====================================================
 with tab_personas:
     st.subheader(f"Personas — {centro_logueado}")
 
-    dfp = personas[personas["centro"] == centro_logueado].copy()
+    personas2 = df_from_ws(ws_personas, PERSONAS_COLS)
 
+    dfp = personas2[personas2["centro"] == centro_logueado].copy()
     bus = st.text_input("Buscar nombre", placeholder="Escribí parte del nombre...", key="per_bus")
     if bus.strip():
         dfp = dfp[dfp["nombre"].fillna("").str.contains(bus.strip(), case=False, na=False)]
@@ -609,7 +544,7 @@ with tab_personas:
     if dfp.empty:
         st.info("No hay personas para mostrar con ese filtro.")
     else:
-        st.dataframe(dfp[["nombre","frecuencia","centro","fecha_alta","notas"]], use_container_width=True)
+        st.dataframe(dfp, use_container_width=True)
 
     st.markdown("---")
     st.subheader("Agregar persona")
@@ -632,41 +567,41 @@ with tab_personas:
                 "notas": (notas or "").strip(),
                 "fecha_alta": date.today().isoformat(),
             }
-            personas2 = pd.concat([personas, pd.DataFrame([nueva])], ignore_index=True)
-            guardar_personas(personas2)
-            personas = cargar_personas()
+            append_row_ws(ws_personas, nueva, PERSONAS_COLS)
             st.success("Persona agregada ✅")
             st.rerun()
 
     st.markdown("---")
     st.subheader("Editar personas (centro actual)")
-    dfp2 = personas[personas["centro"] == centro_logueado].copy()
+    personas2 = df_from_ws(ws_personas, PERSONAS_COLS)
+    dfp2 = personas2[personas2["centro"] == centro_logueado].copy()
+
     if dfp2.empty:
         st.info("No hay personas para editar.")
     else:
         edited_p = st.data_editor(dfp2, use_container_width=True, num_rows="dynamic", key="per_editor")
         if st.button("💾 Guardar cambios de personas", use_container_width=True, key="per_save"):
-            otras = personas[personas["centro"] != centro_logueado].copy()
-            personas_out = pd.concat([otras, edited_p], ignore_index=True)
-            guardar_personas(personas_out)
-            personas = cargar_personas()
+            # reescribimos TODA la hoja personas (simple y confiable)
+            otras = personas2[personas2["centro"] != centro_logueado].copy()
+            out = pd.concat([otras, edited_p], ignore_index=True)
+            write_df_to_ws(ws_personas, out, PERSONAS_COLS)
             st.success("Cambios guardados ✅")
             st.rerun()
 
 # =====================================================
-# TAB 4 — (5) REPORTES PRO + (7) EXPORTACIONES
+# TAB 4 — REPORTES PRO + EXPORT
 # =====================================================
 with tab_reportes:
     st.subheader("Reportes pro")
 
-    if resumen.empty or resumen["fecha"].isna().all():
-        st.info("Todavía no hay datos cargados.")
+    asistencia2 = df_from_ws(ws_asistencia, ASISTENCIA_COLS)
+    if asistencia2.empty:
+        st.info("Todavía no hay datos.")
     else:
-        df = resumen.dropna(subset=["fecha"]).copy()
-        df["anio"] = df["fecha"].dt.year
-        df["dia"] = df["fecha"].dt.date
+        asistencia2["fecha"] = pd.to_datetime(asistencia2["fecha"], errors="coerce")
+        asistencia2["total_presentes"] = pd.to_numeric(asistencia2["total_presentes"], errors="coerce").fillna(0).astype(int)
+        asistencia2["dia"] = asistencia2["fecha"].dt.date
 
-        # filtros
         colf1, colf2, colf3, colf4 = st.columns(4)
         with colf1:
             centros_sel = st.multiselect("Centros", CENTROS, default=[centro_logueado], key="rep_centros")
@@ -678,9 +613,9 @@ with tab_reportes:
             coord_all = sorted({c for lst in COORDINADORES.values() for c in lst})
             coord_sel = st.selectbox("Coordinador (opcional)", ["Todos"] + coord_all, key="rep_coord")
 
-        dff = df[(df["centro"].isin(centros_sel)) &
-                 (df["dia"] >= desde) &
-                 (df["dia"] <= hasta)].copy()
+        dff = asistencia2[(asistencia2["centro"].isin(centros_sel)) &
+                          (asistencia2["dia"] >= desde) &
+                          (asistencia2["dia"] <= hasta)].copy()
 
         if coord_sel != "Todos":
             dff = dff[dff["coordinador"] == coord_sel]
@@ -688,30 +623,27 @@ with tab_reportes:
         if dff.empty:
             st.info("No hay datos con esos filtros.")
         else:
-            # --- Reporte 28 días tendencia ---
             st.markdown("### Tendencia (periodo seleccionado)")
             serie = dff.groupby("fecha")["total_presentes"].sum().sort_index()
             st.line_chart(serie)
 
-            # --- Semana vs semana pasada ---
             st.markdown("### Semana vs semana pasada")
             fin = hoy
             ini = hoy - timedelta(days=6)
             fin_prev = hoy - timedelta(days=7)
             ini_prev = hoy - timedelta(days=13)
 
-            w = df[(df["centro"].isin(centros_sel)) &
-                   (df["dia"] >= ini) & (df["dia"] <= fin)]
-            wp = df[(df["centro"].isin(centros_sel)) &
-                    (df["dia"] >= ini_prev) & (df["dia"] <= fin_prev)]
-
+            w = asistencia2[(asistencia2["centro"].isin(centros_sel)) &
+                            (asistencia2["dia"] >= ini) & (asistencia2["dia"] <= fin)]
+            wp = asistencia2[(asistencia2["centro"].isin(centros_sel)) &
+                             (asistencia2["dia"] >= ini_prev) & (asistencia2["dia"] <= fin_prev)]
             if coord_sel != "Todos":
                 w = w[w["coordinador"] == coord_sel]
                 wp = wp[wp["coordinador"] == coord_sel]
 
             tot_w = int(w["total_presentes"].sum()) if not w.empty else 0
             tot_wp = int(wp["total_presentes"].sum()) if not wp.empty else 0
-            delta = (tot_w - tot_wp)
+            delta = tot_w - tot_wp
             delta_pct = (delta / tot_wp * 100) if tot_wp > 0 else None
 
             cA, cB, cC = st.columns(3)
@@ -722,12 +654,10 @@ with tab_reportes:
             with cC:
                 st.metric("Δ %", f"{delta_pct:.1f}%" if delta_pct is not None else "—")
 
-            # --- Comparación por centro (barras) ---
             st.markdown("### Comparación por centro (periodo)")
             by_center = dff.groupby("centro")["total_presentes"].sum().sort_values(ascending=False)
             st.bar_chart(by_center)
 
-            # --- Ranking días pico ---
             st.markdown("### Top 10 días (periodo)")
             top_days = (
                 dff.groupby("dia")["total_presentes"]
@@ -738,7 +668,6 @@ with tab_reportes:
             )
             st.dataframe(top_days, use_container_width=True)
 
-            # --- Por tipo de jornada ---
             st.markdown("### Por tipo de jornada (periodo)")
             by_tipo = dff.groupby("tipo_jornada")["total_presentes"].sum().sort_values(ascending=False)
             st.bar_chart(by_tipo)
@@ -746,7 +675,6 @@ with tab_reportes:
             st.markdown("---")
             st.subheader("Exportaciones (1 click)")
 
-            # Export 1: dataset filtrado
             st.download_button(
                 "⬇️ Descargar asistencia FILTRADA (CSV)",
                 dff.sort_values("fecha", ascending=False).to_csv(index=False).encode("utf-8"),
@@ -755,10 +683,9 @@ with tab_reportes:
                 use_container_width=True,
             )
 
-            # Export 2: Centro actual semana
-            df_centro_week = df[(df["centro"] == centro_logueado) &
-                                (df["dia"] >= (hoy - timedelta(days=6))) &
-                                (df["dia"] <= hoy)].copy()
+            df_centro_week = asistencia2[(asistencia2["centro"] == centro_logueado) &
+                                         (asistencia2["dia"] >= (hoy - timedelta(days=6))) &
+                                         (asistencia2["dia"] <= hoy)].copy()
             st.download_button(
                 f"⬇️ Descargar {centro_logueado} (últimos 7 días)",
                 df_centro_week.sort_values("fecha", ascending=False).to_csv(index=False).encode("utf-8"),
@@ -767,18 +694,17 @@ with tab_reportes:
                 use_container_width=True,
             )
 
-            # Export 3: Todo (solo admin)
             if role == "admin":
                 st.download_button(
                     "⬇️ Descargar TODO (CSV)",
-                    df.sort_values("fecha", ascending=False).to_csv(index=False).encode("utf-8"),
+                    asistencia2.sort_values("fecha", ascending=False).to_csv(index=False).encode("utf-8"),
                     file_name="asistencia_todo.csv",
                     mime="text/csv",
                     use_container_width=True,
                 )
 
 # =====================================================
-# TAB 5 — ADMIN / AUDITORÍA (8)
+# TAB 5 — ADMIN / AUDITORÍA
 # =====================================================
 with tab_admin:
     st.subheader("Admin / Auditoría")
@@ -786,15 +712,18 @@ with tab_admin:
     if role != "admin":
         st.info("Esta sección es solo para Admin.")
     else:
+        asistencia2 = df_from_ws(ws_asistencia, ASISTENCIA_COLS)
+        if not asistencia2.empty:
+            asistencia2["fecha"] = pd.to_datetime(asistencia2["fecha"], errors="coerce")
+            asistencia2["timestamp"] = pd.to_datetime(asistencia2["timestamp"], errors="coerce")
+            asistencia2 = asistencia2.sort_values("timestamp", ascending=False)
+
         st.markdown("### Auditoría (quién / cuándo / acción)")
-        if resumen.empty:
+        if asistencia2.empty:
             st.info("No hay registros.")
         else:
-            dfa = resumen.copy()
-            dfa = dfa.dropna(subset=["fecha"])
-            dfa = dfa.sort_values("timestamp", ascending=False)
             st.dataframe(
-                dfa[["timestamp","cargado_por","accion","centro","fecha","espacio","total_presentes","coordinador","notas","id_registro"]],
+                asistencia2[["timestamp","cargado_por","accion","centro","fecha","espacio","total_presentes","coordinador","notas","id_registro"]],
                 use_container_width=True,
             )
 
@@ -802,32 +731,17 @@ with tab_admin:
         st.markdown("### Herramientas Admin")
 
         coladm1, coladm2, coladm3 = st.columns(3)
-
         with coladm1:
-            if st.button("🧹 Re-guardar CSV limpio", use_container_width=True):
-                # re-guardar asegurando columnas y tipos
-                df_clean = cargar_resumen()
-                guardar_resumen(df_clean)
-                st.success("Listo ✅")
+            if st.button("↩️ Restaurar backup (sheet)", use_container_width=True):
+                restore_asistencia_from_backup()
+                st.success("Backup restaurado ✅")
+                st.rerun()
 
         with coladm2:
-            if st.button("↩️ Restaurar backup global", use_container_width=True):
-                ok = restore_backup()
-                if ok:
-                    resumen = cargar_resumen()
-                    st.success("Backup restaurado ✅")
-                    st.rerun()
-                else:
-                    st.error("No hay backup (o falló).")
+            if st.button("🧾 Crear backup ahora", use_container_width=True):
+                backup_asistencia_to_sheet()
+                st.success("Backup creado ✅")
 
         with coladm3:
-            if st.button("⚠️ Crear backup manual", use_container_width=True):
-                ok = backup_resumen()
-                st.success("Backup creado ✅" if ok else "No pude crear backup.")
-
-        st.markdown("---")
-        st.markdown("### Resumen de “olvidos” (hoy)")
-        if faltan_hoy:
-            st.error("Faltan hoy: " + ", ".join(faltan_hoy))
-        else:
-            st.success("Hoy están todos cargados ✅")
+            if st.button("🔄 Recargar todo", use_container_width=True):
+                st.rerun()
