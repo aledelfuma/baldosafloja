@@ -6,8 +6,12 @@ import pandas as pd
 import requests
 import streamlit as st
 
+from google.auth.exceptions import RefreshError
+from google.auth.transport.requests import Request
 from google.oauth2.service_account import Credentials
 from google.auth.transport.requests import AuthorizedSession
+
+
 
 
 # ---------------- UI ----------------
@@ -90,9 +94,18 @@ def spreadsheet_id():
 
 
 # ---------------- Google auth via Requests ----------------
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+
 @st.cache_resource(show_spinner=False)
 def get_authed_session():
     sa = dict(st.secrets["gcp_service_account"])
+
+    # chequeos sin exponer secretos
+    must = ["type","project_id","private_key","client_email","token_uri"]
+    missing = [k for k in must if not str(sa.get(k, "")).strip()]
+    if missing:
+        st.error(f"Secrets incompletos. Faltan: {missing}")
+        st.stop()
 
     # normalizar private_key
     pk = sa.get("private_key", "")
@@ -101,14 +114,18 @@ def get_authed_session():
         pk += "\n"
     sa["private_key"] = pk
 
-    creds = Credentials.from_service_account_info(sa, scopes=SCOPES)
-    return AuthorizedSession(creds)
+    try:
+        creds = Credentials.from_service_account_info(sa, scopes=SCOPES)
+        # fuerza refresh acá para capturar el error real
+        creds.refresh(Request())
+        st.success("✅ Token OK (service account autenticado)")
+        return AuthorizedSession(creds)
 
-session = get_authed_session()
-SID = spreadsheet_id()
-
-BASE = f"https://sheets.googleapis.com/v4/spreadsheets/{SID}"
-
+    except RefreshError as e:
+        st.error("❌ RefreshError: Google rechazó la autenticación del service account.")
+        st.write("Detalle (texto real):")
+        st.code(str(e))
+        st.stop()
 
 def sheets_get_meta():
     r = session.get(BASE)
@@ -294,3 +311,4 @@ with tabs[2]:
                 file_name="asistencia.csv",
                 mime="text/csv"
             )
+
