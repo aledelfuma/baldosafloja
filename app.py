@@ -112,6 +112,13 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 
 @st.cache_resource(show_spinner=False)
+if "gcp_service_account" not in st.secrets:
+    st.error("Falta [gcp_service_account] en Secrets de Streamlit Cloud.")
+    st.stop()
+
+if "sheets" not in st.secrets or "spreadsheet_id" not in st.secrets["sheets"]:
+    st.error("Falta [sheets] spreadsheet_id en Secrets de Streamlit Cloud.")
+    st.stop()
 def get_sheets_service():
     sa = dict(st.secrets["gcp_service_account"])
 
@@ -310,3 +317,4 @@ with tabs[2]:
             file_name="asistencia.csv",
             mime="text/csv"
         )
+
