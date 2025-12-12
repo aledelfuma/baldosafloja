@@ -1,5 +1,5 @@
 # =====================================================
-# IMPORTS (SIEMPRE ARRIBA)
+# IMPORTS
 # =====================================================
 import os
 import uuid
@@ -16,15 +16,11 @@ from googleapiclient.errors import HttpError
 # =====================================================
 # CONFIG STREAMLIT
 # =====================================================
-st.set_page_config(
-    page_title="Asistencia — Hogar de Cristo BB",
-    layout="wide"
-)
+st.set_page_config(page_title="Asistencia — Hogar de Cristo BB", layout="wide")
 
 PRIMARY_COLOR = "#004E7B"
 ACCENT_COLOR = "#63296C"
 LOGO_FILE = "logo_hogar.png"
-
 
 st.markdown(
     f"""
@@ -33,18 +29,15 @@ st.markdown(
         background-color: #0b1220;
         border-right: 4px solid {PRIMARY_COLOR};
     }}
-    h1, h2, h3 {{
-        color: {PRIMARY_COLOR};
-    }}
+    h1, h2, h3 {{ color: {PRIMARY_COLOR}; }}
     .stButton>button {{
         background-color: {PRIMARY_COLOR};
         color: white;
         border-radius: 999px;
         font-weight: 700;
+        border: none;
     }}
-    .stButton>button:hover {{
-        background-color: {ACCENT_COLOR};
-    }}
+    .stButton>button:hover {{ background-color: {ACCENT_COLOR}; }}
     </style>
     """,
     unsafe_allow_html=True
@@ -52,7 +45,19 @@ st.markdown(
 
 
 # =====================================================
-# CONSTANTES DE NEGOCIO
+# CHEQUEO DE SECRETS (CLARO Y TEMPRANO)
+# =====================================================
+if "gcp_service_account" not in st.secrets:
+    st.error("Falta [gcp_service_account] en Secrets de Streamlit Cloud.")
+    st.stop()
+
+if "sheets" not in st.secrets or "spreadsheet_id" not in st.secrets["sheets"]:
+    st.error("Falta [sheets] → spreadsheet_id en Secrets de Streamlit Cloud.")
+    st.stop()
+
+
+# =====================================================
+# CONSTANTES
 # =====================================================
 CENTROS = ["Nudo a Nudo", "Casa Maranatha", "Calle Belén"]
 
@@ -76,22 +81,12 @@ ASISTENCIA_TAB = "asistencia"
 PERSONAS_TAB = "personas"
 
 ASISTENCIA_COLS = [
-    "id_registro",
-    "fecha",
-    "centro",
-    "espacio",
-    "presentes",
-    "coordinador",
-    "notas",
-    "timestamp",
-    "usuario",
+    "id_registro", "fecha", "centro", "espacio",
+    "presentes", "coordinador", "notas",
+    "timestamp", "usuario"
 ]
 
-PERSONAS_COLS = [
-    "nombre",
-    "frecuencia",
-    "centro",
-]
+PERSONAS_COLS = ["nombre", "frecuencia", "centro"]
 
 
 # =====================================================
@@ -100,42 +95,28 @@ PERSONAS_COLS = [
 def now_ts():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-
 def new_id():
     return str(uuid.uuid4())
 
 
 # =====================================================
-# GOOGLE SHEETS API (SIN gspread)
+# GOOGLE SHEETS API v4 (SIN gspread)
 # =====================================================
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-
 @st.cache_resource(show_spinner=False)
-if "gcp_service_account" not in st.secrets:
-    st.error("Falta [gcp_service_account] en Secrets de Streamlit Cloud.")
-    st.stop()
-
-if "sheets" not in st.secrets or "spreadsheet_id" not in st.secrets["sheets"]:
-    st.error("Falta [sheets] spreadsheet_id en Secrets de Streamlit Cloud.")
-    st.stop()
 def get_sheets_service():
     sa = dict(st.secrets["gcp_service_account"])
-
-    # blindaje de private_key
     pk = sa.get("private_key", "")
     pk = pk.replace("\\n", "\n").strip()
     if not pk.endswith("\n"):
         pk += "\n"
     sa["private_key"] = pk
-
     creds = Credentials.from_service_account_info(sa, scopes=SCOPES)
     return build("sheets", "v4", credentials=creds)
 
-
 def spreadsheet_id():
     return st.secrets["sheets"]["spreadsheet_id"]
-
 
 def ensure_tab(service, sid, title):
     meta = service.spreadsheets().get(spreadsheetId=sid).execute()
@@ -145,27 +126,20 @@ def ensure_tab(service, sid, title):
     body = {"requests": [{"addSheet": {"properties": {"title": title}}}]}
     service.spreadsheets().batchUpdate(spreadsheetId=sid, body=body).execute()
 
-
 def read_table(service, sid, tab):
     rng = f"{tab}!A1:Z"
     res = service.spreadsheets().values().get(
-        spreadsheetId=sid,
-        range=rng
+        spreadsheetId=sid, range=rng
     ).execute()
     values = res.get("values", [])
     if not values:
         return pd.DataFrame()
-    header = values[0]
-    rows = values[1:]
-    return pd.DataFrame(rows, columns=header)
-
+    return pd.DataFrame(values[1:], columns=values[0])
 
 def write_table(service, sid, tab, df):
-    values = [df.columns.tolist()] + df.astype(str).values.tolist()
+    values = [df.columns.tolist()] + df.astype(str).fillna("").values.tolist()
     service.spreadsheets().values().clear(
-        spreadsheetId=sid,
-        range=f"{tab}!A:Z",
-        body={}
+        spreadsheetId=sid, range=f"{tab}!A:Z", body={}
     ).execute()
     service.spreadsheets().values().update(
         spreadsheetId=sid,
@@ -173,7 +147,6 @@ def write_table(service, sid, tab, df):
         valueInputOption="USER_ENTERED",
         body={"values": values}
     ).execute()
-
 
 def append_row(service, sid, tab, row):
     service.spreadsheets().values().append(
@@ -194,12 +167,10 @@ sid = spreadsheet_id()
 ensure_tab(service, sid, ASISTENCIA_TAB)
 ensure_tab(service, sid, PERSONAS_TAB)
 
-df_asistencia = read_table(service, sid, ASISTENCIA_TAB)
-if df_asistencia.empty:
+if read_table(service, sid, ASISTENCIA_TAB).empty:
     write_table(service, sid, ASISTENCIA_TAB, pd.DataFrame(columns=ASISTENCIA_COLS))
 
-df_personas = read_table(service, sid, PERSONAS_TAB)
-if df_personas.empty:
+if read_table(service, sid, PERSONAS_TAB).empty:
     write_table(service, sid, PERSONAS_TAB, pd.DataFrame(columns=PERSONAS_COLS))
 
 
@@ -210,12 +181,8 @@ if os.path.exists(LOGO_FILE):
     st.sidebar.image(LOGO_FILE, use_container_width=True)
 
 st.sidebar.title("Centro")
-
 centro = st.sidebar.selectbox("Centro barrial", CENTROS)
-coordinador = st.sidebar.selectbox(
-    "Quién carga",
-    COORDINADORES.get(centro, [])
-)
+coordinador = st.sidebar.selectbox("Quién carga", COORDINADORES.get(centro, []))
 
 
 # =====================================================
@@ -232,7 +199,6 @@ tabs = st.tabs(["📌 Registrar", "👥 Personas", "📊 Reportes"])
 # =====================================================
 with tabs[0]:
     fecha = st.date_input("Fecha", value=date.today())
-
     if centro == "Casa Maranatha":
         espacio = st.selectbox("Espacio", ESPACIOS_MARANATHA)
     else:
@@ -244,15 +210,9 @@ with tabs[0]:
 
     if st.button("Guardar asistencia"):
         row = [
-            new_id(),
-            fecha.isoformat(),
-            centro,
-            espacio,
-            str(int(presentes)),
-            coordinador,
-            notas,
-            now_ts(),
-            "app",
+            new_id(), fecha.isoformat(), centro, espacio,
+            str(int(presentes)), coordinador, notas,
+            now_ts(), "app"
         ]
         append_row(service, sid, ASISTENCIA_TAB, row)
         st.success("Asistencia guardada")
@@ -264,27 +224,15 @@ with tabs[0]:
 # =====================================================
 with tabs[1]:
     dfp = read_table(service, sid, PERSONAS_TAB)
-    dfp = dfp[dfp["centro"] == centro] if not dfp.empty else dfp
-
-    st.subheader("Listado")
+    if not dfp.empty:
+        dfp = dfp[dfp["centro"] == centro]
     st.dataframe(dfp, use_container_width=True)
 
     st.markdown("---")
-    st.subheader("Agregar persona")
-
     nombre = st.text_input("Nombre completo")
-    frecuencia = st.selectbox(
-        "Frecuencia",
-        ["Diaria", "Semanal", "Mensual", "No asiste"]
-    )
-
+    frecuencia = st.selectbox("Frecuencia", ["Diaria", "Semanal", "Mensual", "No asiste"])
     if st.button("Agregar persona"):
-        append_row(
-            service,
-            sid,
-            PERSONAS_TAB,
-            [nombre, frecuencia, centro]
-        )
+        append_row(service, sid, PERSONAS_TAB, [nombre, frecuencia, centro])
         st.success("Persona agregada")
         st.rerun()
 
@@ -299,22 +247,13 @@ with tabs[2]:
     else:
         dfa["fecha"] = pd.to_datetime(dfa["fecha"])
         dfa = dfa[dfa["centro"] == centro]
-
-        st.subheader("Últimos 30 días")
         desde = date.today() - timedelta(days=30)
         dfa = dfa[dfa["fecha"].dt.date >= desde]
-
-        serie = (
-            dfa.groupby(dfa["fecha"].dt.date)["presentes"]
-            .sum()
-            .astype(int)
-        )
+        serie = dfa.groupby(dfa["fecha"].dt.date)["presentes"].astype(int).sum()
         st.line_chart(serie)
-
         st.download_button(
             "Descargar CSV",
             dfa.to_csv(index=False).encode("utf-8"),
             file_name="asistencia.csv",
             mime="text/csv"
         )
-
