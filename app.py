@@ -141,7 +141,7 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 # =========================
 # CSV (repo fallback)
 # =========================
-CSV_FALLBACKS = ["data/personas.csv", "personas.csv", "data/personas.CSV", "personas.CSV"]
+CSV_FALLBACKS = ["datapersonas.csv", "personas.csv", "data/personas.CSV", "personas.CSV"]
 
 def find_csv_path():
     for p in CSV_FALLBACKS:
@@ -677,3 +677,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
