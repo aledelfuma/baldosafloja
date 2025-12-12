@@ -196,9 +196,22 @@ def get_gspread_client():
 def get_spreadsheet():
     gc = get_gspread_client()
     spreadsheet_id = st.secrets["sheets"]["spreadsheet_id"]
-    sh = gc.open_by_key(spreadsheet_id)
-    st.success(f"OK: pude abrir la planilla → {sh.title}")
-    return sh
+    sa = dict(st.secrets["gcp_service_account"])
+
+    st.markdown("### Debug Google Sheets")
+    st.write("client_email (bot):", sa.get("client_email"))
+    st.write("spreadsheet_id:", spreadsheet_id)
+    st.write("URL:", f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit")
+
+    try:
+        sh = gc.open_by_key(spreadsheet_id)
+        st.success(f"OK: pude abrir la planilla → {sh.title}")
+        return sh
+    except Exception as e:
+        st.error("❌ No se puede abrir la planilla (PERMISOS o ID).")
+        st.exception(e)
+        st.stop()
+
 
 
 
@@ -693,5 +706,6 @@ with tab_admin:
                 restore_asistencia_from_backup()
                 st.success("Backup restaurado ✅")
                 st.rerun()
+
 
 
