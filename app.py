@@ -64,7 +64,7 @@ def norm_key(s: str) -> str:
 
 def normalize_centro(s: str) -> str:
     k = norm_key(s)
-    if k in ["calle belen", "calle bélen", "calle belén", "belen", "belén"]:
+    if k in ["calle belen", "calle belen", "calle belen ", "calle belen.", "calle bélen", "calle belén", "belen", "belén"]:
         return "Calle Belén"
     if k in ["nudo a nudo", "nudo", "nudo a  nudo"]:
         return "Nudo a Nudo"
@@ -98,14 +98,9 @@ def safe_int(x, default=0):
 
 
 # =========================
-# Dataframe hardening (clave para tu error)
+# Dataframe hardening
 # =========================
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    - baja a minúsculas
-    - trim espacios
-    - reemplaza variantes a nombres canónicos
-    """
     if df is None or df.empty:
         return df
 
@@ -117,7 +112,6 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = new_cols
 
-    # alias -> canónico
     aliases = {
         "persona": "nombre",
         "personas": "nombre",
@@ -132,18 +126,11 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
         "coordinadora": "coordinador",
         "año": "anio",
         "ano": "anio",
-        "fecha": "fecha",
-        "espacio": "espacio",
-        "modo": "modo",
-        "notas": "notas",
-        "timestamp": "timestamp",
-        "frecuencia": "frecuencia",
     }
     for a, b in aliases.items():
         if a in df.columns and b not in df.columns:
             df = df.rename(columns={a: b})
 
-    # asegurar columnas mínimas si faltan (evita crashes)
     for col in ["fecha", "anio", "centro", "espacio", "presentes", "coordinador", "modo", "notas", "timestamp"]:
         if col not in df.columns:
             df[col] = ""
@@ -152,9 +139,9 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # =========================
-# CSV
+# CSV (repo fallback)
 # =========================
-CSV_FALLBACKS = ["data/personas.csv", "personas.csv"]
+CSV_FALLBACKS = ["data/personas.csv", "personas.csv", "data/personas.CSV", "personas.CSV"]
 
 def find_csv_path():
     for p in CSV_FALLBACKS:
@@ -174,7 +161,6 @@ def load_personas_csv_fallback() -> pd.DataFrame:
 
     df = normalize_columns(df)
 
-    # asegurar columnas
     for k in ["nombre", "frecuencia", "centro"]:
         if k not in df.columns:
             df[k] = ""
@@ -183,6 +169,7 @@ def load_personas_csv_fallback() -> pd.DataFrame:
     df["nombre"] = df["nombre"].map(clean_cell)
     df["frecuencia"] = df["frecuencia"].map(normalize_frecuencia)
     df["centro"] = df["centro"].map(normalize_centro)
+
     df = df[df["nombre"] != ""]
     df = df.drop_duplicates(subset=["nombre", "centro"], keep="first")
     return df
@@ -239,7 +226,6 @@ def ensure_tab(session: AuthorizedSession, title: str, headers: list[str]):
     sid, base = sheets_base()
 
     if tab_exists(session, title):
-        # si A1 está vacío, escribo headers
         rng = f"{title}!A1:Z1"
         r = session.get(f"{base}/values/{rng}", timeout=30)
         r.raise_for_status()
@@ -291,7 +277,6 @@ def read_table(session: AuthorizedSession, tab: str) -> pd.DataFrame:
     for c in df.columns:
         df[c] = df[c].map(clean_cell)
 
-    # 🔥 endurecer columnas (evita tu KeyError)
     df = normalize_columns(df)
     return df
 
@@ -362,7 +347,7 @@ def login_box():
 
 
 # =========================
-# Seed personas CSV -> Sheets (si está vacío)
+# Seed personas CSV -> Sheets
 # =========================
 def seed_personas_if_empty(session: AuthorizedSession) -> bool:
     df = read_table(session, PERSONAS_TAB)
@@ -452,7 +437,6 @@ def main():
     df_personas = read_table(session, PERSONAS_TAB)
     df_asistencia = read_table(session, ASISTENCIA_TAB)
 
-    # normalizaciones de contenido
     if df_personas is None or df_personas.empty:
         df_personas = pd.DataFrame(columns=["nombre", "frecuencia", "centro", "timestamp"])
     else:
@@ -467,17 +451,14 @@ def main():
         df_asistencia["presentes"] = df_asistencia["presentes"].map(lambda x: safe_int(x, 0))
         df_asistencia["anio"] = df_asistencia["anio"].map(lambda x: safe_int(x, anio_actual))
 
-    # Header
     st.markdown(f"# {APP_TITLE}")
     st.markdown(
         f"Estás trabajando sobre: **{centro}** — 👤 **{coordinador}**  &nbsp;&nbsp; <span class='hc-pill'>Año: {anio_actual}</span>",
         unsafe_allow_html=True,
     )
 
-    # DF por centro/año
     df_c = df_asistencia[(df_asistencia["centro"] == centro) & (df_asistencia["anio"] == anio_actual)].copy()
 
-    # KPIs (robustos)
     hoy = date.today().isoformat()
     if "presentes" not in df_c.columns:
         df_c["presentes"] = 0
@@ -551,17 +532,53 @@ def main():
     with tabs[1]:
         st.subheader("Personas de este centro")
 
+        # ✅ Uploader dentro de la app
+        up = st.file_uploader("📤 Subir personas.csv (si no está en GitHub)", type=["csv"])
+        if up is not None:
+            try:
+                df_up = pd.read_csv(up)
+            except UnicodeDecodeError:
+                df_up = pd.read_csv(up, encoding="latin1")
+
+            df_up = normalize_columns(df_up)
+
+            for k in ["nombre", "frecuencia", "centro"]:
+                if k not in df_up.columns:
+                    df_up[k] = ""
+
+            df_up["nombre"] = df_up["nombre"].map(clean_cell)
+            df_up["frecuencia"] = df_up["frecuencia"].map(normalize_frecuencia)
+            df_up["centro"] = df_up["centro"].map(normalize_centro)
+            df_up = df_up[df_up["nombre"] != ""]
+
+            st.success(
+                f"CSV cargado: {len(df_up)} filas. Centros detectados: {sorted(df_up['centro'].unique().tolist())}"
+            )
+            st.dataframe(df_up.head(20), use_container_width=True)
+
+            if st.button("✅ Importar este CSV a Google Sheets", use_container_width=True):
+                now = datetime.now().isoformat(timespec="seconds")
+                for _, r in df_up.iterrows():
+                    append_row(session, PERSONAS_TAB, [r["nombre"], r["frecuencia"], r["centro"], now])
+                st.success("Importado a Sheets ✅")
+                st.rerun()
+
         colI, colJ = st.columns([1, 2])
         with colI:
-            if st.button("📥 Importar CSV ahora (si está vacío)", use_container_width=True):
+            if st.button("📥 Importar CSV del repo ahora (si está vacío)", use_container_width=True):
                 ok = seed_personas_if_empty(session)
                 if ok:
                     st.success("Importado ✅. Recargando…")
                 else:
-                    st.info("No importé: no hay CSV o la hoja ya tenía datos.")
+                    st.info("No importé: no hay CSV en el repo o la hoja ya tenía datos.")
                 st.rerun()
         with colJ:
-            st.caption("Busca `data/personas.csv` o `personas.csv`.")
+            st.caption("Busca `data/personas.csv` o `personas.csv` (en el repo).")
+
+        # ✅ diagnóstico de centro y centros detectados
+        st.caption(f"Centro actual (logueado): {centro}")
+        if not df_personas.empty:
+            st.caption("Centros en Sheets (personas): " + ", ".join(sorted(df_personas["centro"].unique().tolist())))
 
         personas_centro = df_personas[df_personas["centro"] == centro].copy()
         st.markdown(f"<span class='hc-pill'>Personas visibles: {len(personas_centro)}</span>", unsafe_allow_html=True)
@@ -643,13 +660,14 @@ def main():
             st.altair_chart(bar, use_container_width=True)
             st.dataframe(dfg.sort_values(by="fecha", ascending=False), use_container_width=True)
 
+    # Sidebar diagnóstico
     with st.sidebar.expander("🔧 Diagnóstico", expanded=False):
         csv_path = find_csv_path()
-        st.write("CSV encontrado:", csv_path if csv_path else "❌ NO")
+        st.write("CSV encontrado en repo:", csv_path if csv_path else "❌ NO")
         if csv_path:
             df_csv = load_personas_csv_fallback()
-            st.write("Filas CSV:", len(df_csv))
-            st.write("Centros detectados en CSV:", sorted(set(df_csv["centro"].tolist())))
+            st.write("Filas CSV repo:", len(df_csv))
+            st.write("Centros en CSV repo:", sorted(set(df_csv["centro"].tolist())))
         st.write("Filas PERSONAS (Sheets):", len(df_personas))
         st.write("Filas ASISTENCIA (Sheets):", len(df_asistencia))
         st.write("Centro usuario:", centro)
