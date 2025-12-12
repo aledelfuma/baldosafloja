@@ -1,15 +1,52 @@
-import os
-import uuid
-from datetime import date, datetime, timedelta
-
-import pandas as pd
-import requests
+import re
 import streamlit as st
-
-from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.service_account import Credentials
-from google.auth.transport.requests import AuthorizedSession
+from google.auth.exceptions import RefreshError
+
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+
+def debug_secrets_and_auth():
+    if "gcp_service_account" not in st.secrets:
+        st.error("❌ Falta [gcp_service_account] en Secrets.")
+        st.stop()
+
+    sa = dict(st.secrets["gcp_service_account"])
+
+    # 1) Chequeo de campos obligatorios (sin exponer valores)
+    required = ["type","project_id","private_key","client_email","token_uri"]
+    missing = [k for k in required if not str(sa.get(k, "")).strip()]
+    if missing:
+        st.error(f"❌ Secrets incompletos. Faltan: {missing}")
+        st.stop()
+
+    # 2) Validaciones de formato (sin imprimir private_key)
+    st.write("✅ type:", sa.get("type"))
+    st.write("✅ project_id presente:", bool(sa.get("project_id")))
+    st.write("✅ client_email:", sa.get("client_email"))
+    st.write("✅ token_uri:", sa.get("token_uri"))
+
+    pk = str(sa.get("private_key", ""))
+    st.write("🔎 private_key length:", len(pk))
+    st.write("🔎 private_key BEGIN/END:",
+             ("BEGIN PRIVATE KEY" in pk) and ("END PRIVATE KEY" in pk))
+
+    # normalización (por si vino con \\n)
+    pk_norm = pk.replace("\\n", "\n").strip()
+    if not pk_norm.endswith("\n"):
+        pk_norm += "\n"
+    sa["private_key"] = pk_norm
+
+    # 3) Intento de autenticación mostrando SOLO el error real
+    try:
+        creds = Credentials.from_service_account_info(sa, scopes=SCOPES)
+        creds.refresh(Request())
+        st.success("✅ AUTH OK: se obtuvo token correctamente.")
+        return True
+    except RefreshError as e:
+        st.error("❌ AUTH FAIL: Google rechazó el JWT del service account.")
+        st.code(str(e))  # esto NO muestra la key, muestra el motivo
+        return False
 
 
 
@@ -311,4 +348,5 @@ with tabs[2]:
                 file_name="asistencia.csv",
                 mime="text/csv"
             )
+
 
