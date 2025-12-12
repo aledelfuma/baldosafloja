@@ -211,43 +211,24 @@ def get_spreadsheet():
 
     try:
         sh = gc.open_by_key(spreadsheet_id)
+        st.success(f"OK: pude abrir la planilla → {sh.title}")
         return sh
 
     except Exception as e:
-        st.error("❌ No pude abrir esa planilla por permisos.")
-        st.caption("➡️ Voy a crear una planilla nueva propiedad del BOT (solución definitiva).")
+        st.error("❌ Error abriendo o creando planilla con el BOT")
 
-        # Crear nueva planilla en el Drive del service account
-        sh_new = gc.create("Asistencia — Hogar de Cristo (AUTO)")
-
-        # Crear/asegurar hojas necesarias
-        ws_as = sh_new.sheet1
-        ws_as.update_title("asistencia")
-        ensure_headers(ws_as, ASISTENCIA_COLS)
+        st.write("Tipo de error:", type(e).__name__)
+        st.write("Args:", getattr(e, "args", None))
 
         try:
-            ws_p = sh_new.add_worksheet(title="personas", rows="2000", cols="30")
+            if hasattr(e, "response") and e.response is not None:
+                st.write("HTTP status:", e.response.status_code)
+                st.write("HTTP text:", e.response.text)
         except Exception:
-            ws_p = sh_new.worksheet("personas")
-        ensure_headers(ws_p, PERSONAS_COLS)
+            pass
 
-        try:
-            ws_b = sh_new.add_worksheet(title="asistencia_backup", rows="2000", cols="30")
-       except Exception as e:
-    st.error("Error creando planilla con el BOT.")
-    st.write("Tipo:", type(e).__name__)
-    st.write("Args:", getattr(e, "args", None))
-    try:
-        import json
-        if hasattr(e, "response") and e.response is not None:
-            st.write("HTTP status:", e.response.status_code)
-            st.write("HTTP text:", e.response.text)
-    except Exception:
-        pass
-    st.exception(e)
-    st.stop()
-
-
+        st.exception(e)
+        st.stop()
 
 
 
@@ -743,6 +724,7 @@ with tab_admin:
                 restore_asistencia_from_backup()
                 st.success("Backup restaurado ✅")
                 st.rerun()
+
 
 
 
