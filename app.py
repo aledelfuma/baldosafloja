@@ -1,11 +1,17 @@
+import os
 import re
 import pandas as pd
 import streamlit as st
 from datetime import date, datetime, timedelta
+
 from google.oauth2.service_account import Credentials
 from google.auth.transport.requests import Request, AuthorizedSession
 from google.auth.exceptions import RefreshError
 
+
+# =========================
+# Config / Estilo
+# =========================
 PRIMARY = "#004E7B"
 ACCENT = "#63296C"
 
@@ -18,11 +24,12 @@ st.markdown(
         --hc-primary: {PRIMARY};
         --hc-accent: {ACCENT};
       }}
-      h1, h2, h3 {{ color: var(--hc-primary); }}
+      h1,h2,h3 {{ color: var(--hc-primary); }}
       .hc-pill {{
         display:inline-block; padding:6px 12px; border-radius:999px;
-        background: rgba(0,78,123,.15); border:1px solid rgba(0,78,123,.35);
-        color:white; font-weight:600;
+        background: rgba(0,78,123,.16);
+        border:1px solid rgba(0,78,123,.35);
+        color:white; font-weight:700;
       }}
       .hc-card {{
         border: 1px solid rgba(99,41,108,.35);
@@ -30,29 +37,36 @@ st.markdown(
         border-radius: 16px;
         padding: 14px 16px;
       }}
+      .hc-badge {{
+        display:inline-block; padding:4px 10px; border-radius:999px;
+        background: rgba(99,41,108,.18);
+        border:1px solid rgba(99,41,108,.35);
+        color:white; font-weight:700;
+        font-size: 0.85rem;
+      }}
       .stButton>button {{
         background: var(--hc-primary) !important;
         color: white !important;
         border-radius: 999px !important;
-        font-weight: 700 !important;
-        border: 1px solid rgba(255,255,255,.08) !important;
+        font-weight: 800 !important;
+        border: 1px solid rgba(255,255,255,.10) !important;
       }}
       .stButton>button:hover {{
         background: var(--hc-accent) !important;
       }}
       .stTabs [data-baseweb="tab"] {{
-        font-weight: 700 !important;
+        font-weight: 800 !important;
       }}
       .stTabs [aria-selected="true"] {{
         border-bottom: 3px solid var(--hc-accent) !important;
       }}
       .small-note {{
-        opacity: .8;
-        font-size: 0.9rem;
+        opacity: .85;
+        font-size: 0.92rem;
       }}
     </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 CENTROS = ["Calle Belén", "Casa Maranatha", "Nudo a Nudo"]
@@ -66,25 +80,28 @@ ESPACIOS_MARANATHA = [
     "La Ronda",
     "Otro",
 ]
+
 FRECUENCIAS = ["Diaria", "Semanal", "Mensual", "No asiste"]
 
 TAB_PERSONAS = "personas"
 TAB_ASISTENCIA = "asistencia"
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-# -------------------------
-# Helpers: limpieza de texto para evitar “desalineado”
-# -------------------------
-def clean_cell(x: str) -> str:
+CSV_FALLBACK = "data/personas.csv"
+
+
+# =========================
+# Helpers: limpieza / normalización
+# =========================
+def clean_cell(x) -> str:
     if x is None:
         return ""
     s = str(x)
-    # Evita que Sheets interprete tabs / saltos como nuevas columnas/filas al pegar
     s = s.replace("\t", " ").replace("\r", " ").replace("\n", " ")
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
-def normalize_frecuencia(x: str) -> str:
+def normalize_frecuencia(x) -> str:
     s = clean_cell(x).lower()
     if "diar" in s:
         return "Diaria"
@@ -94,10 +111,9 @@ def normalize_frecuencia(x: str) -> str:
         return "Mensual"
     if "no" in s and "asist" in s:
         return "No asiste"
-    # fallback
     return "Semanal" if s else "Semanal"
 
-def normalize_centro(x: str) -> str:
+def normalize_centro(x) -> str:
     s = clean_cell(x).lower()
     if "bel" in s:
         return "Calle Belén"
@@ -107,9 +123,10 @@ def normalize_centro(x: str) -> str:
         return "Nudo a Nudo"
     return clean_cell(x)
 
-# -------------------------
+
+# =========================
 # Google Sheets (REST)
-# -------------------------
+# =========================
 def _require_secrets():
     if "gcp_service_account" not in st.secrets:
         st.error("Falta [gcp_service_account] en Secrets.")
@@ -123,6 +140,7 @@ def get_session():
     _require_secrets()
     sa = dict(st.secrets["gcp_service_account"])
 
+    # IMPORTANTÍSIMO: private_key debe venir con \n reales
     pk = str(sa.get("private_key", ""))
     pk = pk.replace("\\n", "\n").strip()
     if not pk.endswith("\n"):
@@ -171,10 +189,14 @@ def put_values(session: AuthorizedSession, sid: str, a1: str, values: list):
     r.raise_for_status()
 
 def append_values(session: AuthorizedSession, sid: str, a1: str, values: list):
-    # values = [[...], [...]]
     url = _base(sid) + f"/values/{a1}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS"
     body = {"range": a1, "majorDimension": "ROWS", "values": values}
     r = session.post(url, json=body)
+    r.raise_for_status()
+
+def clear_range(session: AuthorizedSession, sid: str, a1: str):
+    url = _base(sid) + f"/values/{a1}:clear"
+    r = session.post(url, json={})
     r.raise_for_status()
 
 def _df_from_sheet(values: list, cols: list) -> pd.DataFrame:
@@ -184,8 +206,7 @@ def _df_from_sheet(values: list, cols: list) -> pd.DataFrame:
     rows = values[1:] if len(values) > 1 else []
     if [c.strip().lower() for c in header] != [c.strip().lower() for c in cols]:
         return pd.DataFrame(columns=cols)
-    df = pd.DataFrame(rows, columns=cols)
-    return df
+    return pd.DataFrame(rows, columns=cols)
 
 def ensure_headers(session, sid):
     ensure_sheet(session, sid, TAB_PERSONAS)
@@ -194,23 +215,83 @@ def ensure_headers(session, sid):
     if not get_values(session, sid, f"{TAB_PERSONAS}!A1:C1"):
         put_values(session, sid, f"{TAB_PERSONAS}!A1:C1", [["nombre", "frecuencia", "centro"]])
 
-    if not get_values(session, sid, f"{TAB_ASISTENCIA}!A1:H1"):
-        put_values(session, sid, f"{TAB_ASISTENCIA}!A1:H1", [[
-            "fecha","anio","centro","espacio","presentes","coordinador","notas","timestamp"
+    if not get_values(session, sid, f"{TAB_ASISTENCIA}!A1:I1"):
+        put_values(session, sid, f"{TAB_ASISTENCIA}!A1:I1", [[
+            "fecha","anio","centro","espacio","presentes","coordinador","modo","notas","timestamp"
         ]])
 
 def load_personas(session, sid) -> pd.DataFrame:
     vals = get_values(session, sid, f"{TAB_PERSONAS}!A1:Z")
-    return _df_from_sheet(vals, ["nombre","frecuencia","centro"])
+    df = _df_from_sheet(vals, ["nombre","frecuencia","centro"])
+    if df.empty:
+        return df
+    df["nombre"] = df["nombre"].map(clean_cell)
+    df["frecuencia"] = df["frecuencia"].map(normalize_frecuencia)
+    df["centro"] = df["centro"].map(normalize_centro)
+    df = df[df["nombre"] != ""]
+    df = df.drop_duplicates(subset=["nombre","centro"], keep="first")
+    return df
 
 def load_asistencia(session, sid) -> pd.DataFrame:
     vals = get_values(session, sid, f"{TAB_ASISTENCIA}!A1:Z")
-    return _df_from_sheet(vals, ["fecha","anio","centro","espacio","presentes","coordinador","notas","timestamp"])
+    df = _df_from_sheet(vals, ["fecha","anio","centro","espacio","presentes","coordinador","modo","notas","timestamp"])
+    if df.empty:
+        return df
+    df["presentes"] = pd.to_numeric(df["presentes"], errors="coerce").fillna(0).astype(int)
+    df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce")
+    df["anio"] = pd.to_numeric(df["anio"], errors="coerce").fillna(df["fecha"].dt.year).astype(int)
+    df["centro"] = df["centro"].map(normalize_centro)
+    df["espacio"] = df["espacio"].map(clean_cell)
+    df["coordinador"] = df["coordinador"].map(clean_cell)
+    df["modo"] = df["modo"].map(clean_cell)
+    df["notas"] = df["notas"].map(clean_cell)
+    return df
 
 
-# -------------------------
-# LOGIN
-# -------------------------
+# =========================
+# CSV Fallback (repo)
+# =========================
+def load_personas_csv_fallback() -> pd.DataFrame:
+    if not os.path.exists(CSV_FALLBACK):
+        return pd.DataFrame(columns=["nombre","frecuencia","centro"])
+    try:
+        df = pd.read_csv(CSV_FALLBACK)
+    except UnicodeDecodeError:
+        df = pd.read_csv(CSV_FALLBACK, encoding="latin1")
+
+    df.columns = [c.strip().lower() for c in df.columns]
+    if "personas" in df.columns and "nombre" not in df.columns:
+        df = df.rename(columns={"personas": "nombre"})
+
+    for k in ["nombre","frecuencia","centro"]:
+        if k not in df.columns:
+            df[k] = ""
+
+    df = df[["nombre","frecuencia","centro"]].copy()
+    df["nombre"] = df["nombre"].map(clean_cell)
+    df["frecuencia"] = df["frecuencia"].map(normalize_frecuencia)
+    df["centro"] = df["centro"].map(normalize_centro)
+    df = df[df["nombre"] != ""]
+    df = df.drop_duplicates(subset=["nombre","centro"], keep="first")
+    return df
+
+def seed_personas_if_empty(session, sid) -> bool:
+    df_sheet = load_personas(session, sid)
+    if not df_sheet.empty and df_sheet["nombre"].astype(str).str.strip().any():
+        return False
+
+    df_csv = load_personas_csv_fallback()
+    if df_csv.empty:
+        return False
+
+    rows = df_csv[["nombre","frecuencia","centro"]].values.tolist()
+    append_values(session, sid, f"{TAB_PERSONAS}!A1", rows)
+    return True
+
+
+# =========================
+# LOGIN (usuarios en secrets)
+# =========================
 def require_users():
     if "users" not in st.secrets:
         st.error("Falta [users] en Secrets.")
@@ -250,61 +331,55 @@ def do_login():
 def logout_button():
     if st.sidebar.button("Salir"):
         st.session_state.auth_ok = False
-        isolist = ["user_key","user_nombre","user_centro"]
-        for k in isolist:
+        for k in ["user_key","user_nombre","user_centro"]:
             if k in st.session_state:
                 del st.session_state[k]
         st.rerun()
 
 
 # =========================
-# APP
+# App
 # =========================
 do_login()
 
 st.title("Sistema de Asistencia — Hogar de Cristo Bahía Blanca")
 
-# Conexión Sheets
 sid = st.secrets["sheets"]["spreadsheet_id"]
 session = get_session()
+
 ensure_headers(session, sid)
+seeded = seed_personas_if_empty(session, sid)
 
 df_personas = load_personas(session, sid)
 df_asistencia = load_asistencia(session, sid)
 
-# Sidebar: bloqueado por usuario
+# Sidebar (centro + coordinador BLOQUEADOS)
 st.sidebar.header("Acceso")
 st.sidebar.success(f"Conectado como: {st.session_state.user_key}")
 logout_button()
-
-centro = st.session_state.user_centro  # BLOQUEADO
-coordinador = st.session_state.user_nombre  # BLOQUEADO
-
 st.sidebar.markdown("---")
+
+centro = st.session_state.user_centro
+coordinador = st.session_state.user_nombre
+
 st.sidebar.write(f"Centro asignado: **{centro}**")
 st.sidebar.write(f"¿Quién carga?: **{coordinador}**")
 st.sidebar.caption("App interna — Hogar de Cristo Bahía Blanca")
 
-st.markdown(
-    f"""<div class="hc-pill">Estás trabajando sobre: {centro} — 👤 {coordinador}</div>""",
-    unsafe_allow_html=True
-)
+if seeded:
+    st.success("✅ Importé automáticamente `data/personas.csv` a Google Sheets (solo esta vez).")
 
-# KPIs
 today = date.today()
 anio_actual = today.year
 
+# Datos filtrados
 dfA = df_asistencia.copy()
-if not dfA.empty:
-    dfA["presentes"] = pd.to_numeric(dfA["presentes"], errors="coerce").fillna(0).astype(int)
-    dfA["fecha"] = pd.to_datetime(dfA["fecha"], errors="coerce")
-    dfA["anio"] = pd.to_numeric(dfA["anio"], errors="coerce").fillna(dfA["fecha"].dt.year).astype(int)
-else:
-    dfA = pd.DataFrame(columns=["fecha","anio","centro","espacio","presentes","coordinador","notas","timestamp"])
+dfCentro = dfA[dfA["centro"] == centro].copy() if not dfA.empty else dfA
+dfCentroYear = dfCentro[dfCentro["anio"] == anio_actual].copy() if not dfCentro.empty else dfCentro
 
-dfCentro = dfA[dfA["centro"] == centro].copy()
-dfCentroYear = dfCentro[dfCentro["anio"] == anio_actual].copy()
+st.markdown(f"""<div class="hc-pill">Estás trabajando sobre: {centro} — 👤 {coordinador}</div>""", unsafe_allow_html=True)
 
+# KPIs + alerta semana
 ing_hoy = int(dfCentroYear[dfCentroYear["fecha"].dt.date == today]["presentes"].sum()) if not dfCentroYear.empty else 0
 ing_7 = int(dfCentroYear[dfCentroYear["fecha"].dt.date >= (today - timedelta(days=6))]["presentes"].sum()) if not dfCentroYear.empty else 0
 
@@ -315,17 +390,23 @@ dias_sin = sum(1 for d in dias_semana if d not in dias_cargados and d <= today)
 
 k1, k2, k3 = st.columns(3)
 with k1:
-    st.markdown(f'<div class="hc-card"><b>Ingresos HOY</b><br><span style="font-size:42px;font-weight:800;">{ing_hoy}</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="hc-card"><b>Ingresos HOY</b><br><span style="font-size:42px;font-weight:900;">{ing_hoy}</span></div>', unsafe_allow_html=True)
 with k2:
-    st.markdown(f'<div class="hc-card"><b>Ingresos últimos 7 días</b><br><span style="font-size:42px;font-weight:800;">{ing_7}</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="hc-card"><b>Ingresos últimos 7 días</b><br><span style="font-size:42px;font-weight:900;">{ing_7}</span></div>', unsafe_allow_html=True)
 with k3:
-    st.markdown(f'<div class="hc-card"><b>Días sin cargar esta semana</b><br><span style="font-size:42px;font-weight:800;">{dias_sin}</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="hc-card"><b>Días sin cargar esta semana</b><br><span style="font-size:42px;font-weight:900;">{dias_sin}</span></div>', unsafe_allow_html=True)
 
-tabs = st.tabs(["📌 Registrar asistencia", "👥 Personas", "⬆️ Importar personas", "📊 Reportes / Base de datos", "🌍 Global"])
+if dias_sin >= 2:
+    st.warning(f"⚠️ Ojo: hay **{dias_sin} días** sin cargar esta semana en {centro}.", icon="⚠️")
 
-# TAB Registrar
+tabs = st.tabs(["📌 Registrar asistencia", "👥 Personas", "📊 Reportes / Base de datos", "🌍 Global"])
+
+
+# =========================
+# TAB 1: Registrar asistencia (con evitar duplicados + modo lista)
+# =========================
 with tabs[0]:
-    st.subheader("Registrar asistencia para este centro")
+    st.subheader("Registrar asistencia")
 
     c1, c2 = st.columns([2,1])
     with c1:
@@ -339,48 +420,146 @@ with tabs[0]:
         espacio = "General"
         st.info("Este centro registra asistencia general (sin espacios).")
 
-    presentes = st.number_input("Total presentes", min_value=0, step=1)
+    st.markdown("---")
+    st.markdown("### Modo de carga")
+
+    dfP = df_personas.copy()
+    dfP_c = dfP[dfP["centro"] == centro].copy() if not dfP.empty else pd.DataFrame(columns=["nombre","frecuencia","centro"])
+    dfP_c = dfP_c.sort_values("nombre") if not dfP_c.empty else dfP_c
+
+    modo = st.radio("¿Cómo querés cargar?", ["Número total", "Lista (tildar presentes)"], horizontal=True)
+
+    presentes = 0
+    lista_presentes = []
+
+    if modo == "Número total":
+        presentes = st.number_input("Total presentes", min_value=0, step=1)
+    else:
+        st.caption("Tildá quiénes estuvieron hoy. El total se calcula solo.")
+        if dfP_c.empty:
+            st.warning("No hay personas cargadas para este centro todavía.")
+        else:
+            opciones = dfP_c["nombre"].tolist()
+            lista_presentes = st.multiselect("Presentes", opciones, default=[])
+            presentes = len(lista_presentes)
+            st.info(f"Total calculado: **{presentes}**")
+
     notas = st.text_area("Notas (opcional)")
 
+    # evitar duplicado por clave
+    clave_existente = False
+    if not dfCentro.empty:
+        df_check = dfCentro.copy()
+        df_check["fecha_d"] = df_check["fecha"].dt.date
+        clave_existente = ((df_check["fecha_d"] == fecha) &
+                           (df_check["centro"] == centro) &
+                           (df_check["espacio"] == espacio) &
+                           (df_check["coordinador"] == coordinador)).any()
+
+    if clave_existente:
+        st.warning("⚠️ Ya existe un registro con **misma fecha + centro + espacio + coordinador**. Podés sobrescribirlo.")
+
+    sobrescribir = False
+    if clave_existente:
+        sobrescribir = st.checkbox("Sobrescribir ese registro existente")
+
     if st.button("Guardar asistencia"):
-        row = [[
-            fecha.isoformat(),
-            str(anio),
-            clean_cell(centro),
-            clean_cell(espacio),
-            str(int(presentes)),
-            clean_cell(coordinador),
-            clean_cell(notas),
-            datetime.now().isoformat(timespec="seconds"),
-        ]]
-        append_values(session, sid, f"{TAB_ASISTENCIA}!A1", row)
-        st.success("✅ Asistencia guardada.")
-        st.rerun()
+        if clave_existente and not sobrescribir:
+            st.error("Ya existe registro. Marcá 'Sobrescribir' si querés reemplazarlo.")
+        else:
+            # Si sobrescribe, limpiamos y reescribimos todo el tab (simple y robusto)
+            if clave_existente and sobrescribir:
+                # recargar tab completo
+                df_all = df_asistencia.copy()
+                df_all["fecha_d"] = df_all["fecha"].dt.date
+                mask = ~(
+                    (df_all["fecha_d"] == fecha) &
+                    (df_all["centro"] == centro) &
+                    (df_all["espacio"] == espacio) &
+                    (df_all["coordinador"] == coordinador)
+                )
+                df_all = df_all[mask].drop(columns=["fecha_d"])
+
+                # limpiar hoja y reescribir
+                clear_range(session, sid, f"{TAB_ASISTENCIA}!A:Z")
+                put_values(session, sid, f"{TAB_ASISTENCIA}!A1:I1", [[
+                    "fecha","anio","centro","espacio","presentes","coordinador","modo","notas","timestamp"
+                ]])
+                if not df_all.empty:
+                    rows_old = []
+                    for _, r in df_all.sort_values("fecha").iterrows():
+                        rows_old.append([
+                            r["fecha"].date().isoformat() if pd.notna(r["fecha"]) else "",
+                            str(int(r["anio"])) if str(r.get("anio","")).strip() else "",
+                            clean_cell(r["centro"]),
+                            clean_cell(r["espacio"]),
+                            str(int(r["presentes"])),
+                            clean_cell(r["coordinador"]),
+                            clean_cell(r.get("modo","")),
+                            clean_cell(r.get("notas","")),
+                            clean_cell(r.get("timestamp","")),
+                        ])
+                    append_values(session, sid, f"{TAB_ASISTENCIA}!A1", rows_old)
+
+            modo_txt = "lista" if modo != "Número total" else "total"
+            notas_final = notas
+            if modo_txt == "lista" and lista_presentes:
+                # guardamos la lista en notas (resumen)
+                notas_final = (notas_final + " | " if notas_final else "") + "Presentes: " + ", ".join(lista_presentes)
+
+            row = [[
+                fecha.isoformat(),
+                str(anio),
+                clean_cell(centro),
+                clean_cell(espacio),
+                str(int(presentes)),
+                clean_cell(coordinador),
+                modo_txt,
+                clean_cell(notas_final),
+                datetime.now().isoformat(timespec="seconds"),
+            ]]
+            append_values(session, sid, f"{TAB_ASISTENCIA}!A1", row)
+            st.success("✅ Asistencia guardada.")
+            st.rerun()
 
     st.markdown("---")
     st.caption("Últimos registros (este centro / este año)")
     show = dfCentroYear.sort_values("fecha", ascending=False).head(20) if not dfCentroYear.empty else dfCentroYear
     st.dataframe(show, use_container_width=True)
 
-# TAB Personas
+
+# =========================
+# TAB 2: Personas (buscador + filtros)
+# =========================
 with tabs[1]:
     st.subheader("Personas registradas (este centro)")
 
     dfP = df_personas.copy()
-    if dfP.empty:
-        dfP = pd.DataFrame(columns=["nombre","frecuencia","centro"])
-
-    dfP["nombre"] = dfP["nombre"].map(clean_cell)
-    dfP["frecuencia"] = dfP["frecuencia"].map(clean_cell)
-    dfP["centro"] = dfP["centro"].map(clean_cell)
-
-    dfP_c = dfP[dfP["centro"] == centro].copy()
+    dfP_c = dfP[dfP["centro"] == centro].copy() if not dfP.empty else pd.DataFrame(columns=["nombre","frecuencia","centro"])
     dfP_c = dfP_c.sort_values("nombre") if not dfP_c.empty else dfP_c
-    st.dataframe(dfP_c, use_container_width=True)
+
+    f1, f2, f3 = st.columns([2,1,1])
+    with f1:
+        q = st.text_input("Buscar por nombre", placeholder="Ej: Reynaldo, Coca, Acebedo…")
+    with f2:
+        freq = st.selectbox("Frecuencia", ["Todas"] + FRECUENCIAS, index=0)
+    with f3:
+        solo_activos = st.checkbox("Ocultar 'No asiste'", value=False)
+
+    view = dfP_c.copy()
+    if q.strip():
+        qq = q.strip().lower()
+        view = view[view["nombre"].str.lower().str.contains(qq, na=False)]
+    if freq != "Todas":
+        view = view[view["frecuencia"] == freq]
+    if solo_activos:
+        view = view[view["frecuencia"] != "No asiste"]
+
+    st.markdown(f"<div class='hc-badge'>Personas visibles: {len(view)}</div>", unsafe_allow_html=True)
+    st.dataframe(view, use_container_width=True)
 
     st.markdown("---")
     st.subheader("Agregar persona (manual)")
-
     nombre = st.text_input("Nombre completo")
     frecuencia = st.selectbox("Frecuencia", FRECUENCIAS)
 
@@ -394,115 +573,95 @@ with tabs[1]:
             st.success("✅ Persona agregada.")
             st.rerun()
 
-# TAB Importar personas
+    st.markdown("---")
+    st.subheader("Export rápido (Personas)")
+    st.download_button(
+        "⬇️ Descargar personas del centro (CSV)",
+        dfP_c.to_csv(index=False).encode("utf-8"),
+        file_name=f"personas_{centro}.csv",
+        mime="text/csv"
+    )
+
+
+# =========================
+# TAB 3: Reportes / Base de datos (export semana/mes)
+# =========================
 with tabs[2]:
-    st.subheader("Importar personas (limpieza automática)")
-    st.write("Acá pegás la tabla que te mandaron (C/S/B, etc.) y la app la normaliza a: **nombre / frecuencia / centro**.")
-    st.caption("Tip: podés pegar tal cual desde WhatsApp/Sheets/Word.")
-
-    raw = st.text_area("Pegá acá el listado (filas)", height=220, placeholder="Ej:\nAcebedo Coca, Reynaldo\tMensual\nAcosta, Carlos Alberto\tDiaria\n...")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        centro_import = st.selectbox("Centro destino", [centro], index=0, disabled=True)
-    with col2:
-        default_freq = st.selectbox("Frecuencia por defecto (si falta)", FRECUENCIAS, index=1)
-
-    def parse_raw(text: str) -> pd.DataFrame:
-        lines = [l.strip() for l in text.splitlines() if l.strip()]
-        out = []
-        for ln in lines:
-            # separadores típicos: tab, ;, , , múltiples espacios
-            parts = re.split(r"\t|;|\s{2,}", ln)
-            parts = [p.strip() for p in parts if p.strip()]
-            if len(parts) == 1:
-                nombre = parts[0]
-                freq = default_freq
-            else:
-                nombre = parts[0]
-                freq = parts[1]
-            out.append([clean_cell(nombre), normalize_frecuencia(freq), centro_import])
-        df = pd.DataFrame(out, columns=["nombre","frecuencia","centro"])
-        # quitar vacíos y duplicados por nombre+centro
-        df = df[df["nombre"] != ""]
-        df = df.drop_duplicates(subset=["nombre","centro"], keep="first")
-        return df
-
-    if st.button("Previsualizar"):
-        if not raw.strip():
-            st.warning("Pegá algo primero.")
-        else:
-            df_prev = parse_raw(raw)
-            st.session_state.import_preview = df_prev
-
-    if "import_preview" in st.session_state:
-        df_prev = st.session_state.import_preview
-        st.write("Previsualización:")
-        st.dataframe(df_prev, use_container_width=True)
-        st.markdown(f"<div class='small-note'>Filas a importar: <b>{len(df_prev)}</b></div>", unsafe_allow_html=True)
-
-        if st.button("✅ Importar a Google Sheets"):
-            # Append en bloque para no hacer 200 requests
-            rows = df_prev[["nombre","frecuencia","centro"]].values.tolist()
-            append_values(session, sid, f"{TAB_PERSONAS}!A1", rows)
-            st.success("✅ Importación completa.")
-            del st.session_state.import_preview
-            st.rerun()
-
-# TAB Reportes
-with tabs[3]:
     st.subheader("Reportes (este centro)")
 
-    anios = sorted(dfCentro["anio"].dropna().unique().tolist()) if not dfCentro.empty else [anio_actual]
-    if anio_actual not in anios:
-        anios = [anio_actual] + anios
-
-    anio_sel = st.selectbox("Año", anios, index=0)
-    data = dfCentro[dfCentro["anio"] == anio_sel].copy()
-
-    if data.empty:
-        st.info("No hay registros para ese año.")
+    if dfCentro.empty:
+        st.info("Todavía no hay registros de asistencia para este centro.")
     else:
-        serie = data.groupby(data["fecha"].dt.date)["presentes"].sum().sort_index()
-        st.caption("Asistencia por día")
-        st.line_chart(serie)
+        anios = sorted(dfCentro["anio"].dropna().unique().tolist())
+        if anio_actual not in anios:
+            anios = [anio_actual] + anios
 
-        by_coord = data.groupby("coordinador")["presentes"].sum().sort_values(ascending=False)
-        st.caption("Asistencia acumulada por coordinador/a")
-        st.bar_chart(by_coord)
+        anio_sel = st.selectbox("Año", anios, index=(anios.index(anio_actual) if anio_actual in anios else 0))
+        data = dfCentro[dfCentro["anio"] == anio_sel].copy()
 
-        if centro == "Casa Maranatha":
-            by_esp = data.groupby("espacio")["presentes"].sum().sort_values(ascending=False)
-            st.caption("Asistencia por espacio (Maranatha)")
-            st.bar_chart(by_esp)
+        if data.empty:
+            st.info("No hay registros para ese año.")
+        else:
+            serie = data.groupby(data["fecha"].dt.date)["presentes"].sum().sort_index()
+            st.caption("Asistencia por día")
+            st.line_chart(serie)
 
-        st.markdown("---")
-        st.subheader("Base de datos (descargas)")
-        st.download_button(
-            "⬇️ Descargar asistencia filtrada (CSV)",
-            data.to_csv(index=False).encode("utf-8"),
-            file_name=f"asistencia_{centro}_{anio_sel}.csv",
-            mime="text/csv"
-        )
+            by_coord = data.groupby("coordinador")["presentes"].sum().sort_values(ascending=False)
+            st.caption("Acumulado por coordinador/a")
+            st.bar_chart(by_coord)
 
-        dfP = df_personas.copy()
-        if dfP.empty:
-            dfP = pd.DataFrame(columns=["nombre","frecuencia","centro"])
-        dfP["nombre"] = dfP["nombre"].map(clean_cell)
-        dfP["frecuencia"] = dfP["frecuencia"].map(clean_cell)
-        dfP["centro"] = dfP["centro"].map(clean_cell)
-        dfP_c = dfP[dfP["centro"] == centro].copy()
+            if centro == "Casa Maranatha":
+                by_esp = data.groupby("espacio")["presentes"].sum().sort_values(ascending=False)
+                st.caption("Por espacio (Maranatha)")
+                st.bar_chart(by_esp)
 
-        st.download_button(
-            "⬇️ Descargar personas del centro (CSV)",
-            dfP_c.to_csv(index=False).encode("utf-8"),
-            file_name=f"personas_{centro}.csv",
-            mime="text/csv"
-        )
+            st.markdown("---")
+            st.subheader("Base de datos (descargas rápidas)")
 
-# TAB Global
-with tabs[4]:
+            hoy = date.today()
+            semana_desde = hoy - timedelta(days=6)
+            mes_desde = hoy - timedelta(days=29)
+
+            data2 = data.copy()
+            data2["fecha_d"] = data2["fecha"].dt.date
+
+            semana = data2[data2["fecha_d"] >= semana_desde].drop(columns=["fecha_d"])
+            mes = data2[data2["fecha_d"] >= mes_desde].drop(columns=["fecha_d"])
+
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.download_button(
+                    "⬇️ Descargar semana (CSV)",
+                    semana.to_csv(index=False).encode("utf-8"),
+                    file_name=f"asistencia_{centro}_semana.csv",
+                    mime="text/csv"
+                )
+            with c2:
+                st.download_button(
+                    "⬇️ Descargar mes (CSV)",
+                    mes.to_csv(index=False).encode("utf-8"),
+                    file_name=f"asistencia_{centro}_mes.csv",
+                    mime="text/csv"
+                )
+            with c3:
+                st.download_button(
+                    "⬇️ Descargar todo el año (CSV)",
+                    data.drop(columns=["fecha"], errors="ignore").to_csv(index=False).encode("utf-8"),
+                    file_name=f"asistencia_{centro}_{anio_sel}.csv",
+                    mime="text/csv"
+                )
+
+            st.markdown("---")
+            st.caption("Tabla completa (filtrada por año)")
+            st.dataframe(data.sort_values("fecha", ascending=False), use_container_width=True)
+
+
+# =========================
+# TAB 4: Global
+# =========================
+with tabs[3]:
     st.subheader("Tablero global (todos los centros)")
+
     if dfA.empty:
         st.info("Todavía no hay registros globales.")
     else:
