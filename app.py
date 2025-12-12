@@ -193,6 +193,12 @@ def get_gspread_client():
     return gspread.authorize(creds)
 
 
+def ensure_headers(ws, cols):
+    existing = ws.row_values(1)
+    if existing != cols:
+        ws.clear()
+        ws.update("A1", [cols])
+
 def get_spreadsheet():
     gc = get_gspread_client()
     spreadsheet_id = st.secrets["sheets"]["spreadsheet_id"]
@@ -205,12 +211,45 @@ def get_spreadsheet():
 
     try:
         sh = gc.open_by_key(spreadsheet_id)
-        st.success(f"OK: pude abrir la planilla → {sh.title}")
         return sh
+
     except Exception as e:
-        st.error("❌ No se puede abrir la planilla (PERMISOS o ID).")
-        st.exception(e)
+        st.error("❌ No pude abrir esa planilla por permisos.")
+        st.caption("➡️ Voy a crear una planilla nueva propiedad del BOT (solución definitiva).")
+
+        # Crear nueva planilla en el Drive del service account
+        sh_new = gc.create("Asistencia — Hogar de Cristo (AUTO)")
+
+        # Crear/asegurar hojas necesarias
+        ws_as = sh_new.sheet1
+        ws_as.update_title("asistencia")
+        ensure_headers(ws_as, ASISTENCIA_COLS)
+
+        try:
+            ws_p = sh_new.add_worksheet(title="personas", rows="2000", cols="30")
+        except Exception:
+            ws_p = sh_new.worksheet("personas")
+        ensure_headers(ws_p, PERSONAS_COLS)
+
+        try:
+            ws_b = sh_new.add_worksheet(title="asistencia_backup", rows="2000", cols="30")
+        except Exception:
+            ws_b = sh_new.worksheet("asistencia_backup")
+        ensure_headers(ws_b, ASISTENCIA_COLS)
+
+        # Compartir al humano (tu mail) como editor
+        owner_email = st.secrets.get("app", {}).get("owner_email")
+        if owner_email:
+            sh_new.share(owner_email, perm_type="user", role="writer")
+
+        st.success("✅ Listo. Se creó una planilla nueva y ya está lista para usar.")
+        st.write("📌 NUEVO spreadsheet_id (copiá y pegá en secrets):")
+        st.code(sh_new.id)
+        st.write("🔗 Link:")
+        st.write(sh_new.url)
+
         st.stop()
+
 
 
 
@@ -706,6 +745,7 @@ with tab_admin:
                 restore_asistencia_from_backup()
                 st.success("Backup restaurado ✅")
                 st.rerun()
+
 
 
 
