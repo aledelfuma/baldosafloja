@@ -9,7 +9,7 @@ from google.oauth2.service_account import Credentials
 
 
 # =====================================================
-# CONFIG
+# CONFIG UI
 # =====================================================
 st.set_page_config(page_title="Asistencia Centros Barriales", layout="wide")
 
@@ -73,6 +73,10 @@ h1, h2, h3, h4 {{
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
+
+# =====================================================
+# DATA CONSTANTS
+# =====================================================
 CENTROS = ["Nudo a Nudo", "Casa Maranatha", "Calle Belén"]
 
 ESPACIOS_MARANATHA = [
@@ -103,7 +107,7 @@ LOGO_FILE = "logo_hogar.png"
 
 
 # =====================================================
-# USERS / ROLES (si no ponés secrets users, usa defaults)
+# USERS / ROLES
 # =====================================================
 DEFAULT_USERS = {
     "admin": {"password": "hogar", "role": "admin", "centers": ["*"]},
@@ -136,7 +140,7 @@ USERS = load_users()
 
 
 # =====================================================
-# GOOGLE SHEETS (DB)
+# GOOGLE SHEETS SETTINGS
 # =====================================================
 ASISTENCIA_SHEET = "asistencia"
 PERSONAS_SHEET = "personas"
@@ -149,32 +153,36 @@ ASISTENCIA_COLS = [
 PERSONAS_COLS = ["nombre","frecuencia","centro","notas","fecha_alta"]
 
 
+def now_ts():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+def new_id():
+    return str(uuid.uuid4())
+
+
+# =====================================================
+# GOOGLE SHEETS CLIENT (con FIX private_key)
+# =====================================================
 @st.cache_resource(show_spinner=False)
 def get_gspread_client():
-    """
-    Crea el cliente de Google Sheets desde secrets.
-    Incluye FIX robusto para private_key (evita errores pyasn1).
-    """
     sa = dict(st.secrets["gcp_service_account"])
 
     pk = sa.get("private_key", "")
     if not pk:
         raise ValueError("Falta 'private_key' en secrets[gcp_service_account].")
 
-    # FIX: convertir "\\n" -> "\n" (muy común en Streamlit Secrets)
+    # FIX: convertir "\\n" -> "\n"
     pk = pk.replace("\\n", "\n").strip()
 
-    # asegurar encabezados
+    # Validación mínima
     if "-----BEGIN PRIVATE KEY-----" not in pk or "-----END PRIVATE KEY-----" not in pk:
         raise ValueError(
             "La 'private_key' no contiene BEGIN/END PRIVATE KEY. "
             "Pegala desde el JSON original del service account."
         )
 
-    # asegurar que termina en salto de línea
     if not pk.endswith("\n"):
         pk += "\n"
-
     sa["private_key"] = pk
 
     scopes = [
@@ -188,6 +196,18 @@ def get_gspread_client():
 def get_spreadsheet():
     gc = get_gspread_client()
     spreadsheet_id = st.secrets["sheets"]["spreadsheet_id"]
+
+    # DEBUG SEGURO (para resolver PermissionError)
+    try:
+        sa = dict(st.secrets["gcp_service_account"])
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("Debug Google Sheets")
+        st.sidebar.info(f"client_email en uso:\n{sa.get('client_email', '(faltante)')}")
+        st.sidebar.info(f"spreadsheet_id en uso:\n{spreadsheet_id}")
+        st.sidebar.caption("Si hay PermissionError: compartí el Sheet con ese client_email como EDITOR.")
+    except Exception:
+        pass
+
     return gc.open_by_key(spreadsheet_id)
 
 
@@ -218,7 +238,6 @@ def write_df_to_ws(ws, df: pd.DataFrame, cols_order):
         if c not in df2.columns:
             df2[c] = ""
     df2 = df2[cols_order]
-
     values = [cols_order] + df2.astype(str).fillna("").values.tolist()
     ws.clear()
     ws.update("A1", values)
@@ -230,14 +249,6 @@ def append_row_ws(ws, row_dict, cols_order):
         v = row_dict.get(c, "")
         row.append("" if v is None else str(v))
     ws.append_row(row, value_input_option="USER_ENTERED")
-
-
-def now_ts():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def new_id():
-    return str(uuid.uuid4())
 
 
 def backup_asistencia_to_sheet():
@@ -275,10 +286,10 @@ if "logged_in" not in st.session_state:
 
 
 # =====================================================
-# SIDEBAR: LOGO + LOGIN
+# SIDEBAR LOGIN UI
 # =====================================================
 if os.path.exists(LOGO_FILE):
-    st.sidebar.image(LOGO_FILE, use_column_width=True)
+    st.sidebar.image(LOGO_FILE, use_container_width=True)
 
 st.sidebar.title("Acceso")
 
@@ -367,8 +378,7 @@ hace_una_semana = hoy - timedelta(days=6)
 def registros_por_fecha(df, centro, day: date):
     if df.empty:
         return df
-    dfx = df[(df["centro"] == centro) & (df["fecha"].dt.date == day)]
-    return dfx
+    return df[(df["centro"] == centro) & (df["fecha"].dt.date == day)]
 
 faltan_hoy = []
 faltan_semana = []
@@ -608,7 +618,7 @@ with tab_personas:
             st.rerun()
 
 # =====================================================
-# TAB 4 — REPORTES PRO + EXPORT
+# TAB 4 — REPORTES + EXPORT
 # =====================================================
 with tab_reportes:
     st.subheader("Reportes pro")
@@ -646,54 +656,8 @@ with tab_reportes:
             serie = dff.groupby("fecha")["total_presentes"].sum().sort_index()
             st.line_chart(serie)
 
-            st.markdown("### Semana vs semana pasada")
-            fin = hoy
-            ini = hoy - timedelta(days=6)
-            fin_prev = hoy - timedelta(days=7)
-            ini_prev = hoy - timedelta(days=13)
-
-            w = asistencia2[(asistencia2["centro"].isin(centros_sel)) &
-                            (asistencia2["dia"] >= ini) & (asistencia2["dia"] <= fin)]
-            wp = asistencia2[(asistencia2["centro"].isin(centros_sel)) &
-                             (asistencia2["dia"] >= ini_prev) & (asistencia2["dia"] <= fin_prev)]
-            if coord_sel != "Todos":
-                w = w[w["coordinador"] == coord_sel]
-                wp = wp[wp["coordinador"] == coord_sel]
-
-            tot_w = int(w["total_presentes"].sum()) if not w.empty else 0
-            tot_wp = int(wp["total_presentes"].sum()) if not wp.empty else 0
-            delta = tot_w - tot_wp
-            delta_pct = (delta / tot_wp * 100) if tot_wp > 0 else None
-
-            cA, cB, cC = st.columns(3)
-            with cA:
-                st.metric("Últimos 7 días", tot_w, delta=delta)
-            with cB:
-                st.metric("Semana pasada", tot_wp)
-            with cC:
-                st.metric("Δ %", f"{delta_pct:.1f}%" if delta_pct is not None else "—")
-
-            st.markdown("### Comparación por centro (periodo)")
-            by_center = dff.groupby("centro")["total_presentes"].sum().sort_values(ascending=False)
-            st.bar_chart(by_center)
-
-            st.markdown("### Top 10 días (periodo)")
-            top_days = (
-                dff.groupby("dia")["total_presentes"]
-                .sum()
-                .sort_values(ascending=False)
-                .head(10)
-                .reset_index()
-            )
-            st.dataframe(top_days, use_container_width=True)
-
-            st.markdown("### Por tipo de jornada (periodo)")
-            by_tipo = dff.groupby("tipo_jornada")["total_presentes"].sum().sort_values(ascending=False)
-            st.bar_chart(by_tipo)
-
             st.markdown("---")
-            st.subheader("Exportaciones (1 click)")
-
+            st.subheader("Exportaciones")
             st.download_button(
                 "⬇️ Descargar asistencia FILTRADA (CSV)",
                 dff.sort_values("fecha", ascending=False).to_csv(index=False).encode("utf-8"),
@@ -701,26 +665,6 @@ with tab_reportes:
                 mime="text/csv",
                 use_container_width=True,
             )
-
-            df_centro_week = asistencia2[(asistencia2["centro"] == centro_logueado) &
-                                         (asistencia2["dia"] >= (hoy - timedelta(days=6))) &
-                                         (asistencia2["dia"] <= hoy)].copy()
-            st.download_button(
-                f"⬇️ Descargar {centro_logueado} (últimos 7 días)",
-                df_centro_week.sort_values("fecha", ascending=False).to_csv(index=False).encode("utf-8"),
-                file_name=f"{centro_logueado}_7dias.csv".replace(" ", "_"),
-                mime="text/csv",
-                use_container_width=True,
-            )
-
-            if role == "admin":
-                st.download_button(
-                    "⬇️ Descargar TODO (CSV)",
-                    asistencia2.sort_values("fecha", ascending=False).to_csv(index=False).encode("utf-8"),
-                    file_name="asistencia_todo.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                )
 
 # =====================================================
 # TAB 5 — ADMIN / AUDITORÍA
@@ -747,20 +691,14 @@ with tab_admin:
             )
 
         st.markdown("---")
-        st.markdown("### Herramientas Admin")
-
-        coladm1, coladm2, coladm3 = st.columns(3)
+        coladm1, coladm2 = st.columns(2)
         with coladm1:
-            if st.button("↩️ Restaurar backup (sheet)", use_container_width=True):
-                restore_asistencia_from_backup()
-                st.success("Backup restaurado ✅")
-                st.rerun()
-
-        with coladm2:
             if st.button("🧾 Crear backup ahora", use_container_width=True):
                 backup_asistencia_to_sheet()
                 st.success("Backup creado ✅")
 
-        with coladm3:
-            if st.button("🔄 Recargar todo", use_container_width=True):
+        with coladm2:
+            if st.button("↩️ Restaurar backup", use_container_width=True):
+                restore_asistencia_from_backup()
+                st.success("Backup restaurado ✅")
                 st.rerun()
