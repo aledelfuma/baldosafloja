@@ -3,15 +3,19 @@ from __future__ import annotations
 import csv
 import re
 from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
-from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import streamlit as st
 
+import gspread
+from google.oauth2.service_account import Credentials
+
+
 # =========================
-# Config
+# Config general
 # =========================
 APP_TITLE = "Sistema de Asistencia — Hogar de Cristo Bahía Blanca"
 PRIMARY = "#004E7B"
@@ -35,7 +39,7 @@ COORDINADORES_POR_CENTRO = {
     "Casa Maranatha": ["Florencia", "Guillermina Cazenave"],
 }
 
-# Maranatha: quién puede cargar qué espacio (ajustalo a tu realidad)
+# Permisos por espacio en Maranatha (ajustable)
 MARANATHA_PERMISOS_POR_ESPACIO = {
     "Taller de costura": ["Florencia", "Guillermina Cazenave"],
     "Apoyo escolar (primaria)": ["Florencia", "Guillermina Cazenave"],
@@ -63,16 +67,14 @@ ASISTENCIA_HEADERS = [
     "notas",
     "usuario",
 ]
-PERSONAS_HEADERS = ["nombre", "frecuencia", "centro"]
 
-LOCAL_ASISTENCIA_PATH = Path("/tmp/asistencia_local.csv")
-LOCAL_PERSONAS_PATH = Path("/tmp/personas_local.csv")
+PERSONAS_HEADERS = ["nombre", "frecuencia", "centro"]
 
 st.set_page_config(page_title=APP_TITLE, page_icon="🧾", layout="wide")
 
 
 # =========================
-# UI
+# UI (estilo)
 # =========================
 def inject_css():
     st.markdown(
@@ -108,10 +110,6 @@ section[data-testid="stSidebar"] {{
   border: 1px solid rgba(255,255,255,0.10);
   background: rgba(255,255,255,0.04);
   font-size: 12px;
-}}
-hr {{
-  border:none;
-  border-top: 1px solid rgba(255,255,255,0.08);
 }}
 </style>
         """,
@@ -189,214 +187,144 @@ def datestr(d: date) -> str:
 
 def year_from_datestr(ds: str) -> int:
     try:
-        return int(ds[:4])
+        return int(str(ds)[:4])
     except Exception:
         return date.today().year
 
 
 # =========================
-# Backend abstraction
+# Google Sheets — conexión obligatoria
 # =========================
 @dataclass
-class BackendStatus:
-    mode: str  # "sheets" or "local"
+class SheetsStatus:
+    ok: bool
     details: str
+    service_email: str = ""
 
 
-class StorageBackend:
-    def read_personas(self) -> pd.DataFrame:
-        raise NotImplementedError
-
-    def write_personas(self, df: pd.DataFrame) -> None:
-        raise NotImplementedError
-
-    def read_asistencia(self) -> pd.DataFrame:
-        raise NotImplementedError
-
-    def append_asistencia(self, row: List[Any]) -> None:
-        raise NotImplementedError
-
-    def ensure_ready(self) -> BackendStatus:
-        raise NotImplementedError
+def validate_secrets_or_stop():
+    if "gcp_service_account" not in st.secrets:
+        st.error("Falta [gcp_service_account] en Secrets.")
+        st.stop()
+    if "sheets" not in st.secrets or "spreadsheet_id" not in st.secrets["sheets"]:
+        st.error("Falta [sheets].spreadsheet_id en Secrets.")
+        st.stop()
 
 
-# ---------- Local CSV backend (no se cae nunca) ----------
-class LocalCSVBackend(StorageBackend):
-    def ensure_ready(self) -> BackendStatus:
-        # asegurar archivos con header
-        if not LOCAL_PERSONAS_PATH.exists():
-            pd.DataFrame(columns=PERSONAS_HEADERS).to_csv(LOCAL_PERSONAS_PATH, index=False, encoding="utf-8")
-        if not LOCAL_ASISTENCIA_PATH.exists():
-            pd.DataFrame(columns=ASISTENCIA_HEADERS).to_csv(LOCAL_ASISTENCIA_PATH, index=False, encoding="utf-8")
-        return BackendStatus("local", f"Guardando localmente en {LOCAL_ASISTENCIA_PATH}")
+@st.cache_resource(show_spinner=False)
+def get_gspread_client() -> Tuple[gspread.Client, str]:
+    validate_secrets_or_stop()
 
-    def read_personas(self) -> pd.DataFrame:
-        try:
-            return pd.read_csv(LOCAL_PERSONAS_PATH)
-        except Exception:
-            return pd.DataFrame(columns=PERSONAS_HEADERS)
+    sa = dict(st.secrets["gcp_service_account"])
+    pk = sa.get("private_key", "")
+    # acepta \n escapados o saltos reales
+    if isinstance(pk, str) and "\\n" in pk:
+        sa["private_key"] = pk.replace("\\n", "\n")
 
-    def write_personas(self, df: pd.DataFrame) -> None:
-        df.to_csv(LOCAL_PERSONAS_PATH, index=False, encoding="utf-8")
-
-    def read_asistencia(self) -> pd.DataFrame:
-        try:
-            return pd.read_csv(LOCAL_ASISTENCIA_PATH)
-        except Exception:
-            return pd.DataFrame(columns=ASISTENCIA_HEADERS)
-
-    def append_asistencia(self, row: List[Any]) -> None:
-        df = self.read_asistencia()
-        add = pd.DataFrame([row], columns=ASISTENCIA_HEADERS)
-        out = pd.concat([df, add], ignore_index=True)
-        out.to_csv(LOCAL_ASISTENCIA_PATH, index=False, encoding="utf-8")
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    creds = Credentials.from_service_account_info(sa, scopes=scopes)
+    gc = gspread.authorize(creds)
+    return gc, clean_cell(sa.get("client_email", ""))
 
 
-# ---------- Google Sheets backend ----------
-class SheetsBackend(StorageBackend):
-    def __init__(self):
-        self._gc = None
-        self._sh = None
-        self._sa_email = ""
-
-    def ensure_ready(self) -> BackendStatus:
-        # Importa perezoso y con error controlado
-        try:
-            import gspread  # noqa
-            from google.oauth2.service_account import Credentials  # noqa
-        except Exception as e:
-            return BackendStatus("local", f"No se pudo importar gspread/google-auth: {e}")
-
-        # Validación secrets
-        if "gcp_service_account" not in st.secrets or "sheets" not in st.secrets or "spreadsheet_id" not in st.secrets["sheets"]:
-            return BackendStatus("local", "Faltan secrets [gcp_service_account] o [sheets].spreadsheet_id")
-
-        sa = dict(st.secrets["gcp_service_account"])
-        pk = sa.get("private_key", "")
-        if isinstance(pk, str) and "\\n" in pk:
-            sa["private_key"] = pk.replace("\\n", "\n")
-
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive",
-        ]
-
-        try:
-            creds = Credentials.from_service_account_info(sa, scopes=scopes)
-            import gspread
-            self._gc = gspread.authorize(creds)
-            self._sa_email = sa.get("client_email", "")
-            sid = st.secrets["sheets"]["spreadsheet_id"]
-            self._sh = self._gc.open_by_key(sid)
-        except Exception as e:
-            return BackendStatus("local", f"No se pudo abrir Google Sheets (permiso/clave/red): {e}")
-
-        # asegurar tabs + headers
-        self._ensure_tab(TAB_PERSONAS, PERSONAS_HEADERS)
-        self._ensure_tab(TAB_ASISTENCIA, ASISTENCIA_HEADERS)
-
-        return BackendStatus("sheets", f"Conectado a Sheets como {self._sa_email}")
-
-    def _ensure_tab(self, title: str, headers: List[str]):
-        assert self._sh is not None
-        names = [w.title for w in self._sh.worksheets()]
-        if title not in names:
-            self._sh.add_worksheet(title=title, rows=5000, cols=40)
-        ws = self._sh.worksheet(title)
-        values = ws.get_all_values()
-        if not values:
-            ws.append_row(headers, value_input_option="RAW")
-        else:
-            first = values[0]
-            if [clean_cell(x) for x in first] != headers:
-                ws.update("A1", [headers])
-
-    def _read_tab(self, title: str) -> pd.DataFrame:
-        assert self._sh is not None
-        ws = self._sh.worksheet(title)
-        values = ws.get_all_values()
-        if not values:
-            return pd.DataFrame()
-        header = [clean_cell(h) for h in values[0]]
-        rows = values[1:]
-        fixed = []
-        for r in rows:
-            r = list(r)
-            if len(r) < len(header):
-                r += [""] * (len(header) - len(r))
-            fixed.append(r[: len(header)])
-        df = pd.DataFrame(fixed, columns=header)
-        return df
-
-    def read_personas(self) -> pd.DataFrame:
-        df = self._read_tab(TAB_PERSONAS)
-        df.columns = [c.strip().lower() for c in df.columns]
-        return df
-
-    def write_personas(self, df: pd.DataFrame) -> None:
-        assert self._sh is not None
-        ws = self._sh.worksheet(TAB_PERSONAS)
-        ws.clear()
-        ws.update("A1", [df.columns.tolist()] + df.astype(str).fillna("").values.tolist())
-
-    def read_asistencia(self) -> pd.DataFrame:
-        df = self._read_tab(TAB_ASISTENCIA)
-        df.columns = [c.strip().lower() for c in df.columns]
-        return df
-
-    def append_asistencia(self, row: List[Any]) -> None:
-        assert self._sh is not None
-        ws = self._sh.worksheet(TAB_ASISTENCIA)
-        ws.append_row([str(x) for x in row], value_input_option="USER_ENTERED")
+@st.cache_resource(show_spinner=False)
+def get_spreadsheet() -> Tuple[gspread.Spreadsheet, SheetsStatus]:
+    try:
+        gc, email = get_gspread_client()
+        sid = st.secrets["sheets"]["spreadsheet_id"]
+        sh = gc.open_by_key(sid)
+        return sh, SheetsStatus(ok=True, details="Conectado a Google Sheets.", service_email=email)
+    except Exception as e:
+        # NO hay fallback: cortamos
+        return None, SheetsStatus(ok=False, details=f"No se pudo abrir Sheets: {e}", service_email="")
 
 
-def get_backend() -> Tuple[StorageBackend, BackendStatus]:
-    # Intentar Sheets; si falla, caer a local sin romper.
-    sheets = SheetsBackend()
-    status = sheets.ensure_ready()
-    if status.mode == "sheets":
-        return sheets, status
-    local = LocalCSVBackend()
-    return local, local.ensure_ready()
+def ensure_tab(sh: gspread.Spreadsheet, title: str, headers: List[str]) -> gspread.Worksheet:
+    names = [w.title for w in sh.worksheets()]
+    if title not in names:
+        sh.add_worksheet(title=title, rows=5000, cols=40)
+    ws = sh.worksheet(title)
+
+    values = ws.get_all_values()
+    if not values:
+        ws.append_row(headers, value_input_option="RAW")
+    else:
+        first = [clean_cell(x) for x in values[0]]
+        if first != headers:
+            ws.update("A1", [headers])
+    return ws
 
 
-backend, backend_status = get_backend()
+def read_ws(ws: gspread.Worksheet) -> pd.DataFrame:
+    values = ws.get_all_values()
+    if not values:
+        return pd.DataFrame()
+    header = [clean_cell(h) for h in values[0]]
+    rows = values[1:]
+    fixed = []
+    for r in rows:
+        r = list(r)
+        if len(r) < len(header):
+            r += [""] * (len(header) - len(r))
+        fixed.append(r[: len(header)])
+    df = pd.DataFrame(fixed, columns=header)
+    df.columns = [c.strip().lower() for c in df.columns]
+    return df
+
+
+def overwrite_ws(ws: gspread.Worksheet, df: pd.DataFrame):
+    ws.clear()
+    ws.update("A1", [df.columns.tolist()] + df.astype(str).fillna("").values.tolist())
+
+
+def append_ws(ws: gspread.Worksheet, row: List[Any]):
+    ws.append_row([str(x) for x in row], value_input_option="USER_ENTERED")
+
+
+# Conectar sí o sí
+sh, status = get_spreadsheet()
+if not status.ok:
+    st.error("❌ No hay conexión a Google Sheets. La app no va a usar almacenamiento local.")
+    st.write("Detalle:", status.details)
+    st.stop()
+
+ws_personas = ensure_tab(sh, TAB_PERSONAS, PERSONAS_HEADERS)
+ws_asistencia = ensure_tab(sh, TAB_ASISTENCIA, ASISTENCIA_HEADERS)
 
 
 # =========================
-# Users desde secrets
+# Users desde secrets (obligatorio)
 # =========================
 def get_users() -> Dict[str, Dict[str, Any]]:
     users: Dict[str, Dict[str, Any]] = {}
-    try:
-        if "users" in st.secrets:
-            for username, info in st.secrets["users"].items():
-                u = str(username).lower().strip()
-                users[u] = {
-                    "password": str(info.get("password", "")),
-                    "centro": clean_cell(info.get("centro", "")) or None,
-                    "nombre": clean_cell(info.get("nombre", u)) or u,
-                }
-    except Exception:
-        users = {}
+    if "users" not in st.secrets:
+        st.error("Falta [users] en Secrets. Necesitás usuarios para ingresar.")
+        st.stop()
 
-    # fallback mínimo (para que nunca se quede sin acceso)
-    if not users:
-        users = {"admin": {"password": "admin", "centro": None, "nombre": "Admin"}}
+    for username, info in st.secrets["users"].items():
+        u = str(username).lower().strip()
+        users[u] = {
+            "password": str(info.get("password", "")),
+            "centro": clean_cell(info.get("centro", "")) or None,
+            "nombre": clean_cell(info.get("nombre", u)) or u,
+        }
     return users
 
 
 def login():
     users = get_users()
-
     st.sidebar.markdown("## Acceso")
+
     if "auth" not in st.session_state:
         st.session_state.auth = {"user": None, "nombre": "", "centro": None}
 
     auth = st.session_state.auth
     if auth["user"]:
         st.sidebar.success(f"Conectado: {auth['nombre']}")
-        st.sidebar.caption(f"Modo almacenamiento: {backend_status.mode} — {backend_status.details}")
+        st.sidebar.caption(f"Sheets OK — {status.service_email}")
         if st.sidebar.button("Salir"):
             st.session_state.auth = {"user": None, "nombre": "", "centro": None}
             st.rerun()
@@ -455,7 +383,7 @@ def _parse_line_persona(line: str):
         if len(parts) >= 3:
             return parts[0], parts[1], parts[2]
 
-    # CSV con comillas o normal (si hay comas en el nombre, tomamos las últimas 2 como freq/centro)
+    # CSV (si hay comas en el nombre, tomamos las últimas 2 como frecuencia/centro)
     try:
         parts = next(csv.reader([ln], delimiter=",", quotechar='"', skipinitialspace=True))
         parts = [p.strip() for p in parts if p.strip() != ""]
@@ -468,7 +396,7 @@ def _parse_line_persona(line: str):
     except Exception:
         pass
 
-    # 2+ espacios (copiado de planilla)
+    # 2+ espacios (copiado desde planilla)
     parts = [p.strip() for p in re.split(r"\s{2,}", ln) if p.strip()]
     if len(parts) >= 3:
         return parts[0], parts[1], parts[2]
@@ -480,17 +408,18 @@ def normalize_personas_df(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame(columns=PERSONAS_HEADERS)
 
-    df = df.copy()
-    df.columns = [c.strip().lower() for c in df.columns]
+    d = df.copy()
+    d.columns = [c.strip().lower() for c in d.columns]
 
-    if "personas" in df.columns and "nombre" not in df.columns:
-        df.rename(columns={"personas": "nombre"}, inplace=True)
+    # alias
+    if "personas" in d.columns and "nombre" not in d.columns:
+        d.rename(columns={"personas": "nombre"}, inplace=True)
 
-    for c in ["nombre", "frecuencia", "centro"]:
-        if c not in df.columns:
-            df[c] = ""
+    for c in PERSONAS_HEADERS:
+        if c not in d.columns:
+            d[c] = ""
 
-    out = df[["nombre", "frecuencia", "centro"]].copy()
+    out = d[PERSONAS_HEADERS].copy()
     out["nombre"] = out["nombre"].astype(str).map(clean_cell)
     out["frecuencia"] = out["frecuencia"].astype(str).map(normalize_frecuencia)
     out["centro"] = out["centro"].astype(str).map(normalize_centro)
@@ -514,7 +443,7 @@ def load_personas_csv_robusto() -> Tuple[pd.DataFrame, Dict[str, Any]]:
         return pd.DataFrame(columns=PERSONAS_HEADERS), meta
 
     first = lines[0].lower()
-    data_lines = lines[1:] if ("nombre" in first and "frecuencia" in first) else lines
+    data_lines = lines[1:] if ("nombre" in first and "frecuencia" in first and "centro" in first) else lines
 
     rows = []
     for ln in data_lines:
@@ -531,8 +460,8 @@ def load_personas_csv_robusto() -> Tuple[pd.DataFrame, Dict[str, Any]]:
     return df, meta
 
 
-def seed_personas_from_csv(force: bool = False) -> Dict[str, Any]:
-    df_sheet = normalize_personas_df(backend.read_personas())
+def import_csv_to_sheets(force: bool = True) -> Dict[str, Any]:
+    df_sheet = normalize_personas_df(read_ws(ws_personas))
     df_csv, meta = load_personas_csv_robusto()
 
     if df_csv.empty:
@@ -541,9 +470,10 @@ def seed_personas_from_csv(force: bool = False) -> Dict[str, Any]:
         meta["reason"] = "CSV vacío o no encontrado"
         return meta
 
-    if force or df_sheet.empty:
-        df_final = df_csv if df_sheet.empty else normalize_personas_df(pd.concat([df_sheet, df_csv], ignore_index=True))
-        backend.write_personas(df_final)
+    if force:
+        # merge (no pisar si ya había y querés conservar)
+        df_final = normalize_personas_df(pd.concat([df_sheet, df_csv], ignore_index=True)) if not df_sheet.empty else df_csv
+        overwrite_ws(ws_personas, df_final)
         meta["imported"] = len(df_csv)
         meta["final_total"] = len(df_final)
         meta["reason"] = "OK"
@@ -551,33 +481,13 @@ def seed_personas_from_csv(force: bool = False) -> Dict[str, Any]:
 
     meta["imported"] = 0
     meta["final_total"] = len(df_sheet)
-    meta["reason"] = "Ya había datos (usá FORZAR para reimportar)"
+    meta["reason"] = "No forzado"
     return meta
 
 
 # =========================
-# Asistencia: reglas
+# Asistencia: reglas + parse
 # =========================
-def can_user_load(centro: str, coordinador: str, espacio: str) -> Tuple[bool, str]:
-    centro = normalize_centro(centro)
-    coordinador = clean_cell(coordinador)
-    espacio = clean_cell(espacio)
-
-    if centro != "Casa Maranatha":
-        allowed = COORDINADORES_POR_CENTRO.get(centro, [])
-        if coordinador not in allowed:
-            return False, f"Este coordinador no está habilitado para cargar en {centro}."
-        return True, ""
-
-    # Maranatha
-    if not espacio:
-        return False, "En Casa Maranatha tenés que elegir un espacio."
-    allowed = MARANATHA_PERMISOS_POR_ESPACIO.get(espacio, [])
-    if coordinador not in allowed:
-        return False, f"{coordinador} no puede cargar el espacio: {espacio}."
-    return True, ""
-
-
 def parse_asistencia_df(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame(columns=[c.lower() for c in ASISTENCIA_HEADERS])
@@ -597,17 +507,39 @@ def parse_asistencia_df(df: pd.DataFrame) -> pd.DataFrame:
     return d[[c.lower() for c in ASISTENCIA_HEADERS]]
 
 
+def can_user_load(centro: str, coordinador: str, espacio: str) -> Tuple[bool, str]:
+    centro = normalize_centro(centro)
+    coordinador = clean_cell(coordinador)
+    espacio = clean_cell(espacio)
+
+    if centro != "Casa Maranatha":
+        allowed = COORDINADORES_POR_CENTRO.get(centro, [])
+        if coordinador not in allowed:
+            return False, f"Este coordinador no está habilitado para cargar en {centro}."
+        return True, ""
+
+    if not espacio:
+        return False, "En Casa Maranatha tenés que elegir un espacio."
+    allowed = MARANATHA_PERMISOS_POR_ESPACIO.get(espacio, [])
+    if coordinador not in allowed:
+        return False, f"{coordinador} no puede cargar el espacio: {espacio}."
+    return True, ""
+
+
 def is_duplicate(df_asistencia: pd.DataFrame, centro: str, fecha_str: str, espacio: str) -> bool:
     if df_asistencia is None or df_asistencia.empty:
         return False
-    df = df_asistencia.copy()
     centro = normalize_centro(centro)
     espacio = clean_cell(espacio)
 
     if centro != "Casa Maranatha":
-        return ((df["centro"] == centro) & (df["fecha"] == fecha_str)).any()
+        return ((df_asistencia["centro"] == centro) & (df_asistencia["fecha"] == fecha_str)).any()
 
-    return ((df["centro"] == centro) & (df["fecha"] == fecha_str) & (df["espacio"] == espacio)).any()
+    return (
+        (df_asistencia["centro"] == centro)
+        & (df_asistencia["fecha"] == fecha_str)
+        & (df_asistencia["espacio"] == espacio)
+    ).any()
 
 
 def compute_metrics(df: pd.DataFrame, year: int, centro: Optional[str] = None) -> Dict[str, Any]:
@@ -618,8 +550,7 @@ def compute_metrics(df: pd.DataFrame, year: int, centro: Optional[str] = None) -
             "df_por_centro": pd.DataFrame(columns=["centro", "total_anual"]),
         }
 
-    d = df.copy()
-    d = d[d["anio"] == year].copy()
+    d = df[df["anio"] == year].copy()
     if centro:
         d = d[d["centro"] == centro].copy()
     if d.empty:
@@ -633,7 +564,7 @@ def compute_metrics(df: pd.DataFrame, year: int, centro: Optional[str] = None) -
     d = d.dropna(subset=["_dt"]).copy()
 
     today = pd.Timestamp(date.today())
-    start_week = today - pd.Timedelta(days=today.weekday())
+    start_week = today - pd.Timedelta(days=today.weekday())  # lunes
     start_month = today.replace(day=1)
 
     hoy = int(d[d["_dt"].dt.date == today.date()]["presentes"].sum())
@@ -654,10 +585,10 @@ def compute_metrics(df: pd.DataFrame, year: int, centro: Optional[str] = None) -
 
 
 # =========================
-# Sidebar contexto
+# Sidebar: Contexto
 # =========================
 st.sidebar.markdown("## Contexto")
-st.sidebar.caption(f"Modo almacenamiento: **{backend_status.mode}** — {backend_status.details}")
+st.sidebar.caption(f"Google Sheets OK — {status.service_email}")
 
 current_year = date.today().year
 YEAR = st.sidebar.selectbox("Año", [current_year, current_year - 1, current_year - 2], index=0)
@@ -676,7 +607,6 @@ if CENTRO == "Casa Maranatha":
 else:
     ESPACIO = ""
 
-# Coordinador restringido
 if CENTRO == "Casa Maranatha":
     allowed_coords = MARANATHA_PERMISOS_POR_ESPACIO.get(ESPACIO, COORDINADORES_POR_CENTRO["Casa Maranatha"])
 else:
@@ -688,14 +618,14 @@ with st.sidebar.expander("🔧 Diagnóstico", expanded=False):
     st.write("Usuario:", st.session_state.auth["user"])
     st.write("Nombre:", st.session_state.auth["nombre"])
     st.write("Centro fijo:", assigned_center or "(admin)")
-    st.write("Año:", YEAR)
+    st.write("Spreadsheet ID:", st.secrets["sheets"]["spreadsheet_id"])
 
 
 # =========================
-# Load data
+# Cargar data (Sheets)
 # =========================
-df_personas = normalize_personas_df(backend.read_personas())
-df_asistencia = parse_asistencia_df(backend.read_asistencia())
+df_personas = normalize_personas_df(read_ws(ws_personas))
+df_asistencia = parse_asistencia_df(read_ws(ws_asistencia))
 
 # Header
 st.markdown(f"# {APP_TITLE}")
@@ -706,7 +636,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# KPIs Centro + Global
+# KPIs centro + global
 m_centro = compute_metrics(df_asistencia, YEAR, centro=CENTRO)
 m_global = compute_metrics(df_asistencia, YEAR, centro=None)
 
@@ -721,7 +651,6 @@ kpi_row([
 
 st.divider()
 
-# Tabs
 t1, t2, t3, t4 = st.tabs(["🧾 Cargar asistencia", "👥 Personas", "📊 Reportes", "🌍 Global"])
 
 
@@ -750,8 +679,9 @@ with t1:
         st.error(msg_perm)
 
     if st.button("✅ Guardar", use_container_width=True, disabled=not ok_perm):
-        # recargar asistencia para evitar “doble click”
-        df_now = parse_asistencia_df(backend.read_asistencia())
+        # recargar desde Sheets para evitar duplicado por doble click
+        df_now = parse_asistencia_df(read_ws(ws_asistencia))
+
         if is_duplicate(df_now, CENTRO, fecha_str, espacio_guardar):
             if CENTRO != "Casa Maranatha":
                 st.warning(f"Ya se cargó asistencia para **{CENTRO}** el **{fecha_str}**. (1 por día)")
@@ -770,8 +700,8 @@ with t1:
                 clean_cell(NOTAS),
                 st.session_state.auth["user"],
             ]
-            backend.append_asistencia(row)
-            st.success("Asistencia guardada ✅")
+            append_ws(ws_asistencia, row)
+            st.success("Asistencia guardada en Google Sheets ✅")
             st.rerun()
 
     st.markdown("### Últimos registros (este centro / este año)")
@@ -779,26 +709,30 @@ with t1:
     if df_c.empty:
         st.info("Todavía no hay registros.")
     else:
-        st.dataframe(df_c.sort_values("fecha", ascending=False).head(30), use_container_width=True)
+        st.dataframe(df_c.sort_values("fecha", ascending=False).head(40), use_container_width=True)
 
 
 # =========================
 # TAB 2: Personas
 # =========================
 with t2:
-    st.subheader("Personas")
+    st.subheader("Personas (se guardan en Google Sheets)")
+
     left, right = st.columns([1, 1])
     with left:
-        if st.button("📥 Importar datapersonas.csv (FORZAR)", use_container_width=True):
-            meta = seed_personas_from_csv(force=True)
-            st.success(f"Importadas: {meta.get('imported', 0)} | Total final: {meta.get('final_total', '?')}")
+        if st.button("📥 Importar datapersonas.csv (FORZAR a Google)", use_container_width=True):
+            meta = import_csv_to_sheets(force=True)
+            if meta.get("imported", 0) > 0:
+                st.success(f"Listo ✅ Importadas {meta['imported']} filas. Total final: {meta.get('final_total')}")
+            else:
+                st.warning(f"No importó nada. Motivo: {meta.get('reason')}")
             st.write(meta)
             st.rerun()
     with right:
         p = find_csv_path()
-        st.caption(f"CSV detectado: **{p or 'NO'}** (nombre esperado: `datapersonas.csv`)")
+        st.caption(f"CSV detectado en repo: **{p or 'NO'}** (nombre esperado: `datapersonas.csv`)")
 
-    # mostrar por centro actual
+    df_personas = normalize_personas_df(read_ws(ws_personas))
     df_p = df_personas[df_personas["centro"] == CENTRO].copy()
     st.markdown(f"<span class='hc-pill'>Personas visibles en {CENTRO}: <b>{len(df_p)}</b></span>", unsafe_allow_html=True)
 
@@ -806,10 +740,10 @@ with t2:
     if q:
         df_p = df_p[df_p["nombre"].str.contains(q, case=False, na=False)]
 
-    st.dataframe(df_p, use_container_width=True, height=420)
+    st.dataframe(df_p, use_container_width=True, height=440)
 
     st.divider()
-    st.markdown("### Agregar persona (manual)")
+    st.markdown("### Agregar persona (manual) → Google Sheets")
     a, b = st.columns([2, 1])
     with a:
         nombre_new = st.text_input("Nombre (ej: Apellido, Nombre)", value="")
@@ -820,19 +754,21 @@ with t2:
         if not nombre_new.strip():
             st.error("Falta el nombre.")
         else:
-            df_all = df_personas.copy()
+            df_all = normalize_personas_df(read_ws(ws_personas))
             add = pd.DataFrame([{"nombre": clean_cell(nombre_new), "frecuencia": frec_new, "centro": CENTRO}])
             df_all = normalize_personas_df(pd.concat([df_all, add], ignore_index=True))
-            backend.write_personas(df_all)
-            st.success("Persona agregada ✅")
+            overwrite_ws(ws_personas, df_all)
+            st.success("Persona agregada en Google Sheets ✅")
             st.rerun()
 
 
 # =========================
-# TAB 3: Reportes centro
+# TAB 3: Reportes del centro
 # =========================
 with t3:
     st.subheader("Reportes del centro")
+
+    df_asistencia = parse_asistencia_df(read_ws(ws_asistencia))
     df_c = df_asistencia[(df_asistencia["centro"] == CENTRO) & (df_asistencia["anio"] == YEAR)].copy()
 
     if df_c.empty:
@@ -869,10 +805,14 @@ with t3:
 with t4:
     st.subheader("Tablero Global (todos los centros)")
 
+    df_asistencia = parse_asistencia_df(read_ws(ws_asistencia))
     df_y = df_asistencia[df_asistencia["anio"] == YEAR].copy()
+
     if df_y.empty:
         st.info("No hay datos globales para este año.")
     else:
+        m_global = compute_metrics(df_asistencia, YEAR, centro=None)
+
         st.markdown("### Totales por centro (año)")
         st.dataframe(m_global["df_por_centro"], use_container_width=True)
 
@@ -883,7 +823,7 @@ with t4:
             st.line_chart(gd.set_index("fecha")["presentes"])
 
         st.markdown("### Últimos registros (global)")
-        st.dataframe(df_y.sort_values("fecha", ascending=False).head(50), use_container_width=True)
+        st.dataframe(df_y.sort_values("fecha", ascending=False).head(60), use_container_width=True)
 
         st.download_button(
             "⬇️ Descargar CSV (global / año)",
