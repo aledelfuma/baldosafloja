@@ -293,16 +293,6 @@ ensure_tab(ASISTENCIA_TAB, ASISTENCIA_HEADERS)
 # Podés reemplazar esto por users en secrets si querés:
 # [users]
 # natasha = {password="...", centro="Calle Belén", nombre="Natasha Carrari"}
-USERS_DEFAULT = {
-    "admin": {"password": "admin", "centro": None, "nombre": "Admin"},
-    "natasha": {"password": "1234", "centro": "Calle Belén", "nombre": "Natasha Carrari"},
-    "estefania": {"password": "1234", "centro": "Calle Belén", "nombre": "Estefanía Eberle"},
-    "martin": {"password": "1234", "centro": "Calle Belén", "nombre": "Martín Pérez Santellan"},
-    "camila": {"password": "1234", "centro": "Nudo a Nudo", "nombre": "Camila Prada"},
-    "julieta": {"password": "1234", "centro": "Nudo a Nudo", "nombre": "Julieta"},
-    "florencia": {"password": "1234", "centro": "Casa Maranatha", "nombre": "Florencia"},
-    "guillermina": {"password": "1234", "centro": "Casa Maranatha", "nombre": "Guillermina Cazenave"},
-}
 
 
 def get_users():
