@@ -16,19 +16,14 @@
 # gspread
 # google-auth
 
-from __future__ import annotations
-
-import csv
-import re
-from pathlib import Path
-from datetime import datetime, date, timedelta
-from typing import Dict, Any, Tuple, Optional, List
-
-import pandas as pd
-import streamlit as st
-
-import gspread
-from google.oauth2.service_account import Credentials
+streamlit
+pandas
+gspread==6.1.2
+google-auth==2.33.0
+google-auth-oauthlib==1.2.1
+google-auth-httplib2==0.2.0
+httplib2==0.22.0
+requests==2.32.3
 
 
 # =========================
@@ -899,3 +894,4 @@ with t4:
             mime="text/csv",
             use_container_width=True,
         )
+
