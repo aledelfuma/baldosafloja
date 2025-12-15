@@ -104,28 +104,23 @@ def main():
 
         nueva_persona = st.text_input("Agregar persona nueva (si no está)")
 
-        if st.button("Guardar asistencia"):
-            ts = datetime.now().isoformat(timespec="seconds")
+       # =========================
+# NUEVO – ASISTENCIA POR PERSONA
+# =========================
+def guardar_asistencia_personas(fecha, centro, espacio, personas, usuario):
+    ws = get_ws("asistencia_personas")
+    ts = datetime.now().isoformat(timespec="seconds")
 
-            append_row(ASISTENCIA_TAB, [
-                ts, hoy, anio, centro, "General",
-                presentes, coordinador, modo, notas, coordinador
-            ])
-
-            for nombre in seleccionadas:
-                append_row(ASISTENCIA_PERSONAS_TAB, [
-                    hoy, centro, "General", nombre, "no", coordinador, ts
-                ])
-
-            if nueva_persona.strip():
-                append_row(PERSONAS_TAB, [
-                    nueva_persona.strip(), "Sin definir", centro
-                ])
-                append_row(ASISTENCIA_PERSONAS_TAB, [
-                    hoy, centro, "General", nueva_persona.strip(), "si", coordinador, ts
-                ])
-
-            st.success("Asistencia guardada correctamente")
+    for nombre in personas:
+        ws.append_row([
+            fecha,
+            centro,
+            espacio,
+            nombre,
+            "si",
+            usuario,
+            ts
+        ])
 
     # =====================
     # PERSONAS
@@ -162,3 +157,4 @@ def main():
 # =========================
 if __name__ == "__main__":
     main()
+
