@@ -10,7 +10,6 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import streamlit as st
 
-# Imports Google (requiere requirements.txt)
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -159,7 +158,7 @@ def normalize_frecuencia(s: str) -> str:
         return "Semanal"
     if "mens" in k:
         return "Mensual"
-    if "no as" in k:
+    if "no as" in k or k in ["no", "noasiste", "no asiste"]:
         return "No asiste"
     return s
 
@@ -182,42 +181,6 @@ def year_from_datestr(ds: str) -> int:
         return int(str(ds)[:4])
     except Exception:
         return date.today().year
-
-
-def normalize_personas_df(df: pd.DataFrame) -> pd.DataFrame:
-    if df is None or df.empty:
-        return pd.DataFrame(columns=PERSONAS_HEADERS)
-    d = df.copy()
-    d.columns = [c.strip().lower() for c in d.columns]
-    if "personas" in d.columns and "nombre" not in d.columns:
-        d.rename(columns={"personas": "nombre"}, inplace=True)
-    for c in PERSONAS_HEADERS:
-        if c not in d.columns:
-            d[c] = ""
-    out = d[PERSONAS_HEADERS].copy()
-    out["nombre"] = out["nombre"].astype(str).map(clean_cell)
-    out["frecuencia"] = out["frecuencia"].astype(str).map(normalize_frecuencia)
-    out["centro"] = out["centro"].astype(str).map(normalize_centro)
-    out = out[out["nombre"] != ""]
-    out = out.drop_duplicates(subset=["nombre", "centro"], keep="first").reset_index(drop=True)
-    return out
-
-
-def parse_asistencia_df(df: pd.DataFrame) -> pd.DataFrame:
-    if df is None or df.empty:
-        return pd.DataFrame(columns=[c.lower() for c in ASISTENCIA_HEADERS])
-    d = df.copy()
-    d.columns = [c.strip().lower() for c in d.columns]
-    for c in [x.lower() for x in ASISTENCIA_HEADERS]:
-        if c not in d.columns:
-            d[c] = ""
-    d["centro"] = d["centro"].astype(str).map(normalize_centro)
-    d["espacio"] = d["espacio"].astype(str).map(clean_cell)
-    d["coordinador"] = d["coordinador"].astype(str).map(clean_cell)
-    d["presentes"] = d["presentes"].map(lambda x: safe_int(x, 0))
-    d["fecha"] = d["fecha"].astype(str).map(lambda x: clean_cell(x)[:10])
-    d["anio"] = d["anio"].map(lambda x: safe_int(x, year_from_datestr(datestr(date.today()))))
-    return d[[c.lower() for c in ASISTENCIA_HEADERS]]
 
 
 # =========================
@@ -273,30 +236,56 @@ def get_sheet_ctx() -> SheetCtx:
         values = ws.get_all_values()
         if not values:
             ws.append_row(headers, value_input_option="RAW")
-        else:
-            first = [clean_cell(x) for x in values[0]]
-            if first != headers:
-                ws.update("A1", [headers])
         return ws
 
     ws_personas = ensure_tab(TAB_PERSONAS, PERSONAS_HEADERS)
     ws_asistencia = ensure_tab(TAB_ASISTENCIA, ASISTENCIA_HEADERS)
 
-    return SheetCtx(sh=sh, ws_personas=ws_personas, ws_asistencia=ws_asistencia, service_email=service_email, spreadsheet_id=sid)
+    return SheetCtx(
+        sh=sh,
+        ws_personas=ws_personas,
+        ws_asistencia=ws_asistencia,
+        service_email=service_email,
+        spreadsheet_id=sid,
+    )
 
 
-def read_ws(ws: gspread.Worksheet) -> pd.DataFrame:
+# ✅ LECTURA ROBUSTA: si falta encabezado, lo infiere con expected_headers
+def read_ws(ws: gspread.Worksheet, expected_headers: Optional[List[str]] = None) -> pd.DataFrame:
     values = ws.get_all_values()
     if not values:
         return pd.DataFrame()
-    header = [clean_cell(h) for h in values[0]]
+
+    exp = [h.strip().lower() for h in (expected_headers or [])]
+
+    header_raw = [clean_cell(h) for h in values[0]]
+    header = [h.strip().lower() for h in header_raw]
     rows = values[1:]
+
+    if exp:
+        must_have = set(exp[: min(3, len(exp))])
+        if not (must_have.issubset(set(header))):
+            # No hay header real: tratamos TODO como datos
+            header = exp
+            rows = values
+
+            fixed = []
+            for r in rows:
+                r = list(r)
+                if len(r) < len(header):
+                    r += [""] * (len(header) - len(r))
+                fixed.append(r[: len(header)])
+            df = pd.DataFrame(fixed, columns=header)
+            df.columns = [c.strip().lower() for c in df.columns]
+            return df
+
     fixed = []
     for r in rows:
         r = list(r)
         if len(r) < len(header):
             r += [""] * (len(header) - len(r))
         fixed.append(r[: len(header)])
+
     df = pd.DataFrame(fixed, columns=header)
     df.columns = [c.strip().lower() for c in df.columns]
     return df
@@ -311,13 +300,62 @@ def append_ws(ws: gspread.Worksheet, row: List[Any]):
     ws.append_row([str(x) for x in row], value_input_option="USER_ENTERED")
 
 
-# Conectar sí o sí
 try:
     ctx = get_sheet_ctx()
 except Exception as e:
     st.error("❌ No se pudo conectar a Google Sheets.")
     st.write("Detalle:", str(e))
     st.stop()
+
+
+# =========================
+# Normalizadores de DF
+# =========================
+def normalize_personas_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=PERSONAS_HEADERS)
+    d = df.copy()
+    d.columns = [c.strip().lower() for c in d.columns]
+    if "personas" in d.columns and "nombre" not in d.columns:
+        d.rename(columns={"personas": "nombre"}, inplace=True)
+    for c in PERSONAS_HEADERS:
+        if c not in d.columns:
+            d[c] = ""
+    out = d[PERSONAS_HEADERS].copy()
+    out["nombre"] = out["nombre"].astype(str).map(clean_cell)
+    out["frecuencia"] = out["frecuencia"].astype(str).map(normalize_frecuencia)
+    out["centro"] = out["centro"].astype(str).map(normalize_centro)
+    out = out[out["nombre"] != ""]
+    out = out.drop_duplicates(subset=["nombre", "centro"], keep="first").reset_index(drop=True)
+    return out
+
+
+def parse_asistencia_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=[c.lower() for c in ASISTENCIA_HEADERS])
+
+    d = df.copy()
+    d.columns = [c.strip().lower() for c in d.columns]
+    for c in [x.lower() for x in ASISTENCIA_HEADERS]:
+        if c not in d.columns:
+            d[c] = ""
+
+    d["centro"] = d["centro"].astype(str).map(normalize_centro)
+    d["espacio"] = d["espacio"].astype(str).map(clean_cell)
+    d["coordinador"] = d["coordinador"].astype(str).map(clean_cell)
+    d["presentes"] = d["presentes"].map(lambda x: safe_int(x, 0))
+    d["fecha"] = d["fecha"].astype(str).map(lambda x: clean_cell(x)[:10])
+
+    # ✅ inferir anio desde fecha si está vacío
+    def infer_year(row):
+        a = clean_cell(row.get("anio", ""))
+        if a:
+            return safe_int(a, year_from_datestr(row.get("fecha", "")))
+        return year_from_datestr(row.get("fecha", ""))
+
+    d["anio"] = d.apply(infer_year, axis=1)
+
+    return d[[c.lower() for c in ASISTENCIA_HEADERS]]
 
 
 # =========================
@@ -345,7 +383,7 @@ def login():
     auth = st.session_state.auth
     if auth["user"]:
         st.sidebar.success(f"Conectado: {auth['nombre']}")
-        st.sidebar.caption(f"Google Sheets OK — {ctx.service_email}")
+        st.sidebar.caption(f"Sheets OK — {ctx.service_email}")
         if st.sidebar.button("Salir"):
             st.session_state.auth = {"user": None, "nombre": "", "centro": None}
             st.rerun()
@@ -376,7 +414,7 @@ if not st.session_state.auth["user"]:
 
 
 # =========================
-# CSV personas: robusto + import estable
+# CSV personas
 # =========================
 def find_csv_path() -> Optional[str]:
     for p in ["datapersonas.csv", "personas.csv", "data/datapersonas.csv", "data/personas.csv"]:
@@ -398,7 +436,7 @@ def _parse_line_persona(line: str):
         parts = [p.strip() for p in ln.split(";")]
         return parts[0], parts[1], parts[2]
 
-    # CSV: toma las últimas 2 columnas como freq/centro, el resto es nombre (aunque tenga comas)
+    # CSV: últimas 2 columnas = frecuencia/centro; el resto = nombre (aunque tenga comas)
     try:
         parts = next(csv.reader([ln], delimiter=",", quotechar='"', skipinitialspace=True))
         parts = [p.strip() for p in parts if p.strip() != ""]
@@ -413,7 +451,6 @@ def _parse_line_persona(line: str):
     parts = [p.strip() for p in re.split(r"\s{2,}", ln) if p.strip()]
     if len(parts) >= 3:
         return parts[0], parts[1], parts[2]
-
     return None
 
 
@@ -448,7 +485,7 @@ def load_personas_csv_robusto() -> Tuple[pd.DataFrame, Dict[str, Any]]:
 
 
 # =========================
-# Reglas de carga + métricas
+# Reglas + métricas
 # =========================
 def can_user_load(centro: str, coordinador: str, espacio: str) -> Tuple[bool, str]:
     centro = normalize_centro(centro)
@@ -555,10 +592,10 @@ with st.sidebar.expander("🔧 Diagnóstico", expanded=False):
 
 
 # =========================
-# Load data (siempre desde Sheets)
+# Load data (ROBUSTO)
 # =========================
-df_personas = normalize_personas_df(read_ws(ctx.ws_personas))
-df_asistencia = parse_asistencia_df(read_ws(ctx.ws_asistencia))
+df_personas = normalize_personas_df(read_ws(ctx.ws_personas, expected_headers=PERSONAS_HEADERS))
+df_asistencia = parse_asistencia_df(read_ws(ctx.ws_asistencia, expected_headers=ASISTENCIA_HEADERS))
 
 # Header
 st.markdown(f"# {APP_TITLE}")
@@ -586,9 +623,6 @@ st.divider()
 t1, t2, t3, t4 = st.tabs(["🧾 Cargar asistencia", "👥 Personas", "📊 Reportes", "🌍 Global"])
 
 
-# =========================
-# TAB 1: Cargar asistencia
-# =========================
 with t1:
     st.subheader("Cargar asistencia")
 
@@ -611,7 +645,7 @@ with t1:
         st.error(msg_perm)
 
     if st.button("✅ Guardar", use_container_width=True, disabled=not ok_perm):
-        df_now = parse_asistencia_df(read_ws(ctx.ws_asistencia))
+        df_now = parse_asistencia_df(read_ws(ctx.ws_asistencia, expected_headers=ASISTENCIA_HEADERS))
         if is_duplicate(df_now, CENTRO, fecha_str, espacio_guardar):
             st.warning("Ya existe una carga para ese día (según la regla).")
         else:
@@ -634,14 +668,11 @@ with t1:
     st.markdown("### Últimos registros (este centro / este año)")
     df_c = df_asistencia[(df_asistencia["centro"] == CENTRO) & (df_asistencia["anio"] == YEAR)].copy()
     if df_c.empty:
-        st.info("Todavía no hay registros.")
+        st.info("Todavía no hay registros para este filtro.")
     else:
         st.dataframe(df_c.sort_values("fecha", ascending=False).head(40), use_container_width=True)
 
 
-# =========================
-# TAB 2: Personas
-# =========================
 with t2:
     st.subheader("Personas (Google Sheets)")
 
@@ -653,7 +684,7 @@ with t2:
                 st.error("No pude leer datapersonas.csv. Revisá el archivo en el repo.")
                 st.write(meta)
             else:
-                df_sheet = normalize_personas_df(read_ws(ctx.ws_personas))
+                df_sheet = normalize_personas_df(read_ws(ctx.ws_personas, expected_headers=PERSONAS_HEADERS))
                 df_final = normalize_personas_df(pd.concat([df_sheet, df_csv], ignore_index=True))
                 overwrite_ws(ctx.ws_personas, df_final)
                 st.success(f"Importadas {len(df_csv)} — Total ahora: {len(df_final)} ✅")
@@ -661,9 +692,9 @@ with t2:
                 st.rerun()
     with c2:
         p = find_csv_path()
-        st.caption(f"CSV detectado: **{p or 'NO'}** (esperado: `datapersonas.csv` en el repo)")
+        st.caption(f"CSV detectado: **{p or 'NO'}**")
 
-    df_personas = normalize_personas_df(read_ws(ctx.ws_personas))
+    df_personas = normalize_personas_df(read_ws(ctx.ws_personas, expected_headers=PERSONAS_HEADERS))
     df_p = df_personas[df_personas["centro"] == CENTRO].copy()
     st.markdown(f"<span class='hc-pill'>Personas en {CENTRO}: <b>{len(df_p)}</b></span>", unsafe_allow_html=True)
 
@@ -673,9 +704,6 @@ with t2:
     st.dataframe(df_p, use_container_width=True, height=440)
 
 
-# =========================
-# TAB 3: Reportes
-# =========================
 with t3:
     st.subheader("Reportes del centro")
     df_c = df_asistencia[(df_asistencia["centro"] == CENTRO) & (df_asistencia["anio"] == YEAR)].copy()
@@ -695,14 +723,16 @@ with t3:
         st.dataframe(df_c.sort_values("fecha", ascending=False), use_container_width=True)
 
 
-# =========================
-# TAB 4: Global
-# =========================
 with t4:
     st.subheader("Global (todos los centros)")
     df_y = df_asistencia[df_asistencia["anio"] == YEAR].copy()
     if df_y.empty:
-        st.info("No hay datos globales para este año.")
+        st.warning("Global está vacío para este año. Probá cambiar el año o revisá el diagnóstico.")
+        st.markdown("### 🧪 Diagnóstico rápido (qué ve la app)")
+        st.write("Filas leídas (asistencia):", len(df_asistencia))
+        st.write("Años detectados:", sorted(df_asistencia["anio"].dropna().unique().tolist()) if not df_asistencia.empty else [])
+        st.write("Centros detectados:", df_asistencia["centro"].unique().tolist() if not df_asistencia.empty else [])
+        st.dataframe(df_asistencia.tail(30), use_container_width=True)
     else:
         st.dataframe(m_global["df_por_centro"], use_container_width=True)
 
