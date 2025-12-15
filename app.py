@@ -3,6 +3,8 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 from google.oauth2.service_account import Credentials
 import gspread
+from gspread.exceptions import APIError
+import time
 
 # =========================
 # Config UI / Branding
@@ -198,7 +200,6 @@ def get_spreadsheet():
     return gc.open_by_key(sid)
 
 def _open_ws_strict(sh, title: str):
-    # Si hay espacios raros o unicode, esto igual debería encontrarlo si el título coincide exacto.
     return sh.worksheet(title)
 
 def get_or_create_ws(title: str, cols: list, rows: int = 2000):
@@ -207,13 +208,11 @@ def get_or_create_ws(title: str, cols: list, rows: int = 2000):
     """
     sh = get_spreadsheet()
 
-    # 1) Intento normal: abrir
     try:
         return _open_ws_strict(sh, title)
     except Exception:
         pass
 
-    # 2) Intento: crear
     try:
         ws = sh.add_worksheet(title=title, rows=rows, cols=max(20, len(cols)))
         ws.update("A1", [cols])
@@ -221,19 +220,17 @@ def get_or_create_ws(title: str, cols: list, rows: int = 2000):
     except Exception as e:
         msg = str(e).lower()
 
-        # ✅ Caso: "already exists" -> abrir y continuar (NO mostrar cartel rojo)
         if "already exists" in msg or "alreadyexists" in msg:
             try:
                 return _open_ws_strict(sh, title)
             except Exception:
                 st.error(
                     f"No pude abrir la pestaña '{title}' aunque Google dice que existe.\n\n"
-                    f"Revisá si tiene espacios en el nombre (ej: 'asistencia_personas '), "
+                    f"Revisá si tiene espacios raros en el nombre (ej: 'asistencia_personas '), "
                     f"o si está en otra planilla.\n\nDetalle: {e}"
                 )
                 st.stop()
 
-        # Otros errores: permisos / límite de hojas / etc.
         st.error(
             f"No pude crear la pestaña '{title}'.\n\n"
             f"Solución: creala manualmente en el Google Sheet con ese nombre y recargá.\n\n"
@@ -241,9 +238,56 @@ def get_or_create_ws(title: str, cols: list, rows: int = 2000):
         )
         st.stop()
 
+# =========================
+# ✅ FIX: Retry/backoff para APIError de Google
+# =========================
+def _apierror_info(e: APIError) -> str:
+    # gspread guarda info HTTP en e.response
+    try:
+        status = getattr(e.response, "status_code", None)
+        text = getattr(e.response, "text", "")
+        if text and len(text) > 800:
+            text = text[:800] + "…"
+        return f"HTTP {status} — {text}"
+    except Exception:
+        return str(e)
+
+def safe_get_all_values(ws, tries=6):
+    """
+    Evita que la app se caiga por 429/503/temporales.
+    Backoff: 1s, 2s, 4s, 8s...
+    """
+    last_err = None
+    for i in range(tries):
+        try:
+            return ws.get_all_values()
+        except APIError as e:
+            last_err = e
+            info = _apierror_info(e).lower()
+            # Reintenta en errores típicos temporales / cuota
+            if "429" in info or "rate" in info or "quota" in info or "503" in info or "timeout" in info:
+                time.sleep(2 ** i * 0.5)
+                continue
+            # Si no parece temporal, cortar con diagnóstico
+            st.error("Google Sheets devolvió un error al leer datos.")
+            st.code(_apierror_info(e))
+            st.stop()
+        except Exception as e:
+            last_err = e
+            time.sleep(2 ** i * 0.5)
+
+    st.error("No pude leer la planilla luego de varios intentos (posible cuota o error temporal).")
+    if isinstance(last_err, APIError):
+        st.code(_apierror_info(last_err))
+    else:
+        st.code(str(last_err))
+    st.stop()
+
 def read_ws_df(title: str, cols: list) -> pd.DataFrame:
     ws = get_or_create_ws(title, cols)
-    values = ws.get_all_values()
+
+    # ✅ usa lectura con retry
+    values = safe_get_all_values(ws)
 
     if not values:
         ws.update("A1", [cols])
@@ -252,7 +296,6 @@ def read_ws_df(title: str, cols: list) -> pd.DataFrame:
     header = values[0]
     body = values[1:] if len(values) > 1 else []
 
-    # Headers OK
     if header[: len(cols)] == cols:
         df = pd.DataFrame(body, columns=header)
         for c in cols:
@@ -261,7 +304,6 @@ def read_ws_df(title: str, cols: list) -> pd.DataFrame:
         df = df[cols]
         return df
 
-    # Headers rotos / ausentes -> por posición (sin perder filas)
     df = pd.DataFrame(values)
     for i in range(df.shape[1], len(cols)):
         df[i] = ""
@@ -271,14 +313,14 @@ def read_ws_df(title: str, cols: list) -> pd.DataFrame:
 
 def append_ws_rows(title: str, cols: list, rows: list[list]):
     ws = get_or_create_ws(title, cols)
-    first = ws.get_all_values()[:1]
+    first = safe_get_all_values(ws)[:1]
     if not first or first[0][: len(cols)] != cols:
         ws.update("A1", [cols])
     ws.append_rows(rows, value_input_option="USER_ENTERED")
 
 def repair_headers(title: str, cols: list):
     ws = get_or_create_ws(title, cols)
-    values = ws.get_all_values()
+    values = safe_get_all_values(ws)
     if not values:
         ws.update("A1", [cols])
         return
@@ -467,7 +509,6 @@ def sidebar_pending(df_latest, centro):
     else:
         st.sidebar.warning(f"⏰ Última carga: {last_date} (hace {days} días)")
 
-    # Semana (lun-dom): días sin carga
     today = date.today()
     start = today - timedelta(days=today.weekday())
     days_list = [start + timedelta(days=i) for i in range(7)]
@@ -536,13 +577,11 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
 
     st.divider()
 
-    # ✅ Botón claro + feedback
     if st.button("✅ Guardar asistencia", type="primary", use_container_width=True):
         if not overwrite:
             st.error("Te falta confirmar la sobreescritura.")
             st.stop()
 
-        # Persona nueva
         if agregar_nueva and nueva.strip():
             df_personas = upsert_persona(df_personas, nueva, centro, usuario, frecuencia="Nueva")
             if nueva not in presentes:
@@ -566,7 +605,6 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                 accion=accion,
             )
 
-            # presentes
             for n in presentes:
                 append_asistencia_personas(
                     fecha=fecha,
@@ -580,7 +618,6 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     notas="",
                 )
 
-            # ausentes (opcional)
             if guardar_ausentes:
                 ausentes = [n for n in nombres if n not in presentes]
                 for n in ausentes:
@@ -622,39 +659,6 @@ def page_personas(df_personas, centro, usuario):
     st.markdown(f"<span class='badge'>Personas visibles: {len(df_centro)}</span>", unsafe_allow_html=True)
     st.dataframe(df_centro[["nombre","frecuencia","edad","domicilio","notas","activo"]], use_container_width=True)
 
-    st.markdown("### Agregar persona")
-    with st.form("add_person"):
-        nombre = st.text_input("Nombre y apellido", placeholder="Ej: Gómez, Ana")
-        frecuencia = st.selectbox("Frecuencia", ["Diaria","Semanal","Mensual","No asiste","Nueva"], index=4)
-        edad = st.text_input("Edad (opcional)")
-        domicilio = st.text_input("Domicilio (opcional)")
-        notas = st.text_area("Notas (opcional)")
-        activo = st.selectbox("Activo", ["SI","NO"], index=0)
-        ok = st.form_submit_button("Guardar persona")
-
-    if ok:
-        nombre = nombre.strip()
-        if not nombre:
-            st.error("Falta el nombre.")
-            st.stop()
-
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        row = {
-            "nombre": nombre,
-            "frecuencia": frecuencia,
-            "centro": centro,
-            "edad": edad.strip(),
-            "domicilio": domicilio.strip(),
-            "notas": notas.strip(),
-            "activo": activo,
-            "timestamp": now,
-            "usuario": usuario,
-        }
-        append_ws_rows(PERSONAS_TAB, PERSONAS_COLS, [[row.get(c, "") for c in PERSONAS_COLS]])
-        st.toast("✅ Persona guardada", icon="👤")
-        st.success("Persona guardada.")
-        st.rerun()
-
 def page_reportes(df_asistencia, centro):
     st.subheader("Reportes (este centro)")
     df_latest = latest_asistencia(df_asistencia)
@@ -681,10 +685,6 @@ def page_reportes(df_asistencia, centro):
     serie = df_c.groupby("fecha", as_index=False)["presentes_i"].sum().sort_values("fecha")
     st.line_chart(serie.set_index("fecha")["presentes_i"])
 
-    st.markdown("### Por espacio")
-    esp = df_c.groupby("espacio", as_index=False)["presentes_i"].sum().sort_values("presentes_i", ascending=False)
-    st.bar_chart(esp.set_index("espacio")["presentes_i"])
-
 def page_global(df_asistencia):
     st.subheader("Global (todos los centros)")
     df_latest = latest_asistencia(df_asistencia)
@@ -698,45 +698,10 @@ def page_global(df_asistencia):
     d = df_latest[df_latest["anio"].astype(str) == str(anio)].copy()
     d["presentes_i"] = d["presentes"].apply(lambda x: clean_int(x, 0))
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f"<div class='kpi'><h3>Total año (global)</h3><div class='v'>{int(d['presentes_i'].sum())}</div></div>", unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"<div class='kpi'><h3>Centros con registros</h3><div class='v'>{d['centro'].nunique()}</div></div>", unsafe_allow_html=True)
-    with col3:
-        st.markdown(f"<div class='kpi'><h3>Días registrados</h3><div class='v'>{d['fecha'].nunique()}</div></div>", unsafe_allow_html=True)
-
     st.markdown("### Por centro (acumulado)")
     por = d.groupby("centro", as_index=False)["presentes_i"].sum().sort_values("presentes_i", ascending=False)
     st.bar_chart(por.set_index("centro")["presentes_i"])
 
-    st.markdown("### Evolución global (por día)")
-    dia = d.groupby("fecha", as_index=False)["presentes_i"].sum().sort_values("fecha")
-    st.line_chart(dia.set_index("fecha")["presentes_i"])
-
-    st.markdown("### Base (últimos 50 registros)")
-    st.dataframe(d.sort_values("timestamp", ascending=False)[["fecha","centro","espacio","presentes","coordinador","modo","timestamp"]].head(50), use_container_width=True)
-
-def page_tools():
-    st.subheader("Herramientas")
-    st.warning("Usá esto si tu sheet quedó con columnas corridas o sin encabezados.")
-    colA, colB, colC = st.columns(3)
-    with colA:
-        if st.button("Reparar encabezados: asistencia"):
-            repair_headers(ASISTENCIA_TAB, ASISTENCIA_COLS)
-            st.success("Listo.")
-    with colB:
-        if st.button("Reparar encabezados: personas"):
-            repair_headers(PERSONAS_TAB, PERSONAS_COLS)
-            st.success("Listo.")
-    with colC:
-        if st.button("Reparar encabezados: asistencia_personas"):
-            repair_headers(ASISTENCIA_PERSONAS_TAB, ASISTENCIA_PERSONAS_COLS)
-            st.success("Listo.")
-
-# =========================
-# Main
-# =========================
 def main():
     st.title("Sistema de Asistencia — Hogar de Cristo Bahía Blanca")
 
@@ -760,26 +725,15 @@ def main():
     with st.spinner("Cargando datos desde Google Sheets..."):
         df_asistencia = read_ws_df(ASISTENCIA_TAB, ASISTENCIA_COLS)
         df_personas = read_ws_df(PERSONAS_TAB, PERSONAS_COLS)
-        # esta se abre/crea sin romper aunque exista
         _ = read_ws_df(ASISTENCIA_PERSONAS_TAB, ASISTENCIA_PERSONAS_COLS)
 
     df_latest = latest_asistencia(df_asistencia)
 
     st.caption(f"Estás trabajando sobre: **{centro_asignado}** — 👤 **{nombre_visible}**")
     kpi_row(df_latest, centro_asignado)
-
-    # “Notificaciones” internas (avisos)
-    last_date, days = last_load_info(df_latest, centro_asignado)
-    if last_date is None:
-        st.warning("⚠️ Todavía no hay cargas para este centro. Probá guardando una asistencia para hoy.")
-    else:
-        if days > 0:
-            st.warning(f"⏰ Atención: la última carga de este centro fue el {last_date} (hace {days} días).")
-
-    # Sidebar pendientes
     sidebar_pending(df_latest, centro_asignado)
 
-    tabs = st.tabs(["🧾 Registrar asistencia", "👥 Personas", "📊 Reportes", "🌍 Global", "🛠️ Herramientas"])
+    tabs = st.tabs(["🧾 Registrar asistencia", "👥 Personas", "📊 Reportes", "🌍 Global"])
     with tabs[0]:
         page_registrar_asistencia(df_personas, df_asistencia, centro_asignado, nombre_visible, usuario)
     with tabs[1]:
@@ -788,8 +742,6 @@ def main():
         page_reportes(df_asistencia, centro_asignado)
     with tabs[3]:
         page_global(df_asistencia)
-    with tabs[4]:
-        page_tools()
 
 if __name__ == "__main__":
     main()
