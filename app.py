@@ -140,11 +140,12 @@ def main():
     # =================================================
     with tab2:
         st.subheader("Personas registradas")
-
-       if "centro" in df_personas.columns:
+# Filtrar personas por centro (si existe la columna)
+if "centro" in df_personas.columns:
     df_centro = df_personas[df_personas["centro"] == centro]
 else:
     df_centro = df_personas.copy()
+
 
 
         st.metric("Total personas", len(df_centro))
@@ -197,4 +198,5 @@ else:
 # =====================================================
 if __name__ == "__main__":
     main()
+
 
