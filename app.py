@@ -127,6 +127,25 @@ def main():
 
             st.success("Asistencia guardada correctamente")
 
+    # =========================
+# NUEVO – ASISTENCIA POR PERSONA
+# =========================
+def guardar_asistencia_personas(fecha, centro, espacio, personas, usuario):
+    ws = get_ws("asistencia_personas")
+    ts = datetime.now().isoformat(timespec="seconds")
+
+    for nombre in personas:
+        ws.append_row([
+            fecha,
+            centro,
+            espacio,
+            nombre,
+            "si",
+            usuario,
+            ts
+        ])
+
+
     # =====================
     # PERSONAS
     # =====================
@@ -162,3 +181,4 @@ def main():
 # =========================
 if __name__ == "__main__":
     main()
+
