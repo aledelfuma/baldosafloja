@@ -54,6 +54,10 @@ hr {{
   border: none;
   border-top: 1px solid rgba(255,255,255,.10);
 }}
+.small {{
+  opacity: .85;
+  font-size: .9rem;
+}}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -135,11 +139,6 @@ def get_secret(path, default=None):
         return default
 
 def normalize_private_key(pk: str) -> str:
-    """
-    Asegura formato correcto:
-    - Si viene con \\n, lo convierte a saltos reales
-    - Si viene ya con saltos reales, lo deja
-    """
     if not isinstance(pk, str):
         return pk
     if "\\n" in pk:
@@ -198,63 +197,80 @@ def get_spreadsheet():
     gc = get_gspread_client()
     return gc.open_by_key(sid)
 
+def _open_ws_strict(sh, title: str):
+    # Si hay espacios raros o unicode, esto igual debería encontrarlo si el título coincide exacto.
+    return sh.worksheet(title)
+
 def get_or_create_ws(title: str, cols: list, rows: int = 2000):
+    """
+    FIX: si al crear dice "already exists", re-intenta abrir y listo.
+    """
     sh = get_spreadsheet()
+
+    # 1) Intento normal: abrir
     try:
-        ws = sh.worksheet(title)
-        return ws
+        return _open_ws_strict(sh, title)
     except Exception:
-        # Intentar crear
-        try:
-            ws = sh.add_worksheet(title=title, rows=rows, cols=max(20, len(cols)))
-            # set headers
-            ws.update("A1", [cols])
-            return ws
-        except Exception as e:
-            # Si no puede crear (límite/permisos), mostrar instrucción clara
-            st.error(
-                f"No pude crear la pestaña '{title}'.\n\n"
-                f"Solución: creala manualmente en el Google Sheet con ese nombre "
-                f"y volvé a recargar.\n\nDetalle: {e}"
-            )
-            st.stop()
+        pass
+
+    # 2) Intento: crear
+    try:
+        ws = sh.add_worksheet(title=title, rows=rows, cols=max(20, len(cols)))
+        ws.update("A1", [cols])
+        return ws
+    except Exception as e:
+        msg = str(e).lower()
+
+        # ✅ Caso: "already exists" -> abrir y continuar (NO mostrar cartel rojo)
+        if "already exists" in msg or "alreadyexists" in msg:
+            try:
+                return _open_ws_strict(sh, title)
+            except Exception:
+                st.error(
+                    f"No pude abrir la pestaña '{title}' aunque Google dice que existe.\n\n"
+                    f"Revisá si tiene espacios en el nombre (ej: 'asistencia_personas '), "
+                    f"o si está en otra planilla.\n\nDetalle: {e}"
+                )
+                st.stop()
+
+        # Otros errores: permisos / límite de hojas / etc.
+        st.error(
+            f"No pude crear la pestaña '{title}'.\n\n"
+            f"Solución: creala manualmente en el Google Sheet con ese nombre y recargá.\n\n"
+            f"Detalle: {e}"
+        )
+        st.stop()
 
 def read_ws_df(title: str, cols: list) -> pd.DataFrame:
     ws = get_or_create_ws(title, cols)
     values = ws.get_all_values()
 
     if not values:
-        # sheet vacía: poner headers
         ws.update("A1", [cols])
         return pd.DataFrame(columns=cols)
 
-    # Si la primera fila no coincide con headers, intentamos "reparar" leyendo por posición
     header = values[0]
     body = values[1:] if len(values) > 1 else []
 
-    # Caso 1: headers OK
+    # Headers OK
     if header[: len(cols)] == cols:
         df = pd.DataFrame(body, columns=header)
-        # asegurar columnas requeridas
         for c in cols:
             if c not in df.columns:
                 df[c] = ""
         df = df[cols]
         return df
 
-    # Caso 2: headers rotos / no existen -> interpretar por posición
+    # Headers rotos / ausentes -> por posición (sin perder filas)
     df = pd.DataFrame(values)
-    # Si hay menos columnas que las esperadas, completar
     for i in range(df.shape[1], len(cols)):
         df[i] = ""
     df = df.iloc[:, : len(cols)]
     df.columns = cols
-    # Primera fila probablemente era data: NO la descartamos
     return df
 
 def append_ws_rows(title: str, cols: list, rows: list[list]):
     ws = get_or_create_ws(title, cols)
-    # garantizar headers
     first = ws.get_all_values()[:1]
     if not first or first[0][: len(cols)] != cols:
         ws.update("A1", [cols])
@@ -266,7 +282,6 @@ def repair_headers(title: str, cols: list):
     if not values:
         ws.update("A1", [cols])
         return
-    # Reescribimos: headers + data por posición (sin perder filas)
     df = pd.DataFrame(values)
     for i in range(df.shape[1], len(cols)):
         df[i] = ""
@@ -274,15 +289,11 @@ def repair_headers(title: str, cols: list):
     data = df.values.tolist()
     ws.clear()
     ws.update("A1", [cols])
-    # Guardar todo lo que había como data debajo (incluyendo la vieja fila 1)
     ws.update("A2", data)
 
 # =========================
 # Data normalization
 # =========================
-def today_str():
-    return date.today().isoformat()
-
 def year_of(fecha_iso: str) -> str:
     try:
         return str(pd.to_datetime(fecha_iso).year)
@@ -303,6 +314,41 @@ def norm_text(x):
     return str(x).strip()
 
 # =========================
+# Asistencia aggregation
+# =========================
+def latest_asistencia(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    df2 = df.copy()
+    for c in ["timestamp","fecha","anio","centro","espacio","presentes"]:
+        if c not in df2.columns:
+            df2[c] = ""
+    df2["timestamp_dt"] = pd.to_datetime(df2["timestamp"], errors="coerce")
+    df2["k"] = (
+        df2["anio"].astype(str) + "|" +
+        df2["fecha"].astype(str) + "|" +
+        df2["centro"].astype(str) + "|" +
+        df2["espacio"].astype(str)
+    )
+    df2 = df2.sort_values("timestamp_dt", ascending=True)
+    df2 = df2.groupby("k", as_index=False).tail(1)
+    df2 = df2.drop(columns=["k"], errors="ignore")
+    return df2
+
+def last_load_info(df_latest: pd.DataFrame, centro: str):
+    if df_latest.empty:
+        return None, None
+    d = df_latest[df_latest["centro"] == centro].copy()
+    if d.empty:
+        return None, None
+    d["fecha_dt"] = pd.to_datetime(d["fecha"], errors="coerce")
+    last = d["fecha_dt"].max()
+    if pd.isna(last):
+        return None, None
+    days = (pd.Timestamp(date.today()) - last).days
+    return last.date().isoformat(), int(days)
+
+# =========================
 # Personas logic
 # =========================
 def personas_for_centro(df_personas: pd.DataFrame, centro: str) -> pd.DataFrame:
@@ -319,7 +365,6 @@ def upsert_persona(df_personas: pd.DataFrame, nombre: str, centro: str, usuario:
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Si existe (mismo nombre + centro), no duplicar
     if not df_personas.empty:
         mask = (df_personas.get("nombre", "") == nombre) & (df_personas.get("centro", "") == centro)
         if mask.any():
@@ -336,12 +381,12 @@ def upsert_persona(df_personas: pd.DataFrame, nombre: str, centro: str, usuario:
         "timestamp": now,
         "usuario": usuario,
     }
-    df2 = pd.concat([df_personas, pd.DataFrame([row])], ignore_index=True)
     append_ws_rows(PERSONAS_TAB, PERSONAS_COLS, [[row.get(c, "") for c in PERSONAS_COLS]])
+    df2 = pd.concat([df_personas, pd.DataFrame([row])], ignore_index=True)
     return df2
 
 # =========================
-# Asistencia logic (audit-friendly: append con accion)
+# Writes
 # =========================
 def append_asistencia(fecha, centro, espacio, presentes, coordinador, modo, notas, usuario, accion="append"):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -377,31 +422,14 @@ def append_asistencia_personas(fecha, centro, espacio, nombre, estado, es_nuevo,
         "usuario": usuario,
         "notas": notas,
     }
-    append_ws_rows(ASISTENCIA_PERSONAS_TAB, ASISTENCIA_PERSONAS_COLS, [[row.get(c, "") for c in ASISTENCIA_PERSONAS_COLS]])
-
-def latest_asistencia(df: pd.DataFrame) -> pd.DataFrame:
-    """Devuelve solo el último registro por (anio,fecha,centro,espacio) usando timestamp."""
-    if df.empty:
-        return df
-    # normalizar
-    df2 = df.copy()
-    for c in ["timestamp","fecha","anio","centro","espacio"]:
-        if c not in df2.columns:
-            df2[c] = ""
-    df2["timestamp_dt"] = pd.to_datetime(df2["timestamp"], errors="coerce")
-    df2["k"] = (
-        df2["anio"].astype(str) + "|" +
-        df2["fecha"].astype(str) + "|" +
-        df2["centro"].astype(str) + "|" +
-        df2["espacio"].astype(str)
+    append_ws_rows(
+        ASISTENCIA_PERSONAS_TAB,
+        ASISTENCIA_PERSONAS_COLS,
+        [[row.get(c, "") for c in ASISTENCIA_PERSONAS_COLS]]
     )
-    df2 = df2.sort_values("timestamp_dt", ascending=True)
-    df2 = df2.groupby("k", as_index=False).tail(1)
-    df2 = df2.drop(columns=["k"], errors="ignore")
-    return df2
 
 # =========================
-# UI pages
+# UI blocks
 # =========================
 def kpi_row(df_latest, centro):
     hoy = date.today().isoformat()
@@ -426,7 +454,32 @@ def kpi_row(df_latest, centro):
     with col3:
         st.markdown(f"<div class='kpi'><h3>Este mes</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
 
-def page_registrar_asistencia(df_personas, df_asistencia, df_asist_personas, centro, nombre_visible, usuario):
+def sidebar_pending(df_latest, centro):
+    last_date, days = last_load_info(df_latest, centro)
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### Pendientes")
+    if last_date is None:
+        st.sidebar.warning("⚠️ Todavía no hay cargas para este centro.")
+        return
+
+    if days == 0:
+        st.sidebar.success("✅ Ya se cargó hoy.")
+    else:
+        st.sidebar.warning(f"⏰ Última carga: {last_date} (hace {days} días)")
+
+    # Semana (lun-dom): días sin carga
+    today = date.today()
+    start = today - timedelta(days=today.weekday())
+    days_list = [start + timedelta(days=i) for i in range(7)]
+    df_c = df_latest[df_latest["centro"] == centro].copy()
+    loaded = set(pd.to_datetime(df_c["fecha"], errors="coerce").dt.date.dropna().tolist())
+    missing = [d for d in days_list if d <= today and d not in loaded]
+    if missing:
+        st.sidebar.info("📌 Días sin carga esta semana:\n- " + "\n- ".join([m.isoformat() for m in missing]))
+    else:
+        st.sidebar.success("🎉 Semana al día (hasta hoy).")
+
+def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.subheader("Registrar asistencia")
 
     anio = str(date.today().year)
@@ -444,30 +497,27 @@ def page_registrar_asistencia(df_personas, df_asistencia, df_asist_personas, cen
     st.markdown("### Asistencia persona por persona")
 
     df_centro = personas_for_centro(df_personas, centro)
-    nombres = sorted([n for n in df_centro.get("nombre", pd.Series(dtype=str)).astype(str).tolist() if n.strip()])
+    for c in PERSONAS_COLS:
+        if c not in df_centro.columns:
+            df_centro[c] = ""
+
+    nombres = sorted([n for n in df_centro["nombre"].astype(str).tolist() if n.strip()])
 
     colA, colB = st.columns([2, 1])
     with colA:
-        presentes = st.multiselect(
-            "¿Quiénes vinieron hoy? (seleccioná personas)",
-            options=nombres,
-            default=[],
-        )
+        presentes = st.multiselect("¿Quiénes vinieron hoy?", options=nombres, default=[])
     with colB:
         total_presentes = st.number_input(
-            "Total presentes (si no querés marcar uno por uno)",
+            "Total presentes (si no marcás uno por uno)",
             min_value=0,
             value=len(presentes),
             step=1
         )
 
-    st.caption("Tip: si marcás personas en la lista, el total se autocompleta; si no, podés cargar solo el total.")
-
-    st.markdown("### Persona nueva (si vino alguien que no está en la lista)")
+    st.markdown("### Persona nueva (si vino alguien que no está)")
     nueva = st.text_input("Nombre y apellido (opcional)", placeholder="Ej: Pérez, Juan")
     agregar_nueva = st.checkbox("Hoy vino y es persona nueva")
 
-    # Dedupe: ya existe carga para ese día/centro/espacio?
     df_latest = latest_asistencia(df_asistencia)
     ya = df_latest[
         (df_latest.get("fecha","") == fecha) &
@@ -476,91 +526,84 @@ def page_registrar_asistencia(df_personas, df_asistencia, df_asist_personas, cen
         (df_latest.get("anio","") == anio)
     ]
     existe = not ya.empty
-
     if existe:
-        st.warning("⚠️ Ya existe una carga para este centro / fecha / espacio. Si guardás de nuevo, quedará como *última versión* (no borra, agrega con 'overwrite').")
-        overwrite = st.checkbox("Confirmo que quiero sobreescribir (última versión)", value=False)
+        st.warning("⚠️ Ya hay una carga para este centro / fecha / espacio. Si guardás de nuevo, quedará como última versión (overwrite).")
+        overwrite = st.checkbox("Confirmo sobreescritura", value=False)
     else:
         overwrite = True
 
-    if st.button("Guardar asistencia", type="primary", use_container_width=True):
+    guardar_ausentes = st.checkbox("Guardar también AUSENTES (marca Ausente para todos los que no vinieron)", value=False)
+
+    st.divider()
+
+    # ✅ Botón claro + feedback
+    if st.button("✅ Guardar asistencia", type="primary", use_container_width=True):
         if not overwrite:
-            st.error("Marcá la confirmación de sobreescritura para guardar.")
+            st.error("Te falta confirmar la sobreescritura.")
             st.stop()
 
-        # Si agrego persona nueva:
+        # Persona nueva
         if agregar_nueva and nueva.strip():
             df_personas = upsert_persona(df_personas, nueva, centro, usuario, frecuencia="Nueva")
             if nueva not in presentes:
                 presentes = presentes + [nueva]
 
-        # Calcular totales
         if len(presentes) > 0:
             total_presentes = len(presentes)
 
-        # Guardar resumen (asistencia)
         accion = "overwrite" if existe else "append"
-        append_asistencia(
-            fecha=fecha,
-            centro=centro,
-            espacio=espacio,
-            presentes=total_presentes,
-            coordinador=nombre_visible,
-            modo=modo,
-            notas=notas,
-            usuario=usuario,
-            accion=accion,
-        )
 
-        # Guardar asistencia_personas
-        # - Presente: los seleccionados
-        # - Ausente: el resto (solo si el usuario quiere; para no inflar, lo hacemos opcional)
-        guardar_ausentes = st.session_state.get("guardar_ausentes", False)
-
-        # presentes
-        for n in presentes:
-            append_asistencia_personas(
+        with st.spinner("Guardando en Google Sheets..."):
+            append_asistencia(
                 fecha=fecha,
                 centro=centro,
                 espacio=espacio,
-                nombre=n,
-                estado="Presente",
-                es_nuevo="SI" if (agregar_nueva and n == nueva.strip()) else "NO",
+                presentes=total_presentes,
                 coordinador=nombre_visible,
+                modo=modo,
+                notas=notas,
                 usuario=usuario,
-                notas="",
+                accion=accion,
             )
 
-        # ausentes (opcional)
-        if guardar_ausentes:
-            ausentes = [n for n in nombres if n not in presentes]
-            for n in ausentes:
+            # presentes
+            for n in presentes:
                 append_asistencia_personas(
                     fecha=fecha,
                     centro=centro,
                     espacio=espacio,
                     nombre=n,
-                    estado="Ausente",
-                    es_nuevo="NO",
+                    estado="Presente",
+                    es_nuevo="SI" if (agregar_nueva and n == nueva.strip()) else "NO",
                     coordinador=nombre_visible,
                     usuario=usuario,
                     notas="",
                 )
 
-        st.success("✅ Guardado en Google Sheets.")
-        st.rerun()
+            # ausentes (opcional)
+            if guardar_ausentes:
+                ausentes = [n for n in nombres if n not in presentes]
+                for n in ausentes:
+                    append_asistencia_personas(
+                        fecha=fecha,
+                        centro=centro,
+                        espacio=espacio,
+                        nombre=n,
+                        estado="Ausente",
+                        es_nuevo="NO",
+                        coordinador=nombre_visible,
+                        usuario=usuario,
+                        notas="",
+                    )
 
-    st.checkbox(
-        "Guardar también AUSENTES (marca 'Ausente' para todos los que no vinieron)",
-        key="guardar_ausentes",
-        value=False
-    )
+        st.toast("✅ Asistencia guardada en Google Sheets", icon="✅")
+        st.success("Listo. Se guardó correctamente.")
+        st.rerun()
 
 def page_personas(df_personas, centro, usuario):
     st.subheader("Personas (base del centro)")
     df_centro = personas_for_centro(df_personas, centro).copy()
 
-    # Normalizar columnas si faltan
     for c in PERSONAS_COLS:
         if c not in df_centro.columns:
             df_centro[c] = ""
@@ -573,14 +616,13 @@ def page_personas(df_personas, centro, usuario):
 
     if q.strip():
         df_centro = df_centro[df_centro["nombre"].astype(str).str.contains(q.strip(), case=False, na=False)]
-
-    if solo_activos and "activo" in df_centro.columns:
+    if solo_activos:
         df_centro = df_centro[df_centro["activo"].astype(str).str.upper().fillna("") != "NO"]
 
     st.markdown(f"<span class='badge'>Personas visibles: {len(df_centro)}</span>", unsafe_allow_html=True)
     st.dataframe(df_centro[["nombre","frecuencia","edad","domicilio","notas","activo"]], use_container_width=True)
 
-    st.markdown("### Agregar persona manualmente")
+    st.markdown("### Agregar persona")
     with st.form("add_person"):
         nombre = st.text_input("Nombre y apellido", placeholder="Ej: Gómez, Ana")
         frecuencia = st.selectbox("Frecuencia", ["Diaria","Semanal","Mensual","No asiste","Nueva"], index=4)
@@ -609,7 +651,8 @@ def page_personas(df_personas, centro, usuario):
             "usuario": usuario,
         }
         append_ws_rows(PERSONAS_TAB, PERSONAS_COLS, [[row.get(c, "") for c in PERSONAS_COLS]])
-        st.success("✅ Persona guardada.")
+        st.toast("✅ Persona guardada", icon="👤")
+        st.success("Persona guardada.")
         st.rerun()
 
 def page_reportes(df_asistencia, centro):
@@ -619,9 +662,10 @@ def page_reportes(df_asistencia, centro):
         st.info("Todavía no hay registros.")
         return
 
-    anio = st.selectbox("Año", sorted(df_latest["anio"].astype(str).unique()), index=len(sorted(df_latest["anio"].astype(str).unique()))-1)
-    df_c = df_latest[(df_latest["centro"] == centro) & (df_latest["anio"].astype(str) == str(anio))].copy()
+    anios = sorted(df_latest["anio"].astype(str).unique())
+    anio = st.selectbox("Año", anios, index=len(anios)-1)
 
+    df_c = df_latest[(df_latest["centro"] == centro) & (df_latest["anio"].astype(str) == str(anio))].copy()
     if df_c.empty:
         st.info("Todavía no hay registros para este centro / año.")
         return
@@ -635,10 +679,9 @@ def page_reportes(df_asistencia, centro):
 
     st.markdown("### Evolución (por fecha)")
     serie = df_c.groupby("fecha", as_index=False)["presentes_i"].sum().sort_values("fecha")
-    serie = serie.set_index("fecha")["presentes_i"]
-    st.line_chart(serie)
+    st.line_chart(serie.set_index("fecha")["presentes_i"])
 
-    st.markdown("### Por espacio (Maranatha) / General")
+    st.markdown("### Por espacio")
     esp = df_c.groupby("espacio", as_index=False)["presentes_i"].sum().sort_values("presentes_i", ascending=False)
     st.bar_chart(esp.set_index("espacio")["presentes_i"])
 
@@ -674,9 +717,9 @@ def page_global(df_asistencia):
     st.markdown("### Base (últimos 50 registros)")
     st.dataframe(d.sort_values("timestamp", ascending=False)[["fecha","centro","espacio","presentes","coordinador","modo","timestamp"]].head(50), use_container_width=True)
 
-def page_admin_tools():
-    st.subheader("Herramientas (reparación)")
-    st.warning("Usá esto solo si tu sheet quedó con columnas corridas o sin encabezados.")
+def page_tools():
+    st.subheader("Herramientas")
+    st.warning("Usá esto si tu sheet quedó con columnas corridas o sin encabezados.")
     colA, colB, colC = st.columns(3)
     with colA:
         if st.button("Reparar encabezados: asistencia"):
@@ -714,32 +757,39 @@ def main():
     st.sidebar.markdown(f"**Centro asignado:** {centro_asignado}")
     st.sidebar.markdown(f"**Quién carga:** {nombre_visible}")
 
-    # Cargar data desde Sheets
     with st.spinner("Cargando datos desde Google Sheets..."):
         df_asistencia = read_ws_df(ASISTENCIA_TAB, ASISTENCIA_COLS)
         df_personas = read_ws_df(PERSONAS_TAB, PERSONAS_COLS)
-        df_asist_personas = read_ws_df(ASISTENCIA_PERSONAS_TAB, ASISTENCIA_PERSONAS_COLS)
+        # esta se abre/crea sin romper aunque exista
+        _ = read_ws_df(ASISTENCIA_PERSONAS_TAB, ASISTENCIA_PERSONAS_COLS)
 
-    # KPIs
+    df_latest = latest_asistencia(df_asistencia)
+
     st.caption(f"Estás trabajando sobre: **{centro_asignado}** — 👤 **{nombre_visible}**")
-    kpi_row(latest_asistencia(df_asistencia), centro_asignado)
+    kpi_row(df_latest, centro_asignado)
 
-    tabs = st.tabs(["🧾 Registrar asistencia", "👥 Personas", "📊 Reportes / Base", "🌍 Global", "🛠️ Herramientas"])
+    # “Notificaciones” internas (avisos)
+    last_date, days = last_load_info(df_latest, centro_asignado)
+    if last_date is None:
+        st.warning("⚠️ Todavía no hay cargas para este centro. Probá guardando una asistencia para hoy.")
+    else:
+        if days > 0:
+            st.warning(f"⏰ Atención: la última carga de este centro fue el {last_date} (hace {days} días).")
 
+    # Sidebar pendientes
+    sidebar_pending(df_latest, centro_asignado)
+
+    tabs = st.tabs(["🧾 Registrar asistencia", "👥 Personas", "📊 Reportes", "🌍 Global", "🛠️ Herramientas"])
     with tabs[0]:
-        page_registrar_asistencia(df_personas, df_asistencia, df_asist_personas, centro_asignado, nombre_visible, usuario)
-
+        page_registrar_asistencia(df_personas, df_asistencia, centro_asignado, nombre_visible, usuario)
     with tabs[1]:
         page_personas(df_personas, centro_asignado, usuario)
-
     with tabs[2]:
         page_reportes(df_asistencia, centro_asignado)
-
     with tabs[3]:
         page_global(df_asistencia)
-
     with tabs[4]:
-        page_admin_tools()
+        page_tools()
 
 if __name__ == "__main__":
     main()
