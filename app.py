@@ -76,11 +76,13 @@ def main():
     hoy = date.today().isoformat()
     anio = date.today().year
 
-    tab1, tab2, tab3 = st.tabs([
-        "📝 Registrar asistencia",
-        "👥 Personas",
-        "📊 Reportes"
-    ])
+tab1, tab2, tab3, tab4 = st.tabs([
+    "Registrar asistencia",
+    "Personas",
+    "Reportes",
+    "Asistencia por persona"  # NUEVA
+])
+
 
     # =====================
     # REGISTRAR ASISTENCIA
@@ -181,4 +183,5 @@ def guardar_asistencia_personas(fecha, centro, espacio, personas, usuario):
 # =========================
 if __name__ == "__main__":
     main()
+
 
