@@ -141,8 +141,11 @@ def main():
     with tab2:
         st.subheader("Personas registradas")
 
-        df_personas = read_ws(PERSONAS_TAB)
-        df_centro = df_personas[df_personas.get("centro", "") == centro]
+       if "centro" in df_personas.columns:
+    df_centro = df_personas[df_personas["centro"] == centro]
+else:
+    df_centro = df_personas.copy()
+
 
         st.metric("Total personas", len(df_centro))
         st.dataframe(df_centro, use_container_width=True)
@@ -194,3 +197,4 @@ def main():
 # =====================================================
 if __name__ == "__main__":
     main()
+
