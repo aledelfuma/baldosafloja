@@ -12,92 +12,132 @@ import unicodedata
 # =========================
 # Config UI / Branding
 # =========================
-PRIMARY = "#004E7B"
-SECONDARY = "#63296C"
+PRIMARY = "#004E7B" # Azul institucional
+SECONDARY = "#63296C" # Violeta/Magenta secundario
+BACKGROUND_LIGHT = "#f0f2f6" # Un gris muy clarito para fondos
 
 st.set_page_config(
     page_title="Hogar de Cristo",
     page_icon="🏠",
     layout="wide",
-    initial_sidebar_state="collapsed", # Barra lateral cerrada por defecto
+    initial_sidebar_state="collapsed",
 )
 
+# =========================
+# CSS MEJORADO (Más limpio y profesional)
+# =========================
 CSS = f"""
 <style>
 :root {{
   --primary: {PRIMARY};
   --secondary: {SECONDARY};
 }}
-/* Ocultar menú hamburguesa y footer para que se vea limpio */
 #MainMenu {{visibility: hidden;}}
 footer {{visibility: hidden;}}
 
-/* Estilo del Encabezado Superior */
-.top-bar {{
-    background-color: rgba(255,255,255,0.05);
-    padding: 15px;
-    border-radius: 10px;
-    border-bottom: 2px solid {PRIMARY};
-    margin-bottom: 20px;
+/* --- ENCABEZADO SUPERIOR (Top Bar) --- */
+.top-header-container {{
+    background-color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    margin-bottom: 1.5rem;
+    border-bottom: 3px solid {PRIMARY};
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }}
-.user-info {{
-    font-size: 1.1rem;
-    font-weight: bold;
+.user-welcome h3 {{
+    margin: 0;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #333;
 }}
-.center-info {{
-    color: #aaa;
-    font-size: 0.9rem;
+.user-location {{
+    color: #666;
+    font-weight: 500;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
 }}
 
-/* KPIs y Tarjetas */
-.kpi {{
-  border: 1px solid rgba(255,255,255,.10);
+/* --- TARJETAS KPI (Números grandes) --- */
+.kpi-card {{
+  background: white;
   border-radius: 12px;
-  padding: 10px 14px;
-  background: rgba(0,0,0,.20);
+  padding: 1.2rem;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+  border: 1px solid rgba(0,0,0,0.05);
   text-align: center;
+  transition: all 0.3s ease;
 }}
-.kpi h3 {{
-  margin: 0;
-  font-size: .8rem;
-  opacity: .8;
+.kpi-card:hover {{
+    box-shadow: 0 5px 15px rgba(0,46,123,0.1); /* Sombra azul al pasar mouse */
+    transform: translateY(-2px);
+}}
+.kpi-title {{
+  font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 1px;
+  color: #666;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
 }}
-.kpi .v {{
-  font-size: 1.8rem;
-  font-weight: 700;
-  margin-top: .1rem;
-  color: white;
+.kpi-value {{
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: {PRIMARY};
+  line-height: 1.1;
 }}
 
-/* Alertas en el Top */
-.alert-box {{
-    padding: 10px;
-    border-radius: 8px;
-    margin-bottom: 10px;
+/* --- TARJETA DE NOVEDADES (Derecha) --- */
+.notification-card {{
+    background-color: white;
+    border-radius: 12px;
+    padding: 1rem;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+    border: 1px solid rgba(0,0,0,0.05);
+    height: 100%; /* Para que ocupe el mismo alto que los KPIs */
+}}
+.notification-header {{
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}}
+.alert-item {{
+    padding: 8px;
+    border-radius: 6px;
+    margin-bottom: 8px;
     font-size: 0.9rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
 }}
-.alert-danger {{
-    background-color: rgba(255, 75, 75, 0.15);
-    border: 1px solid #ff4b4b;
-}}
-.alert-success {{
-    background-color: rgba(40, 167, 69, 0.15);
-    border: 1px solid #28a745;
-}}
-.alert-info {{
-    background-color: rgba(23, 162, 184, 0.15);
-    border: 1px solid #17a2b8;
-}}
+.alert-danger-soft {{ background-color: rgba(255, 75, 75, 0.1); color: #d32f2f; }}
+.alert-warning-soft {{ background-color: rgba(255, 193, 7, 0.1); color: #856404; }}
+.alert-success-soft {{ background-color: rgba(40, 167, 69, 0.1); color: #155724; }}
 
-/* Perfil */
-.profile-card {{
-    background-color: rgba(255, 255, 255, 0.05);
-    padding: 20px;
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 20px;
+/* --- GENERAL --- */
+.stTabs [data-baseweb="tab-list"] {{
+    gap: 20px;
+    margin-bottom: 1rem;
+}}
+.stTabs [data-baseweb="tab"] {{
+    height: 50px;
+    white-space: pre-wrap;
+    background-color: white;
+    border-radius: 8px 8px 0 0;
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.02);
+    padding: 0 20px;
+    font-weight: 600;
+}}
+.stTabs [aria-selected="true"] {{
+    color: {PRIMARY} !important;
+    border-bottom-color: {PRIMARY} !important;
 }}
 </style>
 """
@@ -107,12 +147,11 @@ st.markdown(CSS, unsafe_allow_html=True)
 # Zona Horaria
 # =========================
 TZ_AR = pytz.timezone('America/Argentina/Buenos_Aires')
-
-def get_now_ar(): return datetime.now(TZ_AR)
 def get_today_ar(): return datetime.now(TZ_AR).date()
+def get_now_ar_str(): return datetime.now(TZ_AR).strftime("%Y-%m-%d %H:%M:%S")
 
 # =========================
-# Constantes y Schemas
+# Schemas & Constantes
 # =========================
 ASISTENCIA_TAB = "asistencia"
 PERSONAS_TAB = "personas"
@@ -152,7 +191,7 @@ def norm_text(x):
     return str(x).strip() if x else ""
 
 # =========================
-# Google Sheets (HARDCODED)
+# Google Sheets Connection
 # =========================
 @st.cache_resource(show_spinner=False)
 def get_gspread_client():
@@ -188,8 +227,7 @@ def get_or_create_ws(title: str, cols: list):
         ws.update("A1", [cols])
         return ws
     except Exception as e:
-        msg = str(e).lower()
-        if "already exists" in msg: return sh.worksheet(title)
+        if "already exists" in str(e).lower(): return sh.worksheet(title)
         st.error(f"Error crítico: {e}"); st.stop()
 
 def safe_get_all_values(ws, tries=3):
@@ -238,7 +276,7 @@ def load_all_data():
     return df_a, df_p, df_ap, df_seg
 
 # =========================
-# Lógica de Negocio
+# Lógica
 # =========================
 def year_of(fecha_iso: str) -> str:
     try: return str(pd.to_datetime(fecha_iso).year)
@@ -272,7 +310,7 @@ def personas_for_centro(df_personas, centro):
 def upsert_persona(df_personas, nombre, centro, usuario, **kwargs):
     nombre = norm_text(nombre)
     if not nombre: return df_personas
-    now = get_now_ar().strftime("%Y-%m-%d %H:%M:%S")
+    now = get_now_ar_str()
     row = {c: "" for c in PERSONAS_COLS}
     row.update({"nombre": nombre, "centro": centro, "activo": "SI", "timestamp": now, "usuario": usuario})
     for k, v in kwargs.items():
@@ -281,7 +319,7 @@ def upsert_persona(df_personas, nombre, centro, usuario, **kwargs):
     return pd.concat([df_personas, pd.DataFrame([row])], ignore_index=True)
 
 def append_asistencia(fecha, centro, espacio, presentes, coordinador, modo, notas, usuario, accion="append"):
-    ts = get_now_ar().strftime("%Y-%m-%d %H:%M:%S")
+    ts = get_now_ar_str()
     row = {
         "timestamp": ts, "fecha": fecha, "anio": year_of(fecha), "centro": centro, 
         "espacio": espacio, "presentes": str(presentes), "coordinador": coordinador, 
@@ -290,7 +328,7 @@ def append_asistencia(fecha, centro, espacio, presentes, coordinador, modo, nota
     append_ws_rows(ASISTENCIA_TAB, ASISTENCIA_COLS, [[row.get(c, "") for c in ASISTENCIA_COLS]])
 
 def append_asistencia_personas(fecha, centro, espacio, nombre, estado, es_nuevo, coordinador, usuario, notas=""):
-    ts = get_now_ar().strftime("%Y-%m-%d %H:%M:%S")
+    ts = get_now_ar_str()
     row = {
         "timestamp": ts, "fecha": fecha, "anio": year_of(fecha), "centro": centro, 
         "espacio": espacio, "nombre": nombre, "estado": estado, "es_nuevo": es_nuevo, 
@@ -299,7 +337,7 @@ def append_asistencia_personas(fecha, centro, espacio, nombre, estado, es_nuevo,
     append_ws_rows(ASISTENCIA_PERSONAS_TAB, ASISTENCIA_PERSONAS_COLS, [[row.get(c, "") for c in ASISTENCIA_PERSONAS_COLS]])
 
 def append_seguimiento(fecha, centro, nombre, categoria, observacion, usuario):
-    ts = get_now_ar().strftime("%Y-%m-%d %H:%M:%S")
+    ts = get_now_ar_str()
     row = {
         "timestamp": ts, "fecha": fecha, "anio": year_of(fecha), "centro": centro,
         "nombre": nombre, "categoria": categoria, "observacion": observacion, "usuario": usuario
@@ -307,7 +345,7 @@ def append_seguimiento(fecha, centro, nombre, categoria, observacion, usuario):
     append_ws_rows(SEGUIMIENTO_TAB, SEGUIMIENTO_COLS, [[row.get(c, "") for c in SEGUIMIENTO_COLS]])
 
 # =========================
-# UI COMPONENTES (NUEVOS - ARRIBA)
+# UI COMPONENTES (NUEVO DISEÑO)
 # =========================
 def show_login_screen():
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -330,110 +368,110 @@ def show_login_screen():
                     st.error("Error de credenciales.")
     st.stop()
 
-def show_top_header(nombre, centro):
-    # Fila superior con Logo, Info y Botones
-    c1, c2, c3 = st.columns([1, 4, 1])
-    with c1:
-        try: st.image("logo_hogar.png", width=100)
-        except: st.write("🏠")
-    with c2:
-        st.markdown(f"<div class='user-info'>Hola, {nombre}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='center-info'>📍 {centro}</div>", unsafe_allow_html=True)
-    with c3:
-        if st.button("Salir", key="logout_top", use_container_width=True):
-            st.session_state.clear(); st.cache_data.clear(); st.rerun()
-        if st.button("🔄 Refrescar", key="refresh_top", use_container_width=True):
+def render_top_header(nombre, centro):
+    # Encabezado limpio con HTML/CSS
+    st.markdown(f"""
+        <div class="top-header-container">
+            <div style="display:flex; align-items:center; gap:15px;">
+                <img src="https://i.imgur.com/8ZZ1Y2B.png" width="60" style="border-radius:50%;"> <div class="user-welcome">
+                    <h3>Hola, {nombre}</h3>
+                    <div class="user-location">📍 {centro}</div>
+                </div>
+            </div>
+            <div style="display:flex; gap:10px;">
+                </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Botones funcionales alineados a la derecha (usando columnas invisibles)
+    c_spacer, c_btn1, c_btn2 = st.columns([6, 1, 1])
+    with c_btn1:
+        if st.button("🔄 Actualizar", key="refresh_top", use_container_width=True):
             st.cache_data.clear(); st.rerun()
+    with c_btn2:
+        if st.button("Salir", key="logout_top", type="primary", use_container_width=True):
+            st.session_state.clear(); st.cache_data.clear(); st.rerun()
 
-def show_top_alerts(df_latest, df_personas, df_ap, centro):
-    # Panel de Novedades (Estado, Cumples, Ausencias)
-    last_date, days = last_load_info(df_latest, centro)
+def render_dashboard_overview(df_latest, df_personas, df_ap, centro):
+    st.markdown("### 📊 Panorama General")
     
-    # Pre-calculos
-    # 1. Cumpleaños
-    cumples = []
-    if not df_personas.empty:
-        df_c = personas_for_centro(df_personas, centro)
-        df_c["timestamp_dt"] = pd.to_datetime(df_c["timestamp"], errors="coerce")
-        df_c = df_c.sort_values("timestamp_dt").groupby("nombre").tail(1)
-        today = get_today_ar()
-        for _, row in df_c.iterrows():
-            fn_str = str(row.get("fecha_nacimiento", "")).strip()
-            try:
-                fn = pd.to_datetime(fn_str, dayfirst=True, errors="coerce")
-                if not pd.isna(fn) and fn.month == today.month and fn.day == today.day:
-                    cumples.append(row["nombre"])
-            except: pass
-
-    # 2. Ausencias
-    ausentes = []
-    if not df_ap.empty:
-        d = df_ap[(df_ap["centro"]==centro) & (df_ap["estado"]=="Presente")].copy()
-        if not d.empty:
-            d["fecha_dt"] = pd.to_datetime(d["fecha"], errors="coerce")
-            last = d.groupby("nombre")["fecha_dt"].max().reset_index()
-            hoy_ts = pd.Timestamp(get_today_ar())
-            last["dias"] = (hoy_ts - last["fecha_dt"]).dt.days
-            # Criterio: > 7 días y < 90 días
-            alertas = last[(last["dias"]>7) & (last["dias"]<90)].sort_values("dias", ascending=False)
-            for _, r in alertas.iterrows():
-                ausentes.append(f"{r['nombre']} ({r['dias']} días)")
-
-    # Renderizar Columnas
-    ac1, ac2, ac3 = st.columns(3)
-    
-    with ac1:
-        st.markdown("**Estado de Carga**")
-        if last_date is None:
-             st.markdown("<div class='alert-box alert-danger'>⚠️ Sin cargas previas</div>", unsafe_allow_html=True)
-        elif days == 0:
-             st.markdown("<div class='alert-box alert-success'>✅ Al día (Cargado hoy)</div>", unsafe_allow_html=True)
-        else:
-             st.markdown(f"<div class='alert-box alert-info'>⏰ Última: {last_date} ({days}d atrás)</div>", unsafe_allow_html=True)
-
-    with ac2:
-        if cumples:
-            st.markdown("**🎂 Cumpleaños Hoy**")
-            with st.expander(f"🎉 {len(cumples)} cumplen años!", expanded=True):
-                for c in cumples: st.write(f"- {c}")
-        else:
-            st.markdown("**🎂 Cumpleaños**")
-            st.caption("No hay cumples hoy.")
-
-    with ac3:
-        if ausentes:
-            st.markdown("**🚨 Alerta Ausencias**")
-            with st.expander(f"⚠️ {len(ausentes)} en riesgo", expanded=False):
-                st.caption("Faltan hace > 7 días:")
-                for a in ausentes: st.write(f"🔴 {a}")
-        else:
-            st.markdown("**🚨 Alerta Ausencias**")
-            st.caption("Asistencia regular.")
-
-def kpi_row_full(df_latest, centro):
-    # KPIs tradicionales, ahora debajo de las alertas
+    # Preparar datos
     hoy_date = get_today_ar()
     hoy = hoy_date.isoformat()
     week_ago = (hoy_date - timedelta(days=6)).isoformat()
     month_start = hoy_date.replace(day=1).isoformat()
+    
     d = df_latest.copy()
-    if d.empty: c1=c2=c3=0
-    else:
+    c1=c2=c3=0
+    if not d.empty:
         d["presentes_i"] = d.get("presentes", "").apply(lambda x: clean_int(x, 0))
         c1 = int(d[(d["centro"] == centro) & (d["fecha"] == hoy)]["presentes_i"].sum())
         c2 = int(d[(d["centro"] == centro) & (d["fecha"] >= week_ago) & (d["fecha"] <= hoy)]["presentes_i"].sum())
         c3 = int(d[(d["centro"] == centro) & (d["fecha"] >= month_start) & (d["fecha"] <= hoy)]["presentes_i"].sum())
-    
-    col1, col2, col3 = st.columns(3)
-    col1.markdown(f"<div class='kpi'><h3>Ingresos HOY</h3><div class='v'>{c1}</div></div>", unsafe_allow_html=True)
-    col2.markdown(f"<div class='kpi'><h3>Últimos 7 días</h3><div class='v'>{c2}</div></div>", unsafe_allow_html=True)
-    col3.markdown(f"<div class='kpi'><h3>Este mes</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
+
+    # Alertas y Cumples
+    last_date, days = last_load_info(df_latest, centro)
+    cumples = []
+    if not df_personas.empty:
+        df_c = personas_for_centro(df_personas, centro)
+        for _, row in df_c.iterrows():
+            try:
+                fn = pd.to_datetime(str(row.get("fecha_nacimiento")), dayfirst=True, errors="coerce")
+                if not pd.isna(fn) and fn.month == hoy_date.month and fn.day == hoy_date.day:
+                    cumples.append(row["nombre"])
+            except: pass
+            
+    ausentes = []
+    if not df_ap.empty:
+        d_ap = df_ap[(df_ap["centro"]==centro) & (df_ap["estado"]=="Presente")].copy()
+        if not d_ap.empty:
+            d_ap["fecha_dt"] = pd.to_datetime(d_ap["fecha"], errors="coerce")
+            last = d_ap.groupby("nombre")["fecha_dt"].max().reset_index()
+            last["dias"] = (pd.Timestamp(hoy_date) - last["fecha_dt"]).dt.days
+            ausentes = last[(last["dias"]>7) & (last["dias"]<90)].sort_values("dias", ascending=False)["nombre"].tolist()
+
+    # --- LAYOUT PRINCIPAL (2 COLUMNAS: KPIs | NOVEDADES) ---
+    col_kpis, col_notes = st.columns([2.5, 1.5])
+
+    with col_kpis:
+        # 3 KPIs en fila
+        k1, k2, k3 = st.columns(3)
+        k1.markdown(f"<div class='kpi-card'><div class='kpi-title'>Ingresos Hoy</div><div class='kpi-value'>{c1}</div></div>", unsafe_allow_html=True)
+        k2.markdown(f"<div class='kpi-card'><div class='kpi-title'>Últimos 7 días</div><div class='kpi-value'>{c2}</div></div>", unsafe_allow_html=True)
+        k3.markdown(f"<div class='kpi-card'><div class='kpi-title'>Este Mes</div><div class='kpi-value'>{c3}</div></div>", unsafe_allow_html=True)
+        
+        # Estado de carga pequeño abajo
+        st.caption("") # Espacio
+        if last_date is None: st.markdown("🔴 **Estado:** Sin cargas previas.")
+        elif days == 0: st.markdown("🟢 **Estado:** Carga al día (Hoy).")
+        else: st.markdown(f"🟠 **Estado:** Última carga hace {days} días ({last_date}).")
+
+    with col_notes:
+        st.markdown('<div class="notification-card">', unsafe_allow_html=True)
+        st.markdown('<div class="notification-header">🔔 Centro de Novedades</div>', unsafe_allow_html=True)
+        
+        has_notes = False
+        if cumples:
+            has_notes = True
+            with st.expander(f"🎂 Cumpleaños ({len(cumples)})", expanded=True):
+                for c in cumples: st.markdown(f"<div class='alert-item alert-success-soft'>🎉 {c}</div>", unsafe_allow_html=True)
+        
+        if ausentes:
+            has_notes = True
+            with st.expander(f"⚠️ Alerta Ausencias ({len(ausentes)})", expanded=False):
+                st.caption("Faltan hace más de 7 días:")
+                for a in ausentes: st.markdown(f"<div class='alert-item alert-danger-soft'>🔴 {a}</div>", unsafe_allow_html=True)
+
+        if not has_notes:
+            st.caption("No hay novedades urgentes para hoy.")
+            
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
 # PAGES
 # =========================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
-    st.subheader(f"📝 Carga Diaria: {centro}")
+    st.subheader(f"📝 Carga Diaria")
     fecha = st.date_input("Fecha", value=get_today_ar()).isoformat()
     espacio = st.selectbox("Espacio", ESPACIOS_MARANATHA) if centro == "Casa Maranatha" else DEFAULT_ESPACIO
     modo = st.selectbox("Modo", ["Día habitual", "Actividad especial", "Cerrado"])
@@ -456,12 +494,10 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         nac_new = cn4.text_input("Fecha Nac. (DD/MM/AAAA) (Opcional)")
         agregar_nueva = st.checkbox("Agregar a la base")
         
-        # Validación visual de DNI
         if agregar_nueva and dni_new.strip() and not df_personas.empty:
             existe_dni = df_personas[df_personas['dni'].astype(str).str.strip() == dni_new.strip()]
             if not existe_dni.empty:
-                nombre_existente = existe_dni.iloc[0]['nombre']
-                st.markdown(f"<div class='alert-box alert-danger'>⚠️ DNI duplicado: Pertenece a <b>{nombre_existente}</b></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='alert-item alert-danger-soft'>⚠️ DNI duplicado: Pertenece a <b>{existe_dni.iloc[0]['nombre']}</b></div>", unsafe_allow_html=True)
 
     df_latest = latest_asistencia(df_asistencia)
     ya = df_latest[(df_latest.get("fecha","")==fecha) & (df_latest.get("centro","")==centro) & (df_latest.get("espacio","")==espacio)]
@@ -578,7 +614,7 @@ def page_reportes(df_asistencia, centro):
     c1, c2 = st.columns([3,1])
     c1.line_chart(df_c.set_index("fecha")["presentes_i"])
     with c2:
-        st.markdown("##### Ranking (General)")
+        st.markdown("##### Resumen")
         st.metric("Promedio Diario", f"{df_c['presentes_i'].mean():.1f}")
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
@@ -621,19 +657,18 @@ def main():
         st.error(f"Error: Centro '{centro}' no válido."); st.stop()
     centro = match_centro
 
-    # 1. MOSTRAR ENCABEZADO SUPERIOR (Ya no hay sidebar)
-    show_top_header(nombre, centro)
+    # 1. RENDERIZAR ENCABEZADO SUPERIOR
+    render_top_header(nombre, centro)
 
     # 2. CARGAR DATOS
     df_asistencia, df_personas, df_ap, df_seg = load_all_data()
 
-    # 3. ALERTAS Y KPIs ARRIBA
-    show_top_alerts(latest_asistencia(df_asistencia), df_personas, df_ap, centro)
-    kpi_row_full(latest_asistencia(df_asistencia), centro)
+    # 3. RENDERIZAR DASHBOARD (KPIs + Novedades organizados)
+    render_dashboard_overview(latest_asistencia(df_asistencia), df_personas, df_ap, centro)
 
-    # 4. TABS
-    st.markdown("---")
-    t1, t2, t3, t4 = st.tabs(["📝 Asistencia", "👥 Legajo", "📊 Reportes", "🌍 Global"])
+    # 4. TABS PRINCIPALES (Con un poco de aire arriba)
+    st.markdown("<br>", unsafe_allow_html=True)
+    t1, t2, t3, t4 = st.tabs(["📝 Asistencia Diario", "👥 Legajo & Listado", "📊 Reportes y Excel", "🌍 Global Hogar"])
     with t1: page_registrar_asistencia(df_personas, df_asistencia, centro, nombre, u)
     with t2: page_personas_full(df_personas, df_ap, df_seg, centro, u)
     with t3: page_reportes(df_asistencia, centro)
