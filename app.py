@@ -482,4 +482,91 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
         if not df_seg.empty:
             mis_notas = df_seg[(df_seg["nombre"]==seleccion) & (df_seg["centro"]==centro)].copy()
             if not mis_notas.empty:
-                mis_notas["fecha_dt"] = pd.
+                mis_notas["fecha_dt"] = pd.to_datetime(mis_notas["fecha"], errors="coerce")
+                mis_notas = mis_notas.sort_values("fecha_dt", ascending=False)
+                
+                for _, note in mis_notas.iterrows():
+                    icon = "🩺" if "Salud" in note["categoria"] else "📝"
+                    st.markdown(f"""
+                    <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:5px; margin-bottom:10px; border-left: 3px solid {SECONDARY}">
+                        <small>{note['fecha']} | <b>{note['categoria']}</b> ({note['usuario']})</small><br>
+                        {icon} {note['observacion']}
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("No hay notas registradas aún.")
+
+def page_reportes(df_asistencia, centro):
+    st.subheader("Reportes")
+    df_latest = latest_asistencia(df_asistencia)
+    df_c = df_latest[df_latest["centro"] == centro].copy()
+    if df_c.empty: st.info("Sin datos."); return
+    
+    df_c["fecha_dt"] = pd.to_datetime(df_c["fecha"])
+    df_c["presentes_i"] = df_c["presentes"].apply(lambda x: clean_int(x, 0))
+    df_c = df_c.sort_values("fecha_dt")
+    
+    c1, c2 = st.columns([3,1])
+    c1.line_chart(df_c.set_index("fecha")["presentes_i"])
+    with c2:
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            df_c.to_excel(writer, sheet_name='Asistencia', index=False)
+        st.download_button("📥 Descargar Excel", buffer, f"asistencia_{centro}.xlsx", "application/vnd.ms-excel")
+    st.dataframe(df_c[["fecha", "espacio", "presentes", "coordinador", "notas"]].sort_values("fecha", ascending=False), use_container_width=True)
+
+def page_global(df_asistencia, df_ap):
+    st.subheader("Panorama Global")
+    df = latest_asistencia(df_asistencia).copy()
+    if df.empty: return
+    df["presentes_i"] = df["presentes"].apply(lambda x: clean_int(x, 0))
+    anio = str(get_today_ar().year)
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(f"**Asistencias {anio}**")
+        st.bar_chart(df[df["anio"].astype(str)==anio].groupby("centro")["presentes_i"].sum())
+    with c2:
+        st.markdown("**Nuevos Ingresos**")
+        if not df_ap.empty:
+            nuevos = df_ap[(df_ap["es_nuevo"]=="SI") & (df_ap["anio"].astype(str)==anio)]
+            if not nuevos.empty: st.bar_chart(nuevos.groupby("centro").size(), color="#63296C")
+            else: st.info("Sin nuevos ingresos.")
+
+# =========================
+# MAIN
+# =========================
+def main():
+    if not st.session_state.get("logged_in"): show_login_screen()
+    
+    u = st.session_state["usuario"]
+    centro = st.session_state["centro_asignado"]
+    nombre = st.session_state["nombre_visible"]
+    
+    match_centro = next((c for c in CENTROS if c.lower() == centro.lower()), None)
+    if not match_centro: st.error(f"Centro '{centro}' no válido."); st.stop()
+    centro = match_centro
+
+    st.sidebar.image("logo_hogar.png", width=120)
+    st.sidebar.markdown(f"Hola, **{nombre}**")
+    st.sidebar.caption(f"📍 {centro}")
+    if st.sidebar.button("Salir"): st.session_state.clear(); st.cache_data.clear(); st.rerun()
+    if st.sidebar.button("🔄 Refrescar"): st.cache_data.clear(); st.rerun()
+
+    # Carga de datos COMPLETA (Asistencia, Personas, Detalle, Seguimiento)
+    df_asistencia, df_personas, df_ap, df_seg = load_all_data()
+
+    # Sidebar Extras
+    sidebar_pending(latest_asistencia(df_asistencia), centro)
+    sidebar_birthdays(df_personas, centro) # ✅ Alerta Cumple
+    sidebar_alerts(df_ap, centro)
+
+    # Tabs
+    t1, t2, t3, t4 = st.tabs(["📝 Asistencia", "👥 Legajo Digital", "📈 Reportes", "🌍 Global"])
+    with t1: page_registrar_asistencia(df_personas, df_asistencia, centro, nombre, u)
+    with t2: page_personas_full(df_personas, df_ap, df_seg, centro, u) # ✅ Página Nueva
+    with t3: page_reportes(df_asistencia, centro)
+    with t4: page_global(df_asistencia, df_ap)
+
+if __name__ == "__main__":
+    main()
