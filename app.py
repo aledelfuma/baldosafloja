@@ -59,6 +59,33 @@ footer {{visibility: hidden;}}
 .alert-success {{ background-color: rgba(40, 167, 69, 0.15); border-color: #28a745; color: #d4edda; }}
 .alert-info {{ background-color: rgba(23, 162, 184, 0.15); border-color: #17a2b8; color: #d1ecf1; }}
 
+/* Carnet Digital Style */
+.id-card {{
+    background: linear-gradient(135deg, {PRIMARY} 0%, {SECONDARY} 100%);
+    border-radius: 15px;
+    padding: 20px;
+    color: white;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.2);
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+}}
+.id-card::before {{
+    content: "";
+    position: absolute;
+    top: -50px;
+    right: -50px;
+    width: 150px;
+    height: 150px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 50%;
+}}
+.id-title {{ font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; opacity: 0.8; margin-bottom: 10px; }}
+.id-name {{ font-size: 1.8rem; font-weight: 800; margin-bottom: 5px; line-height: 1.1; }}
+.id-data {{ font-size: 0.9rem; opacity: 0.9; margin-bottom: 2px; }}
+.id-footer {{ margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 0.7rem; display: flex; justify-content: space-between; }}
+
 .profile-card {{
     background-color: rgba(255, 255, 255, 0.05);
     padding: 20px;
@@ -83,11 +110,10 @@ def calculate_age(born):
         born = pd.to_datetime(born, dayfirst=True).date()
         today = get_today_ar()
         return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
-    except:
-        return 0
+    except: return 0
 
 # =========================
-# Constantes y Schemas
+# Schemas
 # =========================
 ASISTENCIA_TAB = "asistencia"
 PERSONAS_TAB = "personas"
@@ -96,7 +122,8 @@ USUARIOS_TAB = "config_usuarios"
 SEGUIMIENTO_TAB = "seguimiento"
 
 ASISTENCIA_COLS = ["timestamp", "fecha", "anio", "centro", "espacio", "presentes", "coordinador", "modo", "notas", "usuario", "accion"]
-PERSONAS_COLS = ["nombre", "frecuencia", "centro", "edad", "domicilio", "notas", "activo", "timestamp", "usuario", "dni", "fecha_nacimiento", "telefono"]
+# ✅ AGREGADO "contacto_emergencia"
+PERSONAS_COLS = ["nombre", "frecuencia", "centro", "edad", "domicilio", "notas", "activo", "timestamp", "usuario", "dni", "fecha_nacimiento", "telefono", "contacto_emergencia"]
 ASISTENCIA_PERSONAS_COLS = ["timestamp", "fecha", "anio", "centro", "espacio", "nombre", "estado", "es_nuevo", "coordinador", "usuario", "notas"]
 USUARIOS_COLS = ["usuario", "password", "centro", "nombre"]
 SEGUIMIENTO_COLS = ["timestamp", "fecha", "anio", "centro", "nombre", "categoria", "observacion", "usuario"]
@@ -382,11 +409,9 @@ def kpi_row_full(df_latest, centro):
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.subheader(f"📝 Carga Diaria: {centro}")
     fecha = st.date_input("Fecha", value=get_today_ar())
-    
     if fecha > get_today_ar():
         st.error("⛔ No se puede cargar asistencia futura.")
         return
-    
     fecha_str = fecha.isoformat()
     espacio = st.selectbox("Espacio", ESPACIOS_MARANATHA) if centro == "Casa Maranatha" else DEFAULT_ESPACIO
     modo = st.selectbox("Modo", ["Día habitual", "Actividad especial", "Cerrado"])
@@ -423,14 +448,11 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     
     if st.button("💾 Guardar Asistencia", type="primary", use_container_width=True):
         if not overwrite: st.error("Confirmá sobreescritura"); st.stop()
-        
         if agregar_nueva and nueva.strip():
             df_personas = upsert_persona(df_personas, nueva, centro, usuario, frecuencia="Nueva", dni=dni_new, telefono=tel_new, fecha_nacimiento=nac_new)
             if nueva not in presentes: presentes.append(nueva)
-        
         if len(presentes)>0: total_presentes = len(presentes)
         accion = "overwrite" if not ya.empty else "append"
-        
         with st.spinner("Guardando..."):
             append_asistencia(fecha_str, centro, espacio, total_presentes, nombre_visible, modo, notas, usuario, accion)
             for n in presentes:
@@ -438,8 +460,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
             ausentes = [n for n in nombres if n not in presentes]
             for n in ausentes:
                 append_asistencia_personas(fecha_str, centro, espacio, n, "Ausente", "NO", nombre_visible, usuario)
-
-        st.balloons() # ✨ Confeti al guardar
+        st.balloons()
         st.toast("✅ Guardado Exitoso"); time.sleep(1.5); st.cache_data.clear(); st.rerun()
 
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
@@ -453,49 +474,56 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     
     if not seleccion:
         st.markdown(f"### Listado Histórico")
-        
-        # --- NUEVO: BOTÓN DESCARGAR PADRÓN ---
         with st.expander("📥 Descargar Padrón Completo"):
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
                 df_centro.to_excel(writer, sheet_name='Personas', index=False)
             st.download_button("Bajar Excel de Personas", buffer, f"padron_{centro}.xlsx", "application/vnd.ms-excel")
-
         col_filtro1, col_filtro2 = st.columns(2)
         filtro_txt = col_filtro1.text_input("🔍 Buscar")
         solo_activos = col_filtro2.checkbox("Solo activos", value=False)
-        
         df_show = df_centro.copy()
         if filtro_txt: df_show = df_show[df_show["nombre"].str.contains(filtro_txt, case=False, na=False)]
         if solo_activos: df_show = df_show[df_show["activo"].str.upper() == "SI"]
         df_show = df_show.sort_values("nombre", ascending=True)
-
         cols_to_show = ["nombre", "frecuencia", "dni", "fecha_nacimiento", "activo"]
         for c in cols_to_show:
             if c not in df_show.columns: df_show[c] = ""
-            
         st.dataframe(df_show[cols_to_show], use_container_width=True, hide_index=True)
         return
 
     datos_persona = df_centro[df_centro["nombre"] == seleccion].iloc[0]
     
-    st.markdown(f"## 👤 {seleccion}")
+    # --- CARNET DIGITAL ---
+    st.markdown(f"""
+    <div class="id-card">
+        <div class="id-title">HOGAR DE CRISTO • {centro.upper()}</div>
+        <div class="id-name">{seleccion}</div>
+        <div class="id-data">DNI: {datos_persona.get('dni', '---')}</div>
+        <div class="id-data">F. Nac: {datos_persona.get('fecha_nacimiento', '---')}</div>
+        <div class="id-footer">
+            <span>SOCIO/A ACTIVO</span>
+            <span>ALTA: {datos_persona.get('timestamp', '')[:10]}</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
     c_info, c_bitacora = st.columns([1, 2])
-    
     with c_info:
         st.markdown('<div class="profile-card">', unsafe_allow_html=True)
         st.markdown("#### Datos")
         with st.form("edit_persona"):
             dni = st.text_input("DNI", value=datos_persona.get("dni", ""))
             tel = st.text_input("Teléfono", value=datos_persona.get("telefono", ""))
+            # ✅ NUEVO CAMPO CONTACTO EMERGENCIA
+            contacto_em = st.text_input("🚑 Contacto Emergencia", value=datos_persona.get("contacto_emergencia", ""))
             nac = st.text_input("Fecha Nac.", value=datos_persona.get("fecha_nacimiento", ""))
             dom = st.text_input("Domicilio", value=datos_persona.get("domicilio", ""))
             notas_fija = st.text_area("Notas Fijas", value=datos_persona.get("notas", ""))
             activo_chk = st.checkbox("Activo", value=(str(datos_persona.get("activo")).upper() != "NO"))
-            
             if st.form_submit_button("💾 Actualizar"):
                 nuevo_estado = "SI" if activo_chk else "NO"
-                upsert_persona(df_personas, seleccion, centro, usuario, dni=dni, telefono=tel, fecha_nacimiento=nac, domicilio=dom, notas=notas_fija, activo=nuevo_estado)
+                upsert_persona(df_personas, seleccion, centro, usuario, dni=dni, telefono=tel, fecha_nacimiento=nac, domicilio=dom, notas=notas_fija, activo=nuevo_estado, contacto_emergencia=contacto_em)
                 st.toast("Actualizado"); st.cache_data.clear(); st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
         
@@ -517,7 +545,6 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                 if st.form_submit_button("Guardar"):
                     append_seguimiento(str(fecha_seg), centro, seleccion, cat, obs, usuario)
                     st.toast("Guardado"); st.cache_data.clear(); st.rerun()
-        
         if not df_seg.empty:
             mis_notas = df_seg[(df_seg["nombre"]==seleccion) & (df_seg["centro"]==centro)].copy()
             if not mis_notas.empty:
@@ -570,12 +597,11 @@ def page_global(df_asistencia, df_personas, df_ap):
     df["presentes_i"] = df["presentes"].apply(lambda x: clean_int(x, 0))
     anio = str(get_today_ar().year)
     
-    # --- NUEVO: CÁLCULO DE EDADES PARA EL GRÁFICO ---
+    # --- GRÁFICO DE EDADES AUTOMÁTICO ---
     df_personas_unq = df_personas.sort_values("timestamp").groupby("nombre").tail(1)
     df_personas_unq["edad_calc"] = df_personas_unq["fecha_nacimiento"].apply(calculate_age)
-    df_personas_unq = df_personas_unq[df_personas_unq["edad_calc"] > 0] # Solo fechas válidas
+    df_personas_unq = df_personas_unq[df_personas_unq["edad_calc"] > 0]
     
-    # Categorías de edad
     bins = [0, 12, 18, 30, 50, 100]
     labels = ['Niños (0-12)', 'Adolescentes (13-18)', 'Jóvenes (19-30)', 'Adultos (31-50)', 'Mayores (50+)']
     df_personas_unq['rango_edad'] = pd.cut(df_personas_unq['edad_calc'], bins=bins, labels=labels, right=False)
@@ -589,7 +615,7 @@ def page_global(df_asistencia, df_personas, df_ap):
         if not df_personas_unq.empty:
             st.bar_chart(df_personas_unq['rango_edad'].value_counts().sort_index(), color="#63296C")
         else:
-            st.info("Falta cargar fechas de nacimiento para ver este gráfico.")
+            st.info("Falta cargar fechas de nacimiento.")
 
 # =========================
 # MAIN
