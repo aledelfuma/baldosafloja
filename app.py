@@ -19,7 +19,7 @@ st.set_page_config(
     page_title="Hogar de Cristo",
     page_icon="🏠",
     layout="wide",
-    initial_sidebar_state="collapsed", # Barra lateral oculta para usar el Header
+    initial_sidebar_state="collapsed", # Barra lateral cerrada por defecto
 )
 
 CSS = f"""
@@ -28,20 +28,17 @@ CSS = f"""
   --primary: {PRIMARY};
   --secondary: {SECONDARY};
 }}
-/* Ocultar elementos nativos */
+/* Ocultar menú hamburguesa y footer para que se vea limpio */
 #MainMenu {{visibility: hidden;}}
 footer {{visibility: hidden;}}
 
-/* Estilo del Encabezado Superior (Top Bar) */
+/* Estilo del Encabezado Superior */
 .top-bar {{
     background-color: rgba(255,255,255,0.05);
     padding: 15px;
     border-radius: 10px;
     border-bottom: 2px solid {PRIMARY};
     margin-bottom: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
 }}
 .user-info {{
     font-size: 1.1rem;
@@ -74,13 +71,13 @@ footer {{visibility: hidden;}}
   color: white;
 }}
 
-/* Alertas */
+/* Alertas en el Top */
 .alert-box {{
     padding: 10px;
     border-radius: 8px;
     margin-bottom: 10px;
     font-size: 0.9rem;
-    border: 1px solid;
+    border: 1px solid transparent;
 }}
 .alert-danger {{
     background-color: rgba(255, 75, 75, 0.15);
@@ -159,7 +156,7 @@ def norm_text(x):
     return str(x).strip() if x else ""
 
 # =========================
-# Google Sheets (HARDCODED & BLINDADO)
+# Google Sheets (HARDCODED)
 # =========================
 @st.cache_resource(show_spinner=False)
 def get_gspread_client():
@@ -197,8 +194,7 @@ def get_or_create_ws(title: str, cols: list):
     except Exception as e:
         msg = str(e).lower()
         if "already exists" in msg: return sh.worksheet(title)
-        st.error(f"Error crítico en pestaña '{title}': {e}")
-        st.stop()
+        st.error(f"Error crítico: {e}"); st.stop()
 
 def safe_get_all_values(ws, tries=3):
     for i in range(tries):
@@ -315,7 +311,7 @@ def append_seguimiento(fecha, centro, nombre, categoria, observacion, usuario):
     append_ws_rows(SEGUIMIENTO_TAB, SEGUIMIENTO_COLS, [[row.get(c, "") for c in SEGUIMIENTO_COLS]])
 
 # =========================
-# UI COMPONENTES (HEADER ARRIBA)
+# UI COMPONENTES (NUEVOS - ARRIBA)
 # =========================
 def show_login_screen():
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -442,7 +438,14 @@ def kpi_row_full(df_latest, centro):
 # =========================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.subheader(f"📝 Carga Diaria: {centro}")
-    fecha = st.date_input("Fecha", value=get_today_ar()).isoformat()
+    fecha = st.date_input("Fecha", value=get_today_ar())
+    
+    # --- VALIDACIÓN DE FECHA FUTURA (NUEVO) ---
+    if fecha > get_today_ar():
+        st.error("⛔ No se puede cargar asistencia futura.")
+        return # Corta la función si la fecha es mañana
+    
+    fecha_str = fecha.isoformat()
     espacio = st.selectbox("Espacio", ESPACIOS_MARANATHA) if centro == "Casa Maranatha" else DEFAULT_ESPACIO
     modo = st.selectbox("Modo", ["Día habitual", "Actividad especial", "Cerrado"])
     notas = st.text_area("Notas generales del día")
@@ -472,7 +475,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                 st.markdown(f"<div class='alert-box alert-danger'>⚠️ DNI duplicado: Pertenece a <b>{nombre_existente}</b></div>", unsafe_allow_html=True)
 
     df_latest = latest_asistencia(df_asistencia)
-    ya = df_latest[(df_latest.get("fecha","")==fecha) & (df_latest.get("centro","")==centro) & (df_latest.get("espacio","")==espacio)]
+    ya = df_latest[(df_latest.get("fecha","")==fecha_str) & (df_latest.get("centro","")==centro) & (df_latest.get("espacio","")==espacio)]
     overwrite = True
     if not ya.empty:
         st.warning("⚠️ Ya existe carga para hoy. Se sobreescribirá.")
@@ -489,12 +492,12 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         accion = "overwrite" if not ya.empty else "append"
         
         with st.spinner("Guardando..."):
-            append_asistencia(fecha, centro, espacio, total_presentes, nombre_visible, modo, notas, usuario, accion)
+            append_asistencia(fecha_str, centro, espacio, total_presentes, nombre_visible, modo, notas, usuario, accion)
             for n in presentes:
-                append_asistencia_personas(fecha, centro, espacio, n, "Presente", "SI" if (agregar_nueva and n==nueva) else "NO", nombre_visible, usuario)
+                append_asistencia_personas(fecha_str, centro, espacio, n, "Presente", "SI" if (agregar_nueva and n==nueva) else "NO", nombre_visible, usuario)
             ausentes = [n for n in nombres if n not in presentes]
             for n in ausentes:
-                append_asistencia_personas(fecha, centro, espacio, n, "Ausente", "NO", nombre_visible, usuario)
+                append_asistencia_personas(fecha_str, centro, espacio, n, "Ausente", "NO", nombre_visible, usuario)
 
         st.toast("✅ Guardado"); time.sleep(1.5); st.cache_data.clear(); st.rerun()
 
@@ -547,6 +550,17 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                 st.toast("Actualizado"); st.cache_data.clear(); st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
         
+        # --- NUEVO: HISTORIAL DE VISITAS EN PERFIL ---
+        if not df_ap.empty:
+            st.markdown("#### 🏃 Últimas Visitas")
+            hist = df_ap[(df_ap["nombre"]==seleccion) & (df_ap["centro"]==centro) & (df_ap["estado"]=="Presente")].copy()
+            if not hist.empty:
+                hist["fecha_dt"] = pd.to_datetime(hist["fecha"], errors="coerce")
+                hist = hist.sort_values("fecha_dt", ascending=False).head(5) # Top 5 recientes
+                st.dataframe(hist[["fecha", "espacio"]], use_container_width=True, hide_index=True)
+            else:
+                st.info("Sin asistencias registradas.")
+
     with c_bitacora:
         st.markdown("#### 📖 Bitácora")
         with st.expander("➕ Nueva Nota", expanded=False):
@@ -577,7 +591,16 @@ def page_reportes(df_asistencia, centro):
     st.subheader("📊 Reportes")
     df_latest = latest_asistencia(df_asistencia)
     df_c = df_latest[df_latest["centro"] == centro].copy()
-    if df_c.empty: st.info("Sin datos."); return
+    
+    # --- NUEVO: BOTÓN DE RESPALDO TOTAL ---
+    with st.expander("💾 Seguridad / Copia de Seguridad"):
+        st.caption("Descargar una copia de TODAS las asistencias para guardar en tu PC.")
+        buffer_backup = io.BytesIO()
+        with pd.ExcelWriter(buffer_backup, engine='xlsxwriter') as writer:
+            df_latest.to_excel(writer, sheet_name='Global_Asistencias', index=False)
+        st.download_button("📥 Descargar RESPALDO COMPLETO", buffer_backup, f"BACKUP_TOTAL_{date.today()}.xlsx", "application/vnd.ms-excel")
+
+    if df_c.empty: st.info("Sin datos del centro."); return
     
     df_c["fecha_dt"] = pd.to_datetime(df_c["fecha"])
     df_c["presentes_i"] = df_c["presentes"].apply(lambda x: clean_int(x, 0))
@@ -591,7 +614,7 @@ def page_reportes(df_asistencia, centro):
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
             df_c.to_excel(writer, sheet_name='Asistencia', index=False)
-        st.download_button("📥 Bajar Excel", buffer, f"asistencia_{centro}.xlsx", "application/vnd.ms-excel")
+        st.download_button("📥 Bajar Excel Centro", buffer, f"asistencia_{centro}.xlsx", "application/vnd.ms-excel")
     
     st.dataframe(df_c[["fecha", "espacio", "presentes", "coordinador", "notas"]].sort_values("fecha", ascending=False), use_container_width=True)
 
