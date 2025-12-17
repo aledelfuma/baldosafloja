@@ -16,10 +16,10 @@ PRIMARY = "#004E7B"
 SECONDARY = "#63296C"
 
 st.set_page_config(
-    page_title="Asistencia — Hogar de Cristo Bahía Blanca",
-    page_icon="🧾",
+    page_title="Hogar de Cristo",
+    page_icon="🏠",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="collapsed", # Barra lateral cerrada por defecto
 )
 
 CSS = f"""
@@ -28,33 +28,70 @@ CSS = f"""
   --primary: {PRIMARY};
   --secondary: {SECONDARY};
 }}
-section[data-testid="stSidebar"] {{
-  border-right: 1px solid rgba(255,255,255,.08);
+/* Ocultar menú hamburguesa y footer para que se vea limpio */
+#MainMenu {{visibility: hidden;}}
+footer {{visibility: hidden;}}
+
+/* Estilo del Encabezado Superior */
+.top-bar {{
+    background-color: rgba(255,255,255,0.05);
+    padding: 15px;
+    border-radius: 10px;
+    border-bottom: 2px solid {PRIMARY};
+    margin-bottom: 20px;
 }}
-.badge {{
-  display:inline-block;
-  padding:.25rem .6rem;
-  border-radius:999px;
-  border:1px solid rgba(255,255,255,.14);
-  background: rgba(0,0,0,.25);
-  font-size:.85rem;
+.user-info {{
+    font-size: 1.1rem;
+    font-weight: bold;
 }}
+.center-info {{
+    color: #aaa;
+    font-size: 0.9rem;
+}}
+
+/* KPIs y Tarjetas */
 .kpi {{
   border: 1px solid rgba(255,255,255,.10);
-  border-radius: 18px;
-  padding: 14px 16px;
-  background: rgba(0,0,0,.25);
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: rgba(0,0,0,.20);
+  text-align: center;
 }}
 .kpi h3 {{
   margin: 0;
-  font-size: .9rem;
-  opacity: .9;
+  font-size: .8rem;
+  opacity: .8;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }}
 .kpi .v {{
-  font-size: 2rem;
+  font-size: 1.8rem;
   font-weight: 700;
-  margin-top: .2rem;
+  margin-top: .1rem;
+  color: white;
 }}
+
+/* Alertas en el Top */
+.alert-box {{
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+}}
+.alert-danger {{
+    background-color: rgba(255, 75, 75, 0.15);
+    border: 1px solid #ff4b4b;
+}}
+.alert-success {{
+    background-color: rgba(40, 167, 69, 0.15);
+    border: 1px solid #28a745;
+}}
+.alert-info {{
+    background-color: rgba(23, 162, 184, 0.15);
+    border: 1px solid #17a2b8;
+}}
+
+/* Perfil */
 .profile-card {{
     background-color: rgba(255, 255, 255, 0.05);
     padding: 20px;
@@ -62,32 +99,20 @@ section[data-testid="stSidebar"] {{
     border: 1px solid rgba(255, 255, 255, 0.1);
     margin-bottom: 20px;
 }}
-.validation-error {{
-    color: #ff4b4b;
-    font-weight: bold;
-    padding: 10px;
-    border: 1px solid #ff4b4b;
-    border-radius: 5px;
-    margin-bottom: 10px;
-    background-color: rgba(255, 75, 75, 0.1);
-}}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
 
 # =========================
-# Zona Horaria (Argentina)
+# Zona Horaria
 # =========================
 TZ_AR = pytz.timezone('America/Argentina/Buenos_Aires')
 
-def get_now_ar():
-    return datetime.now(TZ_AR)
-
-def get_today_ar():
-    return datetime.now(TZ_AR).date()
+def get_now_ar(): return datetime.now(TZ_AR)
+def get_today_ar(): return datetime.now(TZ_AR).date()
 
 # =========================
-# Sheets schema
+# Constantes y Schemas
 # =========================
 ASISTENCIA_TAB = "asistencia"
 PERSONAS_TAB = "personas"
@@ -101,9 +126,6 @@ ASISTENCIA_PERSONAS_COLS = ["timestamp", "fecha", "anio", "centro", "espacio", "
 USUARIOS_COLS = ["usuario", "password", "centro", "nombre"]
 SEGUIMIENTO_COLS = ["timestamp", "fecha", "anio", "centro", "nombre", "categoria", "observacion", "usuario"]
 
-# =========================
-# Centros / espacios
-# =========================
 CENTROS = ["Calle Belén", "Nudo a Nudo", "Casa Maranatha"]
 ESPACIOS_MARANATHA = ["Taller de costura", "Apoyo escolar (Primaria)", "Apoyo escolar (Secundaria)", "Fines", "Espacio Joven", "La Ronda", "General"]
 DEFAULT_ESPACIO = "General"
@@ -122,8 +144,15 @@ def clean_string(s):
     s = ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
     return s.strip().upper()
 
+def clean_int(x, default=0):
+    try: return int(float(str(x).strip()))
+    except: return default
+
+def norm_text(x):
+    return str(x).strip() if x else ""
+
 # =========================
-# Google Sheets connection
+# Google Sheets (HARDCODED)
 # =========================
 @st.cache_resource(show_spinner=False)
 def get_gspread_client():
@@ -150,35 +179,24 @@ def get_spreadsheet():
     gc = get_gspread_client()
     return gc.open_by_key(sid)
 
-def _open_ws_strict(sh, title: str):
-    return sh.worksheet(title)
-
-# ✅ FUNCIÓN BLINDADA CONTRA ERROR "ALREADY EXISTS"
 def get_or_create_ws(title: str, cols: list):
     sh = get_spreadsheet()
-    try:
-        return sh.worksheet(title)
-    except Exception:
-        pass 
-
+    try: return sh.worksheet(title)
+    except Exception: pass
     try:
         ws = sh.add_worksheet(title=title, rows=2000, cols=max(20, len(cols)))
         ws.update("A1", [cols])
         return ws
     except Exception as e:
         msg = str(e).lower()
-        if "already exists" in msg:
-            return sh.worksheet(title)
-        st.error(f"Error crítico en pestaña '{title}': {e}")
-        st.stop()
+        if "already exists" in msg: return sh.worksheet(title)
+        st.error(f"Error crítico: {e}"); st.stop()
 
-def safe_get_all_values(ws, tries=4):
+def safe_get_all_values(ws, tries=3):
     for i in range(tries):
         try: return ws.get_all_values()
-        except APIError: time.sleep(0.5)
-        except Exception: time.sleep(0.5)
-    st.error("Error leyendo Google Sheets.")
-    st.stop()
+        except: time.sleep(0.5)
+    st.error("Error de conexión con Sheets."); st.stop()
 
 def read_ws_df(title: str, cols: list) -> pd.DataFrame:
     ws = get_or_create_ws(title, cols)
@@ -205,13 +223,13 @@ def append_ws_rows(title: str, cols: list, rows: list[list]):
     ws.append_rows(rows, value_input_option="USER_ENTERED")
 
 # =========================
-# CACHING
+# Data Loaders
 # =========================
 @st.cache_data(ttl=600, show_spinner=False)
 def get_users_db():
     return read_ws_df(USUARIOS_TAB, USUARIOS_COLS)
 
-@st.cache_data(ttl=300, show_spinner="Cargando datos...")
+@st.cache_data(ttl=300, show_spinner="Sincronizando...")
 def load_all_data():
     df_a = read_ws_df(ASISTENCIA_TAB, ASISTENCIA_COLS)
     df_p = read_ws_df(PERSONAS_TAB, PERSONAS_COLS)
@@ -220,18 +238,11 @@ def load_all_data():
     return df_a, df_p, df_ap, df_seg
 
 # =========================
-# LOGIC
+# Lógica de Negocio
 # =========================
 def year_of(fecha_iso: str) -> str:
     try: return str(pd.to_datetime(fecha_iso).year)
     except: return str(get_today_ar().year)
-
-def clean_int(x, default=0):
-    try: return int(float(str(x).strip()))
-    except: return default
-
-def norm_text(x):
-    return str(x).strip() if x else ""
 
 def latest_asistencia(df):
     if df.empty: return df
@@ -249,9 +260,6 @@ def last_load_info(df_latest, centro):
     days = (pd.Timestamp(get_today_ar()).date() - last.date()).days
     return last.date().isoformat(), int(days)
 
-# =========================
-# WRITES
-# =========================
 def personas_for_centro(df_personas, centro):
     if df_personas.empty: return df_personas
     if "centro" in df_personas.columns:
@@ -299,7 +307,7 @@ def append_seguimiento(fecha, centro, nombre, categoria, observacion, usuario):
     append_ws_rows(SEGUIMIENTO_TAB, SEGUIMIENTO_COLS, [[row.get(c, "") for c in SEGUIMIENTO_COLS]])
 
 # =========================
-# UI COMPONENTS
+# UI COMPONENTES (NUEVOS - ARRIBA)
 # =========================
 def show_login_screen():
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -307,7 +315,7 @@ def show_login_screen():
         st.markdown("<br><br>", unsafe_allow_html=True)
         try: st.image("logo_hogar.png", width=200)
         except: st.title("Hogar de Cristo")
-        st.markdown("### Sistema de Asistencia y Acompañamiento")
+        st.markdown("### Acceso al Sistema")
         with st.form("login_form"):
             u = st.text_input("Usuario")
             p = st.text_input("Contraseña", type="password")
@@ -322,13 +330,94 @@ def show_login_screen():
                     st.error("Error de credenciales.")
     st.stop()
 
-def kpi_row(df_latest, centro):
+def show_top_header(nombre, centro):
+    # Fila superior con Logo, Info y Botones
+    c1, c2, c3 = st.columns([1, 4, 1])
+    with c1:
+        try: st.image("logo_hogar.png", width=100)
+        except: st.write("🏠")
+    with c2:
+        st.markdown(f"<div class='user-info'>Hola, {nombre}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='center-info'>📍 {centro}</div>", unsafe_allow_html=True)
+    with c3:
+        if st.button("Salir", key="logout_top", use_container_width=True):
+            st.session_state.clear(); st.cache_data.clear(); st.rerun()
+        if st.button("🔄 Refrescar", key="refresh_top", use_container_width=True):
+            st.cache_data.clear(); st.rerun()
+
+def show_top_alerts(df_latest, df_personas, df_ap, centro):
+    # Panel de Novedades (Estado, Cumples, Ausencias)
+    last_date, days = last_load_info(df_latest, centro)
+    
+    # Pre-calculos
+    # 1. Cumpleaños
+    cumples = []
+    if not df_personas.empty:
+        df_c = personas_for_centro(df_personas, centro)
+        df_c["timestamp_dt"] = pd.to_datetime(df_c["timestamp"], errors="coerce")
+        df_c = df_c.sort_values("timestamp_dt").groupby("nombre").tail(1)
+        today = get_today_ar()
+        for _, row in df_c.iterrows():
+            fn_str = str(row.get("fecha_nacimiento", "")).strip()
+            try:
+                fn = pd.to_datetime(fn_str, dayfirst=True, errors="coerce")
+                if not pd.isna(fn) and fn.month == today.month and fn.day == today.day:
+                    cumples.append(row["nombre"])
+            except: pass
+
+    # 2. Ausencias
+    ausentes = []
+    if not df_ap.empty:
+        d = df_ap[(df_ap["centro"]==centro) & (df_ap["estado"]=="Presente")].copy()
+        if not d.empty:
+            d["fecha_dt"] = pd.to_datetime(d["fecha"], errors="coerce")
+            last = d.groupby("nombre")["fecha_dt"].max().reset_index()
+            hoy_ts = pd.Timestamp(get_today_ar())
+            last["dias"] = (hoy_ts - last["fecha_dt"]).dt.days
+            # Criterio: > 7 días y < 90 días
+            alertas = last[(last["dias"]>7) & (last["dias"]<90)].sort_values("dias", ascending=False)
+            for _, r in alertas.iterrows():
+                ausentes.append(f"{r['nombre']} ({r['dias']} días)")
+
+    # Renderizar Columnas
+    ac1, ac2, ac3 = st.columns(3)
+    
+    with ac1:
+        st.markdown("**Estado de Carga**")
+        if last_date is None:
+             st.markdown("<div class='alert-box alert-danger'>⚠️ Sin cargas previas</div>", unsafe_allow_html=True)
+        elif days == 0:
+             st.markdown("<div class='alert-box alert-success'>✅ Al día (Cargado hoy)</div>", unsafe_allow_html=True)
+        else:
+             st.markdown(f"<div class='alert-box alert-info'>⏰ Última: {last_date} ({days}d atrás)</div>", unsafe_allow_html=True)
+
+    with ac2:
+        if cumples:
+            st.markdown("**🎂 Cumpleaños Hoy**")
+            with st.expander(f"🎉 {len(cumples)} cumplen años!", expanded=True):
+                for c in cumples: st.write(f"- {c}")
+        else:
+            st.markdown("**🎂 Cumpleaños**")
+            st.caption("No hay cumples hoy.")
+
+    with ac3:
+        if ausentes:
+            st.markdown("**🚨 Alerta Ausencias**")
+            with st.expander(f"⚠️ {len(ausentes)} en riesgo", expanded=False):
+                st.caption("Faltan hace > 7 días:")
+                for a in ausentes: st.write(f"🔴 {a}")
+        else:
+            st.markdown("**🚨 Alerta Ausencias**")
+            st.caption("Asistencia regular.")
+
+def kpi_row_full(df_latest, centro):
+    # KPIs tradicionales, ahora debajo de las alertas
     hoy_date = get_today_ar()
     hoy = hoy_date.isoformat()
     week_ago = (hoy_date - timedelta(days=6)).isoformat()
     month_start = hoy_date.replace(day=1).isoformat()
     d = df_latest.copy()
-    if d.empty: c1 = c2 = c3 = 0
+    if d.empty: c1=c2=c3=0
     else:
         d["presentes_i"] = d.get("presentes", "").apply(lambda x: clean_int(x, 0))
         c1 = int(d[(d["centro"] == centro) & (d["fecha"] == hoy)]["presentes_i"].sum())
@@ -340,63 +429,11 @@ def kpi_row(df_latest, centro):
     col2.markdown(f"<div class='kpi'><h3>Últimos 7 días</h3><div class='v'>{c2}</div></div>", unsafe_allow_html=True)
     col3.markdown(f"<div class='kpi'><h3>Este mes</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
 
-def sidebar_pending(df_latest, centro):
-    last_date, days = last_load_info(df_latest, centro)
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Estado de Carga")
-    if last_date is None:
-        st.sidebar.warning("⚠️ Sin cargas previas.")
-        return
-    if days == 0:
-        st.sidebar.success("✅ Ya se cargó hoy.")
-    else:
-        st.sidebar.warning(f"⏰ Última carga: {last_date} (hace {days} días)")
-
-def sidebar_birthdays(df_personas, centro):
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🎂 Cumpleaños")
-    if df_personas.empty: return
-    df_c = personas_for_centro(df_personas, centro)
-    df_c["timestamp_dt"] = pd.to_datetime(df_c["timestamp"], errors="coerce")
-    df_c = df_c.sort_values("timestamp_dt").groupby("nombre").tail(1)
-    today = get_today_ar()
-    cumples = []
-    for _, row in df_c.iterrows():
-        fn_str = str(row.get("fecha_nacimiento", "")).strip()
-        if not fn_str: continue
-        try:
-            fn = pd.to_datetime(fn_str, dayfirst=True, errors="coerce")
-            if not pd.isna(fn):
-                if fn.month == today.month and fn.day == today.day:
-                    cumples.append(row["nombre"])
-        except: pass
-    if cumples:
-        st.sidebar.success(f"🎉 ¡Hoy cumple años! \n\n" + "\n".join([f"- {c}" for c in cumples]))
-    else:
-        st.sidebar.caption("Nadie cumple años hoy.")
-
-def sidebar_alerts(df_ap, centro):
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### ⚠️ Alerta: Ausencia")
-    if df_ap.empty: return
-    d = df_ap[(df_ap["centro"]==centro) & (df_ap["estado"]=="Presente")].copy()
-    if d.empty: return
-    d["fecha_dt"] = pd.to_datetime(d["fecha"], errors="coerce")
-    last = d.groupby("nombre")["fecha_dt"].max().reset_index()
-    hoy = pd.Timestamp(get_today_ar())
-    last["dias"] = (hoy - last["fecha_dt"]).dt.days
-    alertas = last[(last["dias"]>7) & (last["dias"]<60)].sort_values("dias", ascending=False)
-    if alertas.empty: st.sidebar.success("Asistencia regular.")
-    else:
-        st.sidebar.caption("Ausentes > 7 días:")
-        for _, r in alertas.iterrows():
-            st.sidebar.markdown(f"🔴 **{r['nombre']}**: {r['dias']} días")
-
 # =========================
 # PAGES
 # =========================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
-    st.subheader(f"Registrar: {centro}")
+    st.subheader(f"📝 Carga Diaria: {centro}")
     fecha = st.date_input("Fecha", value=get_today_ar()).isoformat()
     espacio = st.selectbox("Espacio", ESPACIOS_MARANATHA) if centro == "Casa Maranatha" else DEFAULT_ESPACIO
     modo = st.selectbox("Modo", ["Día habitual", "Actividad especial", "Cerrado"])
@@ -419,12 +456,12 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         nac_new = cn4.text_input("Fecha Nac. (DD/MM/AAAA) (Opcional)")
         agregar_nueva = st.checkbox("Agregar a la base")
         
-        # ✅ VALIDACIÓN DE DUPLICADOS DNI
+        # Validación visual de DNI
         if agregar_nueva and dni_new.strip() and not df_personas.empty:
             existe_dni = df_personas[df_personas['dni'].astype(str).str.strip() == dni_new.strip()]
             if not existe_dni.empty:
                 nombre_existente = existe_dni.iloc[0]['nombre']
-                st.markdown(f"<div class='validation-error'>⚠️ ATENCIÓN: El DNI {dni_new} ya pertenece a: <b>{nombre_existente}</b></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='alert-box alert-danger'>⚠️ DNI duplicado: Pertenece a <b>{nombre_existente}</b></div>", unsafe_allow_html=True)
 
     df_latest = latest_asistencia(df_asistencia)
     ya = df_latest[(df_latest.get("fecha","")==fecha) & (df_latest.get("centro","")==centro) & (df_latest.get("espacio","")==espacio)]
@@ -454,49 +491,30 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         st.toast("✅ Guardado"); time.sleep(1.5); st.cache_data.clear(); st.rerun()
 
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
-    st.subheader("👥 Legajo Digital y Listado")
-    
+    st.subheader("👥 Legajo Digital")
     df_centro = personas_for_centro(df_personas, centro)
     df_centro = df_centro.sort_values("timestamp", ascending=True).groupby("nombre").tail(1)
-    
     nombres = sorted(df_centro["nombre"].unique())
 
     col_sel, col_act = st.columns([3, 1])
-    seleccion = col_sel.selectbox("Seleccionar Persona (Dejar vacío para ver listado completo)", [""] + nombres)
+    seleccion = col_sel.selectbox("Seleccionar Persona (Vacío para ver listado)", [""] + nombres)
     
     if not seleccion:
         st.markdown(f"### Listado Histórico")
         col_filtro1, col_filtro2 = st.columns(2)
-        filtro_txt = col_filtro1.text_input("🔍 Buscar por nombre")
+        filtro_txt = col_filtro1.text_input("🔍 Buscar")
         solo_activos = col_filtro2.checkbox("Solo activos", value=False)
         
         df_show = df_centro.copy()
-        if filtro_txt:
-            df_show = df_show[df_show["nombre"].str.contains(filtro_txt, case=False, na=False)]
-        if solo_activos:
-            df_show = df_show[df_show["activo"].str.upper() == "SI"]
-            
+        if filtro_txt: df_show = df_show[df_show["nombre"].str.contains(filtro_txt, case=False, na=False)]
+        if solo_activos: df_show = df_show[df_show["activo"].str.upper() == "SI"]
         df_show = df_show.sort_values("nombre", ascending=True)
 
-        m1, m2 = st.columns(2)
-        m1.metric("Total Personas Históricas", len(df_centro))
-        m2.metric("Personas Listadas Ahora", len(df_show))
-
-        cols_to_show = ["nombre", "frecuencia", "telefono", "dni", "fecha_nacimiento", "activo"]
+        cols_to_show = ["nombre", "frecuencia", "dni", "fecha_nacimiento", "activo"]
         for c in cols_to_show:
             if c not in df_show.columns: df_show[c] = ""
             
-        st.dataframe(
-            df_show[cols_to_show], 
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "nombre": "Nombre y Apellido",
-                "frecuencia": st.column_config.TextColumn("Frecuencia"),
-                "fecha_nacimiento": "Fecha Nac.",
-                "activo": st.column_config.TextColumn("Estado", width="small")
-            }
-        )
+        st.dataframe(df_show[cols_to_show], use_container_width=True, hide_index=True)
         return
 
     datos_persona = df_centro[df_centro["nombre"] == seleccion].iloc[0]
@@ -506,36 +524,31 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     
     with c_info:
         st.markdown('<div class="profile-card">', unsafe_allow_html=True)
-        st.markdown("#### Datos Personales")
+        st.markdown("#### Datos")
         with st.form("edit_persona"):
             dni = st.text_input("DNI", value=datos_persona.get("dni", ""))
             tel = st.text_input("Teléfono", value=datos_persona.get("telefono", ""))
-            nac = st.text_input("Fecha Nac. (DD/MM/AAAA)", value=datos_persona.get("fecha_nacimiento", ""))
+            nac = st.text_input("Fecha Nac.", value=datos_persona.get("fecha_nacimiento", ""))
             dom = st.text_input("Domicilio", value=datos_persona.get("domicilio", ""))
             notas_fija = st.text_area("Notas Fijas", value=datos_persona.get("notas", ""))
-            activo_chk = st.checkbox("¿Está Activo?", value=(str(datos_persona.get("activo")).upper() != "NO"))
+            activo_chk = st.checkbox("Activo", value=(str(datos_persona.get("activo")).upper() != "NO"))
             
-            if st.form_submit_button("💾 Actualizar Datos"):
+            if st.form_submit_button("💾 Actualizar"):
                 nuevo_estado = "SI" if activo_chk else "NO"
                 upsert_persona(df_personas, seleccion, centro, usuario, dni=dni, telefono=tel, fecha_nacimiento=nac, domicilio=dom, notas=notas_fija, activo=nuevo_estado)
-                st.toast("Datos actualizados"); st.cache_data.clear(); st.rerun()
+                st.toast("Actualizado"); st.cache_data.clear(); st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
         
-        if not df_ap.empty:
-            hist = df_ap[(df_ap["nombre"]==seleccion) & (df_ap["centro"]==centro)]
-            presencias = len(hist[hist["estado"]=="Presente"])
-            st.metric("Asistencias Totales", presencias)
-
     with c_bitacora:
-        st.markdown("#### 📖 Bitácora de Seguimiento")
-        with st.expander("➕ Agregar Nota / Intervención", expanded=False):
+        st.markdown("#### 📖 Bitácora")
+        with st.expander("➕ Nueva Nota", expanded=False):
             with st.form("new_seg"):
                 fecha_seg = st.date_input("Fecha", value=get_today_ar())
                 cat = st.selectbox("Tipo", CATEGORIAS_SEGUIMIENTO)
-                obs = st.text_area("Detalle de la intervención...")
-                if st.form_submit_button("Guardar en Bitácora"):
+                obs = st.text_area("Detalle...")
+                if st.form_submit_button("Guardar"):
                     append_seguimiento(str(fecha_seg), centro, seleccion, cat, obs, usuario)
-                    st.toast("Nota guardada"); st.cache_data.clear(); st.rerun()
+                    st.toast("Guardado"); st.cache_data.clear(); st.rerun()
         
         if not df_seg.empty:
             mis_notas = df_seg[(df_seg["nombre"]==seleccion) & (df_seg["centro"]==centro)].copy()
@@ -550,11 +563,10 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                         {icon} {note['observacion']}
                     </div>
                     """, unsafe_allow_html=True)
-            else:
-                st.info("No hay notas registradas aún.")
+            else: st.info("Sin notas.")
 
 def page_reportes(df_asistencia, centro):
-    st.subheader("Reportes")
+    st.subheader("📊 Reportes")
     df_latest = latest_asistencia(df_asistencia)
     df_c = df_latest[df_latest["centro"] == centro].copy()
     if df_c.empty: st.info("Sin datos."); return
@@ -566,18 +578,17 @@ def page_reportes(df_asistencia, centro):
     c1, c2 = st.columns([3,1])
     c1.line_chart(df_c.set_index("fecha")["presentes_i"])
     with c2:
-        st.markdown("##### 🏆 Ranking (General)")
-        # Se podría mejorar si cruzamos con df_ap para ver nombres
-        st.markdown("Descargar informe completo:")
+        st.markdown("##### Ranking (General)")
+        st.metric("Promedio Diario", f"{df_c['presentes_i'].mean():.1f}")
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
             df_c.to_excel(writer, sheet_name='Asistencia', index=False)
-        st.download_button("📥 Excel", buffer, f"asistencia_{centro}.xlsx", "application/vnd.ms-excel")
+        st.download_button("📥 Bajar Excel", buffer, f"asistencia_{centro}.xlsx", "application/vnd.ms-excel")
     
     st.dataframe(df_c[["fecha", "espacio", "presentes", "coordinador", "notas"]].sort_values("fecha", ascending=False), use_container_width=True)
 
 def page_global(df_asistencia, df_ap):
-    st.subheader("Panorama Global")
+    st.subheader("🌍 Panorama Global")
     df = latest_asistencia(df_asistencia).copy()
     if df.empty: return
     df["presentes_i"] = df["presentes"].apply(lambda x: clean_int(x, 0))
@@ -606,30 +617,23 @@ def main():
     
     centro_clean = clean_string(centro)
     match_centro = next((c for c in CENTROS if clean_string(c) == centro_clean), None)
-    
     if not match_centro:
-        st.error(f"Error de Configuración: El centro '{centro}' no coincide con la lista válida. Revisá mayúsculas y acentos en el Excel.")
-        if st.button("Salir"):
-            st.session_state.clear()
-            st.rerun()
-        st.stop()
-    else:
-        centro = match_centro
+        st.error(f"Error: Centro '{centro}' no válido."); st.stop()
+    centro = match_centro
 
-    st.sidebar.image("logo_hogar.png", width=120)
-    st.sidebar.markdown(f"Hola, **{nombre}**")
-    st.sidebar.caption(f"📍 {centro}")
-    if st.sidebar.button("Salir"): st.session_state.clear(); st.cache_data.clear(); st.rerun()
-    if st.sidebar.button("🔄 Refrescar"): st.cache_data.clear(); st.rerun()
+    # 1. MOSTRAR ENCABEZADO SUPERIOR (Ya no hay sidebar)
+    show_top_header(nombre, centro)
 
+    # 2. CARGAR DATOS
     df_asistencia, df_personas, df_ap, df_seg = load_all_data()
 
-    kpi_row(latest_asistencia(df_asistencia), centro)
-    sidebar_pending(latest_asistencia(df_asistencia), centro)
-    sidebar_birthdays(df_personas, centro)
-    sidebar_alerts(df_ap, centro)
+    # 3. ALERTAS Y KPIs ARRIBA
+    show_top_alerts(latest_asistencia(df_asistencia), df_personas, df_ap, centro)
+    kpi_row_full(latest_asistencia(df_asistencia), centro)
 
-    t1, t2, t3, t4 = st.tabs(["📝 Asistencia", "👥 Legajo Digital", "📈 Reportes", "🌍 Global"])
+    # 4. TABS
+    st.markdown("---")
+    t1, t2, t3, t4 = st.tabs(["📝 Asistencia", "👥 Legajo", "📊 Reportes", "🌍 Global"])
     with t1: page_registrar_asistencia(df_personas, df_asistencia, centro, nombre, u)
     with t2: page_personas_full(df_personas, df_ap, df_seg, centro, u)
     with t3: page_reportes(df_asistencia, centro)
