@@ -5,7 +5,7 @@ from google.oauth2.service_account import Credentials
 import gspread
 from gspread.exceptions import APIError
 import time
-import pytz  # ✅ NUEVO: Para manejar la zona horaria de Argentina
+import pytz
 
 # =========================
 # Config UI / Branding
@@ -53,6 +53,13 @@ section[data-testid="stSidebar"] {{
   font-weight: 700;
   margin-top: .2rem;
 }}
+.alert-box {{
+    padding: 10px;
+    border-left: 4px solid #ff4b4b;
+    background-color: rgba(255, 75, 75, 0.1);
+    margin-bottom: 10px;
+    border-radius: 4px;
+}}
 hr {{
   border: none;
   border-top: 1px solid rgba(255,255,255,.10);
@@ -66,16 +73,14 @@ hr {{
 st.markdown(CSS, unsafe_allow_html=True)
 
 # =========================
-# Zona Horaria (Argentina) ✅
+# Zona Horaria (Argentina)
 # =========================
 TZ_AR = pytz.timezone('America/Argentina/Buenos_Aires')
 
 def get_now_ar():
-    """Devuelve datetime actual en hora argentina"""
     return datetime.now(TZ_AR)
 
 def get_today_ar():
-    """Devuelve date actual en hora argentina"""
     return datetime.now(TZ_AR).date()
 
 # =========================
@@ -84,46 +89,24 @@ def get_today_ar():
 ASISTENCIA_TAB = "asistencia"
 PERSONAS_TAB = "personas"
 ASISTENCIA_PERSONAS_TAB = "asistencia_personas"
+USUARIOS_TAB = "config_usuarios"  # ✅ NUEVA PESTAÑA
 
 ASISTENCIA_COLS = [
-    "timestamp",
-    "fecha",
-    "anio",
-    "centro",
-    "espacio",
-    "presentes",
-    "coordinador",
-    "modo",
-    "notas",
-    "usuario",
-    "accion",
+    "timestamp", "fecha", "anio", "centro", "espacio",
+    "presentes", "coordinador", "modo", "notas", "usuario", "accion",
 ]
 
 PERSONAS_COLS = [
-    "nombre",
-    "frecuencia",
-    "centro",
-    "edad",
-    "domicilio",
-    "notas",
-    "activo",
-    "timestamp",
-    "usuario",
+    "nombre", "frecuencia", "centro", "edad", "domicilio",
+    "notas", "activo", "timestamp", "usuario",
 ]
 
 ASISTENCIA_PERSONAS_COLS = [
-    "timestamp",
-    "fecha",
-    "anio",
-    "centro",
-    "espacio",
-    "nombre",
-    "estado",        # "Presente" | "Ausente"
-    "es_nuevo",      # "SI" | "NO"
-    "coordinador",
-    "usuario",
-    "notas",
+    "timestamp", "fecha", "anio", "centro", "espacio",
+    "nombre", "estado", "es_nuevo", "coordinador", "usuario", "notas",
 ]
+
+USUARIOS_COLS = ["usuario", "password", "centro", "nombre"] # ✅ NUEVAS COLUMNAS
 
 # =========================
 # Centros / espacios
@@ -131,15 +114,9 @@ ASISTENCIA_PERSONAS_COLS = [
 CENTROS = ["Calle Belén", "Nudo a Nudo", "Casa Maranatha"]
 
 ESPACIOS_MARANATHA = [
-    "Taller de costura",
-    "Apoyo escolar (Primaria)",
-    "Apoyo escolar (Secundaria)",
-    "Fines",
-    "Espacio Joven",
-    "La Ronda",
-    "General",
+    "Taller de costura", "Apoyo escolar (Primaria)", "Apoyo escolar (Secundaria)",
+    "Fines", "Espacio Joven", "La Ronda", "General",
 ]
-
 DEFAULT_ESPACIO = "General"
 
 # =========================
@@ -155,38 +132,9 @@ def get_secret(path, default=None):
         return default
 
 def normalize_private_key(pk: str) -> str:
-    if not isinstance(pk, str):
-        return pk
-    if "\\n" in pk:
-        pk = pk.replace("\\n", "\n")
+    if not isinstance(pk, str): return pk
+    if "\\n" in pk: pk = pk.replace("\\n", "\n")
     return pk
-
-def login_box():
-    st.sidebar.markdown("## Acceso")
-    if st.session_state.get("logged_in"):
-        usuario = st.session_state.get("usuario")
-        st.sidebar.success(f"Conectado como: {usuario}")
-        if st.sidebar.button("Salir"):
-            for k in ["logged_in", "usuario", "centro_asignado", "nombre_visible"]:
-                st.session_state.pop(k, None)
-            st.cache_data.clear() # Limpiar cache al salir
-            st.rerun()
-        return True
-
-    u = st.sidebar.text_input("Usuario", key="login_user")
-    p = st.sidebar.text_input("Contraseña", type="password", key="login_pass")
-    if st.sidebar.button("Ingresar"):
-        users = get_secret("users", {})
-        if u in users and str(users[u]) == str(p):
-            st.session_state["logged_in"] = True
-            st.session_state["usuario"] = u
-            prof = get_secret(f"user_profile.{u}", {})
-            st.session_state["centro_asignado"] = prof.get("centro", "")
-            st.session_state["nombre_visible"] = prof.get("nombre", u)
-            st.rerun()
-        else:
-            st.sidebar.error("Usuario o contraseña incorrectos.")
-    return False
 
 # =========================
 # Google Sheets connection
@@ -196,21 +144,15 @@ def get_gspread_client():
     sa = dict(get_secret("gcp_service_account", {}))
     if not sa:
         raise KeyError("Falta [gcp_service_account] en secrets.toml")
-
     sa["private_key"] = normalize_private_key(sa.get("private_key", ""))
-
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
+    scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_info(sa, scopes=scopes)
     return gspread.authorize(creds)
 
 @st.cache_resource(show_spinner=False)
 def get_spreadsheet():
     sid = get_secret("sheets.spreadsheet_id", "")
-    if not sid:
-        raise KeyError("Falta [sheets].spreadsheet_id en secrets.toml")
+    if not sid: raise KeyError("Falta [sheets].spreadsheet_id en secrets.toml")
     gc = get_gspread_client()
     return gc.open_by_key(sid)
 
@@ -223,92 +165,48 @@ def get_or_create_ws(title: str, cols: list, rows: int = 2000):
         return _open_ws_strict(sh, title)
     except Exception:
         pass
-
     try:
         ws = sh.add_worksheet(title=title, rows=rows, cols=max(20, len(cols)))
         ws.update("A1", [cols])
         return ws
     except Exception as e:
-        msg = str(e).lower()
-        if "already exists" in msg or "alreadyexists" in msg:
-            try:
-                return _open_ws_strict(sh, title)
-            except Exception:
-                st.error(f"Error abriendo pestaña '{title}': {e}")
-                st.stop()
-        st.error(f"No pude crear la pestaña '{title}'. Detalle: {e}")
+        st.error(f"Error pestaña '{title}': {e}")
         st.stop()
 
-def _apierror_info(e: APIError) -> str:
-    try:
-        status = getattr(e.response, "status_code", None)
-        text = getattr(e.response, "text", "")
-        if text and len(text) > 800:
-            text = text[:800] + "…"
-        return f"HTTP {status} — {text}"
-    except Exception:
-        return str(e)
-
-def safe_get_all_values(ws, tries=6):
-    last_err = None
+def safe_get_all_values(ws, tries=4):
     for i in range(tries):
         try:
             return ws.get_all_values()
         except APIError as e:
-            last_err = e
-            info = _apierror_info(e).lower()
-            if "429" in info or "rate" in info or "quota" in info or "503" in info or "timeout" in info:
-                time.sleep(2 ** i * 0.5)
-                continue
-            st.error("Google Sheets devolvió un error al leer datos.")
-            st.code(_apierror_info(e))
-            st.stop()
-        except Exception as e:
-            last_err = e
             time.sleep(2 ** i * 0.5)
-
-    st.error("No pude leer la planilla luego de varios intentos.")
-    st.code(str(last_err))
+        except Exception:
+            time.sleep(2 ** i * 0.5)
+    st.error("Error leyendo Google Sheets (Timeout/Quota).")
     st.stop()
 
 def read_ws_df(title: str, cols: list) -> pd.DataFrame:
-    """Lee una pestaña y devuelve DataFrame. NO TIENE CACHE PROPIO (se cachea afuera)."""
     ws = get_or_create_ws(title, cols)
     values = safe_get_all_values(ws)
-
     if not values:
         ws.update("A1", [cols])
         return pd.DataFrame(columns=cols)
-
     header = values[0]
     body = values[1:] if len(values) > 1 else []
+    
+    # Manejo robusto de columnas
+    df = pd.DataFrame(body)
+    if not df.empty:
+        # Si hay más columnas en el sheet que en la config, cortamos
+        df = df.iloc[:, :len(header)]
+        df.columns = header
+    else:
+        df = pd.DataFrame(columns=header)
 
-    if header[: len(cols)] == cols:
-        df = pd.DataFrame(body, columns=header)
-        for c in cols:
-            if c not in df.columns:
-                df[c] = ""
-        df = df[cols]
-        return df
-
-    df = pd.DataFrame(values)
-    for i in range(df.shape[1], len(cols)):
-        df[i] = ""
-    df = df.iloc[:, : len(cols)]
-    df.columns = cols
-    return df
-
-# =========================
-# ✅ CACHING LOGIC
-# =========================
-@st.cache_data(ttl=600, show_spinner="Actualizando datos...")
-def load_all_data():
-    """Carga todas las bases de datos relevantes de una sola vez."""
-    df_a = read_ws_df(ASISTENCIA_TAB, ASISTENCIA_COLS)
-    df_p = read_ws_df(PERSONAS_TAB, PERSONAS_COLS)
-    # Asistencia por persona se puede cargar si se necesita reporte detallado
-    # df_ap = read_ws_df(ASISTENCIA_PERSONAS_TAB, ASISTENCIA_PERSONAS_COLS)
-    return df_a, df_p
+    # Asegurar que existan todas las columnas pedidas
+    for c in cols:
+        if c not in df.columns:
+            df[c] = ""
+    return df[cols]
 
 def append_ws_rows(title: str, cols: list, rows: list[list]):
     ws = get_or_create_ws(title, cols)
@@ -318,150 +216,177 @@ def append_ws_rows(title: str, cols: list, rows: list[list]):
     ws.append_rows(rows, value_input_option="USER_ENTERED")
 
 # =========================
-# Data normalization
+# ✅ CACHING & LOADERS
+# =========================
+
+@st.cache_data(ttl=600, show_spinner="Cargando usuarios...")
+def get_users_db():
+    """Lee la pestaña de usuarios para el login"""
+    return read_ws_df(USUARIOS_TAB, USUARIOS_COLS)
+
+@st.cache_data(ttl=600, show_spinner="Actualizando datos...")
+def load_all_data():
+    """Carga datos masivos una vez logueado"""
+    df_a = read_ws_df(ASISTENCIA_TAB, ASISTENCIA_COLS)
+    df_p = read_ws_df(PERSONAS_TAB, PERSONAS_COLS)
+    # ✅ AHORA CARGAMOS ESTO PARA LAS ALERTAS
+    df_ap = read_ws_df(ASISTENCIA_PERSONAS_TAB, ASISTENCIA_PERSONAS_COLS)
+    return df_a, df_p, df_ap
+
+# =========================
+# LOGIN SYSTEM (Sheets Based)
+# =========================
+def login_box():
+    st.sidebar.markdown("## Acceso")
+    if st.session_state.get("logged_in"):
+        usuario = st.session_state.get("usuario")
+        st.sidebar.success(f"Hola, {st.session_state.get('nombre_visible', usuario)}")
+        if st.sidebar.button("Salir"):
+            st.session_state.clear()
+            st.cache_data.clear()
+            st.rerun()
+        return True
+
+    u = st.sidebar.text_input("Usuario", key="login_user")
+    p = st.sidebar.text_input("Contraseña", type="password", key="login_pass")
+    
+    if st.sidebar.button("Ingresar"):
+        df_users = get_users_db()
+        # Filtrar usuario y pass
+        user_row = df_users[
+            (df_users["usuario"].astype(str).str.strip() == u.strip()) & 
+            (df_users["password"].astype(str).str.strip() == p.strip())
+        ]
+        
+        if not user_row.empty:
+            row = user_row.iloc[0]
+            st.session_state["logged_in"] = True
+            st.session_state["usuario"] = row["usuario"]
+            st.session_state["centro_asignado"] = row["centro"]
+            st.session_state["nombre_visible"] = row["nombre"]
+            st.rerun()
+        else:
+            st.sidebar.error("Usuario o contraseña incorrectos.")
+    return False
+
+# =========================
+# Data Helpers
 # =========================
 def year_of(fecha_iso: str) -> str:
-    try:
-        return str(pd.to_datetime(fecha_iso).year)
-    except Exception:
-        return str(get_today_ar().year)
+    try: return str(pd.to_datetime(fecha_iso).year)
+    except: return str(get_today_ar().year)
 
 def clean_int(x, default=0):
-    try:
-        if x is None or x == "":
-            return default
-        return int(float(str(x).strip()))
-    except Exception:
-        return default
+    try: return int(float(str(x).strip()))
+    except: return default
 
 def norm_text(x):
-    if x is None:
-        return ""
+    if x is None: return ""
     return str(x).strip()
 
-# =========================
-# Asistencia aggregation
-# =========================
 def latest_asistencia(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return df
+    if df.empty: return df
     df2 = df.copy()
-    for c in ["timestamp","fecha","anio","centro","espacio","presentes"]:
-        if c not in df2.columns:
-            df2[c] = ""
     df2["timestamp_dt"] = pd.to_datetime(df2["timestamp"], errors="coerce")
-    df2["k"] = (
-        df2["anio"].astype(str) + "|" +
-        df2["fecha"].astype(str) + "|" +
-        df2["centro"].astype(str) + "|" +
-        df2["espacio"].astype(str)
-    )
+    df2["k"] = (df2["anio"].astype(str) + "|" + df2["fecha"].astype(str) + "|" +
+                df2["centro"].astype(str) + "|" + df2["espacio"].astype(str))
     df2 = df2.sort_values("timestamp_dt", ascending=True)
     df2 = df2.groupby("k", as_index=False).tail(1)
-    df2 = df2.drop(columns=["k"], errors="ignore")
     return df2
 
 def last_load_info(df_latest: pd.DataFrame, centro: str):
-    if df_latest.empty:
-        return None, None
+    if df_latest.empty: return None, None
     d = df_latest[df_latest["centro"] == centro].copy()
-    if d.empty:
-        return None, None
+    if d.empty: return None, None
     d["fecha_dt"] = pd.to_datetime(d["fecha"], errors="coerce")
     last = d["fecha_dt"].max()
-    if pd.isna(last):
-        return None, None
-    
-    # Calcular días respecto a HOY en Argentina
+    if pd.isna(last): return None, None
     today_dt = pd.Timestamp(get_today_ar())
-    # Normalizar last a date para la resta
     days = (today_dt.date() - last.date()).days
     return last.date().isoformat(), int(days)
 
 # =========================
-# Personas logic
+# Write Functions
 # =========================
-def personas_for_centro(df_personas: pd.DataFrame, centro: str) -> pd.DataFrame:
-    if df_personas.empty:
-        return df_personas
+def personas_for_centro(df_personas, centro):
+    if df_personas.empty: return df_personas
     if "centro" in df_personas.columns:
         return df_personas[df_personas["centro"] == centro].copy()
     return df_personas.copy()
 
-def upsert_persona(df_personas: pd.DataFrame, nombre: str, centro: str, usuario: str, frecuencia="Nueva"):
+def upsert_persona(df_personas, nombre, centro, usuario, frecuencia="Nueva"):
     nombre = norm_text(nombre)
-    if not nombre:
-        return df_personas
-
-    # Usamos hora argentina para el timestamp de creación
+    if not nombre: return df_personas
     now = get_now_ar().strftime("%Y-%m-%d %H:%M:%S")
-
     if not df_personas.empty:
         mask = (df_personas.get("nombre", "") == nombre) & (df_personas.get("centro", "") == centro)
-        if mask.any():
-            return df_personas
+        if mask.any(): return df_personas
 
-    row = {
-        "nombre": nombre,
-        "frecuencia": frecuencia,
-        "centro": centro,
-        "edad": "",
-        "domicilio": "",
-        "notas": "",
-        "activo": "SI",
-        "timestamp": now,
-        "usuario": usuario,
-    }
-    append_ws_rows(PERSONAS_TAB, PERSONAS_COLS, [[row.get(c, "") for c in PERSONAS_COLS]])
-    df2 = pd.concat([df_personas, pd.DataFrame([row])], ignore_index=True)
-    return df2
+    row = {c: "" for c in PERSONAS_COLS}
+    row.update({"nombre": nombre, "frecuencia": frecuencia, "centro": centro, 
+                "activo": "SI", "timestamp": now, "usuario": usuario})
+    
+    append_ws_rows(PERSONAS_TAB, PERSONAS_COLS, [[row[c] for c in PERSONAS_COLS]])
+    return pd.concat([df_personas, pd.DataFrame([row])], ignore_index=True)
 
-# =========================
-# Writes (usa hora AR)
-# =========================
 def append_asistencia(fecha, centro, espacio, presentes, coordinador, modo, notas, usuario, accion="append"):
-    ts = get_now_ar().strftime("%Y-%m-%d %H:%M:%S") # ✅ Hora AR
-    anio = year_of(fecha)
+    ts = get_now_ar().strftime("%Y-%m-%d %H:%M:%S")
     row = {
-        "timestamp": ts,
-        "fecha": fecha,
-        "anio": anio,
-        "centro": centro,
-        "espacio": espacio,
-        "presentes": str(presentes),
-        "coordinador": coordinador,
-        "modo": modo,
-        "notas": notas,
-        "usuario": usuario,
-        "accion": accion,
+        "timestamp": ts, "fecha": fecha, "anio": year_of(fecha),
+        "centro": centro, "espacio": espacio, "presentes": str(presentes),
+        "coordinador": coordinador, "modo": modo, "notas": notas,
+        "usuario": usuario, "accion": accion
     }
     append_ws_rows(ASISTENCIA_TAB, ASISTENCIA_COLS, [[row.get(c, "") for c in ASISTENCIA_COLS]])
 
 def append_asistencia_personas(fecha, centro, espacio, nombre, estado, es_nuevo, coordinador, usuario, notas=""):
-    ts = get_now_ar().strftime("%Y-%m-%d %H:%M:%S") # ✅ Hora AR
-    anio = year_of(fecha)
+    ts = get_now_ar().strftime("%Y-%m-%d %H:%M:%S")
     row = {
-        "timestamp": ts,
-        "fecha": fecha,
-        "anio": anio,
-        "centro": centro,
-        "espacio": espacio,
-        "nombre": nombre,
-        "estado": estado,
-        "es_nuevo": es_nuevo,
-        "coordinador": coordinador,
-        "usuario": usuario,
-        "notas": notas,
+        "timestamp": ts, "fecha": fecha, "anio": year_of(fecha),
+        "centro": centro, "espacio": espacio, "nombre": nombre,
+        "estado": estado, "es_nuevo": es_nuevo, "coordinador": coordinador,
+        "usuario": usuario, "notas": notas
     }
-    append_ws_rows(
-        ASISTENCIA_PERSONAS_TAB,
-        ASISTENCIA_PERSONAS_COLS,
-        [[row.get(c, "") for c in ASISTENCIA_PERSONAS_COLS]]
-    )
+    append_ws_rows(ASISTENCIA_PERSONAS_TAB, ASISTENCIA_PERSONAS_COLS, [[row.get(c, "") for c in ASISTENCIA_PERSONAS_COLS]])
 
 # =========================
-# UI blocks
+# ✅ ALERTAS Y SIDEBAR
 # =========================
+def sidebar_alerts(df_ap: pd.DataFrame, centro: str):
+    """Muestra alertas de deserción en el sidebar"""
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### ⚠️ Alerta: Sin asistencia")
+    
+    if df_ap.empty:
+        st.sidebar.caption("No hay datos históricos para calcular alertas.")
+        return
+
+    # Filtramos por centro y solo los que estuvieron "Presente" alguna vez
+    d = df_ap[(df_ap["centro"] == centro) & (df_ap["estado"] == "Presente")].copy()
+    if d.empty:
+        st.sidebar.success("No hay datos suficientes.")
+        return
+    
+    # Convertir fecha
+    d["fecha_dt"] = pd.to_datetime(d["fecha"], errors="coerce")
+    
+    # Agrupar por persona y buscar la última fecha que vino
+    last_seen = d.groupby("nombre")["fecha_dt"].max().reset_index()
+    
+    # Calcular días desde la última vez
+    hoy = pd.Timestamp(get_today_ar())
+    last_seen["dias"] = (hoy - last_seen["fecha_dt"]).dt.days
+    
+    # Criterio: Más de 7 días y menos de 60 (para no mostrar gente de hace años)
+    alertas = last_seen[(last_seen["dias"] > 7) & (last_seen["dias"] < 60)].sort_values("dias", ascending=False)
+    
+    if alertas.empty:
+        st.sidebar.success("👏 Todos vienen con regularidad (o faltan hace mucho).")
+    else:
+        st.sidebar.caption(f"Personas que no vienen hace > 7 días:")
+        for _, r in alertas.iterrows():
+            st.sidebar.markdown(f"🔴 **{r['nombre']}**: hace {r['dias']} días")
+
 def kpi_row(df_latest, centro):
     hoy_date = get_today_ar()
     hoy = hoy_date.isoformat()
@@ -469,8 +394,7 @@ def kpi_row(df_latest, centro):
     month_start = hoy_date.replace(day=1).isoformat()
 
     d = df_latest.copy()
-    if d.empty:
-        c1 = c2 = c3 = 0
+    if d.empty: c1 = c2 = c3 = 0
     else:
         d["presentes_i"] = d.get("presentes", "").apply(lambda x: clean_int(x, 0))
         c1 = int(d[(d["centro"] == centro) & (d["fecha"] == hoy)]["presentes_i"].sum())
@@ -478,268 +402,184 @@ def kpi_row(df_latest, centro):
         c3 = int(d[(d["centro"] == centro) & (d["fecha"] >= month_start) & (d["fecha"] <= hoy)]["presentes_i"].sum())
 
     col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f"<div class='kpi'><h3>Ingresos HOY</h3><div class='v'>{c1}</div></div>", unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"<div class='kpi'><h3>Últimos 7 días</h3><div class='v'>{c2}</div></div>", unsafe_allow_html=True)
-    with col3:
-        st.markdown(f"<div class='kpi'><h3>Este mes</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
+    col1.markdown(f"<div class='kpi'><h3>Ingresos HOY</h3><div class='v'>{c1}</div></div>", unsafe_allow_html=True)
+    col2.markdown(f"<div class='kpi'><h3>Últimos 7 días</h3><div class='v'>{c2}</div></div>", unsafe_allow_html=True)
+    col3.markdown(f"<div class='kpi'><h3>Este mes</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
 
 def sidebar_pending(df_latest, centro):
     last_date, days = last_load_info(df_latest, centro)
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### Pendientes")
+    st.sidebar.markdown("### Estado de Carga")
     if last_date is None:
-        st.sidebar.warning("⚠️ Todavía no hay cargas para este centro.")
+        st.sidebar.warning("⚠️ Sin cargas previas.")
         return
-
     if days == 0:
         st.sidebar.success("✅ Ya se cargó hoy.")
     else:
         st.sidebar.warning(f"⏰ Última carga: {last_date} (hace {days} días)")
 
-    today = get_today_ar()
-    start = today - timedelta(days=today.weekday())
-    days_list = [start + timedelta(days=i) for i in range(7)]
-    df_c = df_latest[df_latest["centro"] == centro].copy()
-    loaded = set(pd.to_datetime(df_c["fecha"], errors="coerce").dt.date.dropna().tolist())
-    missing = [d for d in days_list if d <= today and d not in loaded]
-    if missing:
-        st.sidebar.info("📌 Días sin carga esta semana:\n- " + "\n- ".join([m.isoformat() for m in missing]))
-    else:
-        st.sidebar.success("🎉 Semana al día (hasta hoy).")
-
+# =========================
+# Pages
+# =========================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
-    st.subheader("Registrar asistencia")
-
-    anio = str(get_today_ar().year)
-    fecha = st.date_input("Fecha", value=get_today_ar()).isoformat() # ✅ Default hoy Argentina
-
+    st.subheader(f"Registrar: {centro}")
+    fecha = st.date_input("Fecha", value=get_today_ar()).isoformat()
+    
     if centro == "Casa Maranatha":
-        espacio = st.selectbox("Espacio (solo Maranatha)", ESPACIOS_MARANATHA, index=ESPACIOS_MARANATHA.index("General"))
+        espacio = st.selectbox("Espacio", ESPACIOS_MARANATHA, index=ESPACIOS_MARANATHA.index("General"))
     else:
         espacio = DEFAULT_ESPACIO
-        st.info("Este centro no usa espacios internos. (Solo Maranatha)")
-
-    modo = st.selectbox("Tipo de día", ["Día habitual", "Actividad especial", "Centro cerrado / no abrió"], index=0)
-    notas = st.text_area("Notas (opcional)", placeholder="Ej: visita, salida, situación particular...")
-
-    st.markdown("### Asistencia persona por persona")
-
+    
+    modo = st.selectbox("Modo", ["Día habitual", "Actividad especial", "Cerrado"], index=0)
+    notas = st.text_area("Notas del día", placeholder="Ocurrencias, visitas, faltantes...")
+    
+    st.markdown("---")
+    
+    # Personas
     df_centro = personas_for_centro(df_personas, centro)
-    for c in PERSONAS_COLS:
-        if c not in df_centro.columns:
-            df_centro[c] = ""
-
-    # Ordenar y filtrar
     nombres = sorted([n for n in df_centro["nombre"].astype(str).tolist() if n.strip()])
-
-    colA, colB = st.columns([2, 1])
-    with colA:
-        presentes = st.multiselect("¿Quiénes vinieron hoy?", options=nombres, default=[])
-    with colB:
-        total_presentes = st.number_input(
-            "Total presentes (si no marcás uno por uno)",
-            min_value=0,
-            value=len(presentes),
-            step=1
-        )
-
-    st.markdown("### Persona nueva (si vino alguien que no está)")
-    nueva = st.text_input("Nombre y apellido (opcional)", placeholder="Ej: Pérez, Juan")
-    agregar_nueva = st.checkbox("Hoy vino y es persona nueva")
-
+    
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        presentes = st.multiselect("Asistentes hoy", options=nombres, default=[])
+    with c2:
+        total_presentes = st.number_input("Total (manual)", min_value=0, value=len(presentes), step=1)
+    
+    # Persona nueva
+    with st.expander("👤 ¿Vino alguien nuevo?"):
+        col_new1, col_new2 = st.columns([3, 1])
+        nueva = col_new1.text_input("Nombre completo")
+        agregar_nueva = col_new2.checkbox("Es nuevo/a")
+    
+    # Check overwrite
     df_latest = latest_asistencia(df_asistencia)
-    ya = df_latest[
-        (df_latest.get("fecha","") == fecha) &
-        (df_latest.get("centro","") == centro) &
-        (df_latest.get("espacio","") == espacio) &
-        (df_latest.get("anio","") == anio)
-    ]
+    ya = df_latest[(df_latest.get("fecha","")==fecha) & (df_latest.get("centro","")==centro) & (df_latest.get("espacio","")==espacio)]
     existe = not ya.empty
+    overwrite = True
     if existe:
-        st.warning("⚠️ Ya hay una carga para este centro / fecha / espacio. Si guardás de nuevo, quedará como última versión (overwrite).")
-        overwrite = st.checkbox("Confirmo sobreescritura", value=False)
-    else:
-        overwrite = True
-
-    guardar_ausentes = st.checkbox("Guardar también AUSENTES", value=False)
-
-    st.divider()
-
-    if st.button("✅ Guardar asistencia", type="primary", use_container_width=True):
+        st.warning("⚠️ Ya existe una carga para hoy/espacio. Se sobreescribirá.")
+        overwrite = st.checkbox("Confirmar sobreescritura", value=False)
+    
+    guardar_ausentes = st.checkbox("Guardar registro de Ausentes (Recomendado)", value=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("💾 Guardar Asistencia", type="primary", use_container_width=True):
         if not overwrite:
-            st.error("Te falta confirmar la sobreescritura.")
+            st.error("Confirmá la sobreescritura.")
             st.stop()
-
+        
+        # Procesar nueva persona
         if agregar_nueva and nueva.strip():
-            df_personas = upsert_persona(df_personas, nueva, centro, usuario, frecuencia="Nueva")
-            if nueva not in presentes:
-                presentes = presentes + [nueva]
-
-        if len(presentes) > 0:
-            total_presentes = len(presentes)
-
+            df_personas = upsert_persona(df_personas, nueva, centro, usuario, "Nueva")
+            if nueva not in presentes: presentes.append(nueva)
+        
+        if len(presentes) > 0: total_presentes = len(presentes)
         accion = "overwrite" if existe else "append"
-
-        with st.spinner("Guardando en Google Sheets..."):
-            append_asistencia(
-                fecha=fecha,
-                centro=centro,
-                espacio=espacio,
-                presentes=total_presentes,
-                coordinador=nombre_visible,
-                modo=modo,
-                notas=notas,
-                usuario=usuario,
-                accion=accion,
-            )
-
+        
+        with st.spinner("Guardando..."):
+            append_asistencia(fecha, centro, espacio, total_presentes, nombre_visible, modo, notas, usuario, accion)
+            
+            # Guardar presentes
             for n in presentes:
-                append_asistencia_personas(
-                    fecha=fecha,
-                    centro=centro,
-                    espacio=espacio,
-                    nombre=n,
-                    estado="Presente",
-                    es_nuevo="SI" if (agregar_nueva and n == nueva.strip()) else "NO",
-                    coordinador=nombre_visible,
-                    usuario=usuario,
-                    notas="",
-                )
-
+                append_asistencia_personas(fecha, centro, espacio, n, "Presente", 
+                                           "SI" if (agregar_nueva and n==nueva) else "NO", nombre_visible, usuario)
+            
+            # Guardar ausentes
             if guardar_ausentes:
                 ausentes = [n for n in nombres if n not in presentes]
                 for n in ausentes:
-                    append_asistencia_personas(
-                        fecha=fecha,
-                        centro=centro,
-                        espacio=espacio,
-                        nombre=n,
-                        estado="Ausente",
-                        es_nuevo="NO",
-                        coordinador=nombre_visible,
-                        usuario=usuario,
-                        notas="",
-                    )
+                    append_asistencia_personas(fecha, centro, espacio, n, "Ausente", "NO", nombre_visible, usuario)
 
-        st.toast("✅ Asistencia guardada", icon="✅")
-        st.success("Listo. Se guardó correctamente.")
-        
-        # ✅ NUEVO: Limpiar cache para que se vea el cambio inmediatamente
+        st.toast("✅ Guardado exitoso!")
+        time.sleep(1.5)
         st.cache_data.clear()
-        
-        # ✅ NUEVO: Esperar un toque para que el usuario lea el cartel
-        time.sleep(2)
         st.rerun()
 
 def page_personas(df_personas, centro, usuario):
-    st.subheader("Personas (base del centro)")
-    df_centro = personas_for_centro(df_personas, centro).copy()
-
-    for c in PERSONAS_COLS:
-        if c not in df_centro.columns:
-            df_centro[c] = ""
-
+    st.subheader("Base de Personas")
+    df_centro = personas_for_centro(df_personas, centro)
+    
     c1, c2 = st.columns([2, 1])
-    with c1:
-        q = st.text_input("Buscar", placeholder="Filtrar por nombre...")
-    with c2:
-        solo_activos = st.checkbox("Solo activos", value=True)
-
-    if q.strip():
-        df_centro = df_centro[df_centro["nombre"].astype(str).str.contains(q.strip(), case=False, na=False)]
-    if solo_activos:
-        df_centro = df_centro[df_centro["activo"].astype(str).str.upper().fillna("") != "NO"]
-
-    st.markdown(f"<span class='badge'>Personas visibles: {len(df_centro)}</span>", unsafe_allow_html=True)
-    st.dataframe(df_centro[["nombre","frecuencia","edad","domicilio","notas","activo"]], use_container_width=True)
+    q = c1.text_input("🔍 Buscar persona")
+    activos = c2.checkbox("Ocultar inactivos", value=True)
+    
+    if q: df_centro = df_centro[df_centro["nombre"].str.contains(q, case=False, na=False)]
+    if activos: df_centro = df_centro[df_centro["activo"].astype(str).str.upper() != "NO"]
+    
+    st.dataframe(df_centro[["nombre", "frecuencia", "edad", "notas", "activo"]], use_container_width=True)
 
 def page_reportes(df_asistencia, centro):
-    st.subheader("Reportes (este centro)")
+    st.subheader("Reportes")
     df_latest = latest_asistencia(df_asistencia)
-    if df_latest.empty:
-        st.info("Todavía no hay registros.")
-        return
-
-    anios = sorted(df_latest["anio"].astype(str).unique())
-    anio = st.selectbox("Año", anios, index=len(anios)-1)
-
-    df_c = df_latest[(df_latest["centro"] == centro) & (df_latest["anio"].astype(str) == str(anio))].copy()
+    df_c = df_latest[df_latest["centro"] == centro].copy()
     if df_c.empty:
-        st.info("Todavía no hay registros para este centro / año.")
+        st.info("Sin datos.")
         return
-
+    
+    df_c["fecha_dt"] = pd.to_datetime(df_c["fecha"])
     df_c["presentes_i"] = df_c["presentes"].apply(lambda x: clean_int(x, 0))
-    df_c["fecha_dt"] = pd.to_datetime(df_c["fecha"], errors="coerce")
-    df_c = df_c.sort_values("fecha_dt", ascending=True)
-
-    st.markdown("### Últimos registros (este centro / este año)")
-    st.dataframe(df_c[["fecha","anio","centro","espacio","presentes","coordinador","modo","notas","timestamp"]].tail(30), use_container_width=True)
-
-    st.markdown("### Evolución (por fecha)")
-    serie = df_c.groupby("fecha", as_index=False)["presentes_i"].sum().sort_values("fecha")
-    st.line_chart(serie.set_index("fecha")["presentes_i"])
+    df_c = df_c.sort_values("fecha_dt")
+    
+    st.line_chart(df_c.set_index("fecha")["presentes_i"])
+    st.dataframe(df_c[["fecha", "espacio", "presentes", "coordinador", "notas"]].sort_values("fecha", ascending=False), use_container_width=True)
 
 def page_global(df_asistencia):
-    st.subheader("Global (todos los centros)")
-    df_latest = latest_asistencia(df_asistencia)
-    if df_latest.empty:
-        st.info("Todavía no hay registros globales.")
-        return
+    st.subheader("Panorama Global")
+    df = latest_asistencia(df_asistencia).copy()
+    if df.empty: return
+    df["presentes_i"] = df["presentes"].apply(lambda x: clean_int(x, 0))
+    
+    # Barras por centro (Total histórico del año)
+    anio = str(get_today_ar().year)
+    d = df[df["anio"].astype(str) == anio]
+    st.markdown(f"**Asistencias Acumuladas {anio}**")
+    st.bar_chart(d.groupby("centro")["presentes_i"].sum())
 
-    anios = sorted(df_latest["anio"].astype(str).unique())
-    anio = st.selectbox("Año (global)", anios, index=len(anios)-1)
-
-    d = df_latest[df_latest["anio"].astype(str) == str(anio)].copy()
-    d["presentes_i"] = d["presentes"].apply(lambda x: clean_int(x, 0))
-
-    st.markdown("### Por centro (acumulado)")
-    por = d.groupby("centro", as_index=False)["presentes_i"].sum().sort_values("presentes_i", ascending=False)
-    st.bar_chart(por.set_index("centro")["presentes_i"])
-
+# =========================
+# MAIN APP
+# =========================
 def main():
-    st.title("Sistema de Asistencia — Hogar de Cristo Bahía Blanca")
+    st.title("Sistema Hogar de Cristo")
 
-    ok = login_box()
-    if not ok:
+    if not login_box():
         st.stop()
 
-    usuario = st.session_state.get("usuario", "")
-    centro_asignado = st.session_state.get("centro_asignado", "")
-    nombre_visible = st.session_state.get("nombre_visible", usuario)
+    # Usuario logueado
+    u = st.session_state["usuario"]
+    centro = st.session_state["centro_asignado"]
+    nombre = st.session_state["nombre_visible"]
 
-    if centro_asignado not in CENTROS:
-        st.error("Tu usuario no tiene centro asignado. Revisá [user_profile] en secrets.toml.")
+    if centro not in CENTROS:
+        st.error(f"Centro '{centro}' no válido. Avisar al admin.")
         st.stop()
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### Centro / Coordinador")
-    st.sidebar.markdown(f"**Centro asignado:** {centro_asignado}")
-    st.sidebar.markdown(f"**Quién carga:** {nombre_visible}")
-    
-    # ✅ NUEVO: Botón para recargar caché manualmente
-    if st.sidebar.button("🔄 Actualizar datos"):
+    st.sidebar.markdown(f"📍 **{centro}**")
+    st.sidebar.markdown(f"👤 **{nombre}**")
+
+    if st.sidebar.button("🔄 Refrescar"):
         st.cache_data.clear()
         st.rerun()
 
-    # ✅ NUEVO: Carga optimizada con caché
-    df_asistencia, df_personas = load_all_data()
+    # Cargar datos pesados
+    df_asistencia, df_personas, df_ap = load_all_data()
 
-    df_latest = latest_asistencia(df_asistencia)
+    # Layout Principal
+    kpi_row(latest_asistencia(df_asistencia), centro)
+    
+    # Alertas en Sidebar
+    sidebar_pending(latest_asistencia(df_asistencia), centro)
+    sidebar_alerts(df_ap, centro) # ✅ Alerta de deserción
 
-    st.caption(f"Estás trabajando sobre: **{centro_asignado}** — 👤 **{nombre_visible}**")
-    kpi_row(df_latest, centro_asignado)
-    sidebar_pending(df_latest, centro_asignado)
-
-    tabs = st.tabs(["🧾 Registrar asistencia", "👥 Personas", "📊 Reportes", "🌍 Global"])
-    with tabs[0]:
-        page_registrar_asistencia(df_personas, df_asistencia, centro_asignado, nombre_visible, usuario)
-    with tabs[1]:
-        page_personas(df_personas, centro_asignado, usuario)
-    with tabs[2]:
-        page_reportes(df_asistencia, centro_asignado)
-    with tabs[3]:
+    tab1, tab2, tab3, tab4 = st.tabs(["📝 Asistencia", "👥 Personas", "📈 Reportes", "🌍 Global"])
+    
+    with tab1:
+        page_registrar_asistencia(df_personas, df_asistencia, centro, nombre, u)
+    with tab2:
+        page_personas(df_personas, centro, u)
+    with tab3:
+        page_reportes(df_asistencia, centro)
+    with tab4:
         page_global(df_asistencia)
 
 if __name__ == "__main__":
