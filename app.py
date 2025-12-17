@@ -7,7 +7,7 @@ from gspread.exceptions import APIError
 import time
 import pytz
 import io
-import unicodedata # Para arreglar lo de los tildes
+import unicodedata
 
 # =========================
 # Config UI / Branding
@@ -112,14 +112,12 @@ def normalize_private_key(pk: str) -> str:
     return pk
 
 def clean_string(s):
-    """Elimina tildes y pone mayúsculas para comparar strings de forma segura"""
     if not isinstance(s, str): return ""
-    # Normalizar unicode (eliminar tildes)
     s = ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
     return s.strip().upper()
 
 # =========================
-# Google Sheets connection (HARDCODED)
+# Google Sheets connection
 # =========================
 @st.cache_resource(show_spinner=False)
 def get_gspread_client():
@@ -243,16 +241,11 @@ def last_load_info(df_latest, centro):
 # =========================
 def personas_for_centro(df_personas, centro):
     if df_personas.empty: return df_personas
-    # Filtro más inteligente: compara ignorando mayúsculas y acentos
     if "centro" in df_personas.columns:
-        # Normalizamos la columna del DF y el valor buscado
         centro_clean = clean_string(centro)
-        # Hacemos una copia para no romper el original
         df_temp = df_personas.copy()
-        # Creamos columna temporal normalizada
         df_temp['centro_norm'] = df_temp['centro'].apply(clean_string)
         return df_temp[df_temp['centro_norm'] == centro_clean].copy()
-        
     return df_personas.copy()
 
 def upsert_persona(df_personas, nombre, centro, usuario, **kwargs):
@@ -405,10 +398,13 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     total_presentes = c2.number_input("Total", min_value=0, value=len(presentes))
     
     with st.expander("👤 ¿Vino alguien nuevo?"):
-        cn1, cn2, cn3 = st.columns([2, 1, 1])
+        cn1, cn2 = st.columns(2)
         nueva = cn1.text_input("Nombre completo")
         dni_new = cn2.text_input("DNI (Opcional)")
+        cn3, cn4 = st.columns(2)
         tel_new = cn3.text_input("Tel (Opcional)")
+        # ✅ AQUÍ AGREGUÉ EL CAMPO DE NACIMIENTO
+        nac_new = cn4.text_input("Fecha Nac. (DD/MM/AAAA) (Opcional)")
         agregar_nueva = st.checkbox("Agregar a la base")
 
     df_latest = latest_asistencia(df_asistencia)
@@ -422,7 +418,8 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         if not overwrite: st.error("Confirmá sobreescritura"); st.stop()
         
         if agregar_nueva and nueva.strip():
-            df_personas = upsert_persona(df_personas, nueva, centro, usuario, frecuencia="Nueva", dni=dni_new, telefono=tel_new)
+            # ✅ PASAMOS TAMBIÉN LA FECHA DE NACIMIENTO
+            df_personas = upsert_persona(df_personas, nueva, centro, usuario, frecuencia="Nueva", dni=dni_new, telefono=tel_new, fecha_nacimiento=nac_new)
             if nueva not in presentes: presentes.append(nueva)
         
         if len(presentes)>0: total_presentes = len(presentes)
@@ -441,62 +438,51 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     st.subheader("👥 Legajo Digital y Listado")
     
-    # Preparamos el DataFrame de personas único por centro
     df_centro = personas_for_centro(df_personas, centro)
-    # Nos aseguramos de tener la última versión de cada persona
     df_centro = df_centro.sort_values("timestamp", ascending=True).groupby("nombre").tail(1)
     
     nombres = sorted(df_centro["nombre"].unique())
 
-    # --- SELECTOR DE PERFIL O LISTADO ---
     col_sel, col_act = st.columns([3, 1])
     seleccion = col_sel.selectbox("Seleccionar Persona (Dejar vacío para ver listado completo)", [""] + nombres)
     
     if not seleccion:
-        # VISTA DE LISTADO GENERAL (MEJORADA)
         st.markdown(f"### Listado Histórico de personas que pasaron por {centro}")
         
-        # Filtros rápidos
         col_filtro1, col_filtro2 = st.columns(2)
         filtro_txt = col_filtro1.text_input("🔍 Buscar por nombre")
         solo_activos = col_filtro2.checkbox("Solo activos", value=False)
         
-        # Copia para mostrar
         df_show = df_centro.copy()
         
-        # Aplicar filtros
         if filtro_txt:
             df_show = df_show[df_show["nombre"].str.contains(filtro_txt, case=False, na=False)]
         if solo_activos:
             df_show = df_show[df_show["activo"].str.upper() == "SI"]
             
-        # Ordenar ALFABÉTICAMENTE POR NOMBRE (A-Z)
         df_show = df_show.sort_values("nombre", ascending=True)
 
-        # Métricas del listado
         m1, m2 = st.columns(2)
         m1.metric("Total Personas Históricas", len(df_centro))
         m2.metric("Personas Listadas Ahora", len(df_show))
 
-        # Mostrar tabla limpia (solo columnas útiles)
-        cols_to_show = ["nombre", "frecuencia", "telefono", "dni", "activo"]
-        # Aseguramos que existan las columnas
+        cols_to_show = ["nombre", "frecuencia", "telefono", "dni", "fecha_nacimiento", "activo"]
         for c in cols_to_show:
             if c not in df_show.columns: df_show[c] = ""
             
         st.dataframe(
             df_show[cols_to_show], 
             use_container_width=True,
-            hide_index=True, # Oculta la columna de números 0,1,2...
+            hide_index=True,
             column_config={
                 "nombre": "Nombre y Apellido",
                 "frecuencia": st.column_config.TextColumn("Frecuencia", help="Diaria, Semanal, etc."),
+                "fecha_nacimiento": "Fecha Nac.",
                 "activo": st.column_config.TextColumn("Estado", width="small")
             }
         )
         return
 
-    # VISTA DE PERFIL INDIVIDUAL (SI SELECCIONA ALGUIEN)
     datos_persona = df_centro[df_centro["nombre"] == seleccion].iloc[0]
     
     st.markdown(f"## 👤 {seleccion}")
@@ -508,6 +494,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
         with st.form("edit_persona"):
             dni = st.text_input("DNI", value=datos_persona.get("dni", ""))
             tel = st.text_input("Teléfono", value=datos_persona.get("telefono", ""))
+            # ✅ CAMPO DE FECHA DE NACIMIENTO EN EL PERFIL
             nac = st.text_input("Fecha Nac. (DD/MM/AAAA)", value=datos_persona.get("fecha_nacimiento", ""))
             dom = st.text_input("Domicilio", value=datos_persona.get("domicilio", ""))
             notas_fija = st.text_area("Notas Fijas", value=datos_persona.get("notas", ""))
@@ -598,8 +585,6 @@ def main():
     centro = st.session_state["centro_asignado"]
     nombre = st.session_state["nombre_visible"]
     
-    # --- VALIDACIÓN ROBUSTA DE CENTRO ---
-    # Limpiamos el centro que viene del login y comparamos con la lista oficial
     centro_clean = clean_string(centro)
     match_centro = next((c for c in CENTROS if clean_string(c) == centro_clean), None)
     
@@ -610,7 +595,6 @@ def main():
             st.rerun()
         st.stop()
     else:
-        # Usamos el nombre "bonito" oficial de la lista
         centro = match_centro
 
     st.sidebar.image("logo_hogar.png", width=120)
