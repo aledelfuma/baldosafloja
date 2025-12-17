@@ -380,21 +380,43 @@ def sidebar_birthdays(df_personas, centro):
 
 def sidebar_alerts(df_ap, centro):
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### ⚠️ Alerta: Ausencia")
+    st.sidebar.markdown("### 🚨 Semáforo de Asistencia")
+    
+    # Selector de sensibilidad
+    dias_limite = st.sidebar.slider("Días sin venir para alertar:", min_value=3, max_value=30, value=7)
+    
     if df_ap.empty: return
+    
+    # Filtramos solo este centro y gente que alguna vez vino
     d = df_ap[(df_ap["centro"]==centro) & (df_ap["estado"]=="Presente")].copy()
     if d.empty: return
+    
+    # Calculamos fecha
     d["fecha_dt"] = pd.to_datetime(d["fecha"], errors="coerce")
+    
+    # Agrupamos por persona y buscamos la fecha MÁXIMA (última vez que vino)
     last = d.groupby("nombre")["fecha_dt"].max().reset_index()
+    
     hoy = pd.Timestamp(get_today_ar())
     last["dias"] = (hoy - last["fecha_dt"]).dt.days
-    alertas = last[(last["dias"]>7) & (last["dias"]<60)].sort_values("dias", ascending=False)
-    if alertas.empty: st.sidebar.success("Asistencia regular.")
+    
+    # Filtro: Que falten más de X días Y que no sea gente de hace años (< 90 días)
+    alertas = last[(last["dias"] >= dias_limite) & (last["dias"] < 90)].sort_values("dias", ascending=False)
+    
+    if alertas.empty:
+        st.sidebar.success(f"👏 Todos vinieron hace menos de {dias_limite} días.")
     else:
-        st.sidebar.caption("Ausentes > 7 días:")
+        st.sidebar.warning(f"⚠️ {len(alertas)} personas en riesgo")
         for _, r in alertas.iterrows():
-            st.sidebar.markdown(f"🔴 **{r['nombre']}**: {r['dias']} días")
-
+            # Formato visual de alerta
+            st.sidebar.markdown(
+                f"""
+                <div style="background: rgba(255, 75, 75, 0.15); border-left: 3px solid #ff4b4b; padding: 5px; margin-bottom: 5px; border-radius: 4px;">
+                    <small>🔴 <b>{r['nombre']}</b><br>Falta hace <b>{r['dias']}</b> días</small>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
 # =========================
 # PAGES
 # =========================
@@ -653,3 +675,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
