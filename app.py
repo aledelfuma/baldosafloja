@@ -7,6 +7,7 @@ from gspread.exceptions import APIError
 import time
 import pytz
 import io
+import unicodedata # Para arreglar lo de los tildes
 
 # =========================
 # Config UI / Branding
@@ -105,32 +106,35 @@ CATEGORIAS_SEGUIMIENTO = ["Escucha / Acompañamiento", "Salud", "Trámite (DNI/S
 # =========================
 # Helpers
 # =========================
-def get_secret(path, default=None):
-    try:
-        node = st.secrets
-        for p in path.split("."):
-            node = node[p]
-        return node
-    except Exception:
-        return default
-
 def normalize_private_key(pk: str) -> str:
     if not isinstance(pk, str): return pk
     if "\\n" in pk: pk = pk.replace("\\n", "\n")
     return pk
 
+def clean_string(s):
+    """Elimina tildes y pone mayúsculas para comparar strings de forma segura"""
+    if not isinstance(s, str): return ""
+    # Normalizar unicode (eliminar tildes)
+    s = ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+    return s.strip().upper()
+
 # =========================
-# Google Sheets connection (MODO SEGURO - Lee de Secrets)
+# Google Sheets connection (HARDCODED)
 # =========================
 @st.cache_resource(show_spinner=False)
 def get_gspread_client():
-    # Intenta leer de secrets
-    sa = dict(get_secret("gcp_service_account", {}))
-    
-    if not sa:
-        # Fallback de emergencia si falla secrets (pero idealmente usá secrets)
-        raise KeyError("Falta configuración [gcp_service_account] en secrets.toml")
-
+    sa = {
+        "type": "service_account",
+        "project_id": "hogar-de-cristo-asistencia",
+        "private_key_id": "cb7af14255a324107d2d2119a4f95d4348ed5b90",
+        "private_key": """-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDA6M0EIfQYCvZ/\n2cF1j9knWNLM1nGE0nohznJz8C9XsIJYZyPNXruD/y0cjdiQWyNopjzx3o15hoy2\ncRQOHDBgQA2alX9r7xd7rWvazwOTsgkNpRQVk0+wlOFUZdg79vQe9cn42JB71I0b\n0qsSLaeW35n3c8RFAzcv0XVmUdkRm76lU8pNhBKWOv3/DJJ2wB8VMW4l9Iq7MKyL\ng5t6d7qMPVckc3kGBsq/N+mPiisRjsPLgyvP3IHRzddIvcKiW9JpzNZoSqvOwpha\n2o+eMHuPHcJKev1JcJcU72CO1djfwwGM4L4ioRVVuE4w2EfCNdshSQC8Ht14alL3\ngQ6DMugNAgMBAAECggEAF1x562yzMzAsrsnvkC2V5hpvGMhFYgjdKnfmS10EVrG0\n70C6SLYWrkL6MxGIbt7imFs9WSsS5esh4jwqahUG1LkdDKHbFvaS2PLk81ALhljS\nmNjraDt5NJCrAv38ZDKhWJh6V4zeXmicmAh4mBB4UaCNdDaMR7E+fyd1+KijyWpl\noRqGUdpyEHoKCaXbPKQoGC9lGNs7xB7MGjPGi2pMz6O78oDTE1Obocqxk6sZYjrQ\nCH0jKwqTSosxlAb40hOFlGUUpDW7DF03trH0D9w2vNJTN/PqVJNOp5X7VKf2GTcg\n44ivcaEH2ZZF8hHIn9uDjWglVUFNJEwBGfEBmfVcQQKBgQDkkZzYG9czVslP+OHY\nANFQHAJ1tyEQ69O4YF8RZVLU6+QTIv8GplObaapVa1cAXPp0kMrU/bzUUKs38gZG\n8PQXYYpkCv/iceHqyLSm8KsvtKRSwXBwlzI5sn9XjSE1qAQsfg68LKikK3DswGjB\nc6qnsrm4fhnj1vU/ffsa7Xo5LQKBgQDYD5z3YATFvF5LHv3Ihj3gZZBoJMFss+EA\nt1TVt4KHaI94F224Bp52NDS3sScumQa+01WAaMBmGhPkw0G0hszQ428i5G7TCVuz\nM89Xb1aaQCSyopFKP8dVJYSJXXbwj+Cyno0DQc4jkcjSsfj2GgbG1BAjJqlnUGzr\nKAqBm/r2YQKBgDZZ6dH5zNKIcJZzuECE8UD7aBpV0acUbOQLBpA8Z9X5weJLEBmk\ns3zhQ3/MZoPPmD7fr1u2epCCHjTPeG6mHWTx7NadRvux2ObbkxmfYRWW/vwuw24C\nhg7yQxWumZcIvPVXhGl6tR9UtSWXG1HlD0+RUFhuo/lpxCe07WEZ11aBAoGBANFp\nUJnzVqzQhhQJVbClbBOyXOSTu2XAcrRe/Lqnwru7fFLJYm6a+7tVnkLsUS244/DQ\npG5xGQnc/KsdFPIENT/BMFaBUWj6CQcHkE8OesHGqcr6BhgQ+QJt+qepDz7aNM7r\nHYGqpkGTazHLjaH6V9cecwWe01JvgSHrDUPSCswBAoGAZgc8T9KvJ5r5sZQC/SkN\nSLzLT47WGr57f+WAT2CiaHhBRV2kwInNcsljsHCi1viFyQO/YDCWVEvozTjh6BoF\nrt4XiT6vnkKojyyG5uKBu+WHmXyaSH0aHj8ZCZl/C0Ab8MMAUVJg5zZHWyrztQAJ\nRx/AQ42L3AHtN6gVhU0zvVU=\n-----END PRIVATE KEY-----\n""",
+        "client_email": "hogar-asistencia-bot@hogar-de-cristo-asistencia.iam.gserviceaccount.com",
+        "client_id": "101282710856404935805",
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/hogar-asistencia-bot%40hogar-de-cristo-asistencia.iam.gserviceaccount.com"
+    }
     sa["private_key"] = normalize_private_key(sa.get("private_key", ""))
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_info(sa, scopes=scopes)
@@ -138,9 +142,7 @@ def get_gspread_client():
 
 @st.cache_resource(show_spinner=False)
 def get_spreadsheet():
-    sid = get_secret("sheets.spreadsheet_id")
-    if not sid:
-        raise KeyError("Falta [sheets] spreadsheet_id en secrets.toml")
+    sid = "1nCK2Q2ddxUO-erDwa5jgfGsUYsjZD7e4doHXoQ4N9zg"
     gc = get_gspread_client()
     return gc.open_by_key(sid)
 
@@ -241,8 +243,16 @@ def last_load_info(df_latest, centro):
 # =========================
 def personas_for_centro(df_personas, centro):
     if df_personas.empty: return df_personas
+    # Filtro más inteligente: compara ignorando mayúsculas y acentos
     if "centro" in df_personas.columns:
-        return df_personas[df_personas["centro"] == centro].copy()
+        # Normalizamos la columna del DF y el valor buscado
+        centro_clean = clean_string(centro)
+        # Hacemos una copia para no romper el original
+        df_temp = df_personas.copy()
+        # Creamos columna temporal normalizada
+        df_temp['centro_norm'] = df_temp['centro'].apply(clean_string)
+        return df_temp[df_temp['centro_norm'] == centro_clean].copy()
+        
     return df_personas.copy()
 
 def upsert_persona(df_personas, nombre, centro, usuario, **kwargs):
@@ -429,20 +439,65 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         st.toast("✅ Guardado"); time.sleep(1.5); st.cache_data.clear(); st.rerun()
 
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
-    st.subheader("👥 Legajo Digital")
-    df_centro = personas_for_centro(df_personas, centro)
-    nombres = sorted(list(set(df_centro["nombre"].dropna().unique())))
+    st.subheader("👥 Legajo Digital y Listado")
     
+    # Preparamos el DataFrame de personas único por centro
+    df_centro = personas_for_centro(df_personas, centro)
+    # Nos aseguramos de tener la última versión de cada persona
+    df_centro = df_centro.sort_values("timestamp", ascending=True).groupby("nombre").tail(1)
+    
+    nombres = sorted(df_centro["nombre"].unique())
+
+    # --- SELECTOR DE PERFIL O LISTADO ---
     col_sel, col_act = st.columns([3, 1])
-    seleccion = col_sel.selectbox("Seleccionar Persona", [""] + nombres)
+    seleccion = col_sel.selectbox("Seleccionar Persona (Dejar vacío para ver listado completo)", [""] + nombres)
     
     if not seleccion:
-        st.info("Seleccioná una persona para ver su ficha completa.")
-        st.markdown("### Padrón General")
-        st.dataframe(df_centro.sort_values("timestamp", ascending=False).groupby("nombre").head(1)[["nombre","telefono","dni","frecuencia"]], use_container_width=True)
+        # VISTA DE LISTADO GENERAL (MEJORADA)
+        st.markdown(f"### Listado Histórico de personas que pasaron por {centro}")
+        
+        # Filtros rápidos
+        col_filtro1, col_filtro2 = st.columns(2)
+        filtro_txt = col_filtro1.text_input("🔍 Buscar por nombre")
+        solo_activos = col_filtro2.checkbox("Solo activos", value=False)
+        
+        # Copia para mostrar
+        df_show = df_centro.copy()
+        
+        # Aplicar filtros
+        if filtro_txt:
+            df_show = df_show[df_show["nombre"].str.contains(filtro_txt, case=False, na=False)]
+        if solo_activos:
+            df_show = df_show[df_show["activo"].str.upper() == "SI"]
+            
+        # Ordenar ALFABÉTICAMENTE POR NOMBRE (A-Z)
+        df_show = df_show.sort_values("nombre", ascending=True)
+
+        # Métricas del listado
+        m1, m2 = st.columns(2)
+        m1.metric("Total Personas Históricas", len(df_centro))
+        m2.metric("Personas Listadas Ahora", len(df_show))
+
+        # Mostrar tabla limpia (solo columnas útiles)
+        cols_to_show = ["nombre", "frecuencia", "telefono", "dni", "activo"]
+        # Aseguramos que existan las columnas
+        for c in cols_to_show:
+            if c not in df_show.columns: df_show[c] = ""
+            
+        st.dataframe(
+            df_show[cols_to_show], 
+            use_container_width=True,
+            hide_index=True, # Oculta la columna de números 0,1,2...
+            column_config={
+                "nombre": "Nombre y Apellido",
+                "frecuencia": st.column_config.TextColumn("Frecuencia", help="Diaria, Semanal, etc."),
+                "activo": st.column_config.TextColumn("Estado", width="small")
+            }
+        )
         return
 
-    datos_persona = df_centro[df_centro["nombre"] == seleccion].sort_values("timestamp", ascending=True).tail(1).iloc[0]
+    # VISTA DE PERFIL INDIVIDUAL (SI SELECCIONA ALGUIEN)
+    datos_persona = df_centro[df_centro["nombre"] == seleccion].iloc[0]
     
     st.markdown(f"## 👤 {seleccion}")
     c_info, c_bitacora = st.columns([1, 2])
@@ -456,8 +511,11 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
             nac = st.text_input("Fecha Nac. (DD/MM/AAAA)", value=datos_persona.get("fecha_nacimiento", ""))
             dom = st.text_input("Domicilio", value=datos_persona.get("domicilio", ""))
             notas_fija = st.text_area("Notas Fijas", value=datos_persona.get("notas", ""))
+            activo_chk = st.checkbox("¿Está Activo?", value=(str(datos_persona.get("activo")).upper() != "NO"))
+            
             if st.form_submit_button("💾 Actualizar Datos"):
-                upsert_persona(df_personas, seleccion, centro, usuario, dni=dni, telefono=tel, fecha_nacimiento=nac, domicilio=dom, notas=notas_fija)
+                nuevo_estado = "SI" if activo_chk else "NO"
+                upsert_persona(df_personas, seleccion, centro, usuario, dni=dni, telefono=tel, fecha_nacimiento=nac, domicilio=dom, notas=notas_fija, activo=nuevo_estado)
                 st.toast("Datos actualizados"); st.cache_data.clear(); st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
         
@@ -540,9 +598,20 @@ def main():
     centro = st.session_state["centro_asignado"]
     nombre = st.session_state["nombre_visible"]
     
-    match_centro = next((c for c in CENTROS if c.lower() == centro.lower()), None)
-    if not match_centro: st.error(f"Centro '{centro}' no válido."); st.stop()
-    centro = match_centro
+    # --- VALIDACIÓN ROBUSTA DE CENTRO ---
+    # Limpiamos el centro que viene del login y comparamos con la lista oficial
+    centro_clean = clean_string(centro)
+    match_centro = next((c for c in CENTROS if clean_string(c) == centro_clean), None)
+    
+    if not match_centro:
+        st.error(f"Error de Configuración: El centro '{centro}' no coincide con la lista válida. Revisá mayúsculas y acentos en el Excel.")
+        if st.button("Salir"):
+            st.session_state.clear()
+            st.rerun()
+        st.stop()
+    else:
+        # Usamos el nombre "bonito" oficial de la lista
+        centro = match_centro
 
     st.sidebar.image("logo_hogar.png", width=120)
     st.sidebar.markdown(f"Hola, **{nombre}**")
