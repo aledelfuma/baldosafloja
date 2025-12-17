@@ -62,7 +62,6 @@ section[data-testid="stSidebar"] {{
     border: 1px solid rgba(255, 255, 255, 0.1);
     margin-bottom: 20px;
 }}
-/* Alerta visual para validaciones */
 .validation-error {{
     color: #ff4b4b;
     font-weight: bold;
@@ -70,6 +69,7 @@ section[data-testid="stSidebar"] {{
     border: 1px solid #ff4b4b;
     border-radius: 5px;
     margin-bottom: 10px;
+    background-color: rgba(255, 75, 75, 0.1);
 }}
 </style>
 """
@@ -123,7 +123,7 @@ def clean_string(s):
     return s.strip().upper()
 
 # =========================
-# Google Sheets connection (HARDCODED)
+# Google Sheets connection
 # =========================
 @st.cache_resource(show_spinner=False)
 def get_gspread_client():
@@ -153,13 +153,13 @@ def get_spreadsheet():
 def _open_ws_strict(sh, title: str):
     return sh.worksheet(title)
 
-# ✅ FUNCIÓN CORREGIDA (Evita error 400 si la pestaña ya existe)
+# ✅ FUNCIÓN BLINDADA CONTRA ERROR "ALREADY EXISTS"
 def get_or_create_ws(title: str, cols: list):
     sh = get_spreadsheet()
     try:
         return sh.worksheet(title)
     except Exception:
-        pass # Si falla al abrir, intentamos crear
+        pass 
 
     try:
         ws = sh.add_worksheet(title=title, rows=2000, cols=max(20, len(cols)))
@@ -168,10 +168,7 @@ def get_or_create_ws(title: str, cols: list):
     except Exception as e:
         msg = str(e).lower()
         if "already exists" in msg:
-            # Si dice que ya existe, es porque hubo un race condition o error de lectura previo.
-            # Intentamos abrirla de nuevo.
             return sh.worksheet(title)
-        
         st.error(f"Error crítico en pestaña '{title}': {e}")
         st.stop()
 
@@ -380,43 +377,21 @@ def sidebar_birthdays(df_personas, centro):
 
 def sidebar_alerts(df_ap, centro):
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🚨 Semáforo de Asistencia")
-    
-    # Selector de sensibilidad
-    dias_limite = st.sidebar.slider("Días sin venir para alertar:", min_value=3, max_value=30, value=7)
-    
+    st.sidebar.markdown("### ⚠️ Alerta: Ausencia")
     if df_ap.empty: return
-    
-    # Filtramos solo este centro y gente que alguna vez vino
     d = df_ap[(df_ap["centro"]==centro) & (df_ap["estado"]=="Presente")].copy()
     if d.empty: return
-    
-    # Calculamos fecha
     d["fecha_dt"] = pd.to_datetime(d["fecha"], errors="coerce")
-    
-    # Agrupamos por persona y buscamos la fecha MÁXIMA (última vez que vino)
     last = d.groupby("nombre")["fecha_dt"].max().reset_index()
-    
     hoy = pd.Timestamp(get_today_ar())
     last["dias"] = (hoy - last["fecha_dt"]).dt.days
-    
-    # Filtro: Que falten más de X días Y que no sea gente de hace años (< 90 días)
-    alertas = last[(last["dias"] >= dias_limite) & (last["dias"] < 90)].sort_values("dias", ascending=False)
-    
-    if alertas.empty:
-        st.sidebar.success(f"👏 Todos vinieron hace menos de {dias_limite} días.")
+    alertas = last[(last["dias"]>7) & (last["dias"]<60)].sort_values("dias", ascending=False)
+    if alertas.empty: st.sidebar.success("Asistencia regular.")
     else:
-        st.sidebar.warning(f"⚠️ {len(alertas)} personas en riesgo")
+        st.sidebar.caption("Ausentes > 7 días:")
         for _, r in alertas.iterrows():
-            # Formato visual de alerta
-            st.sidebar.markdown(
-                f"""
-                <div style="background: rgba(255, 75, 75, 0.15); border-left: 3px solid #ff4b4b; padding: 5px; margin-bottom: 5px; border-radius: 4px;">
-                    <small>🔴 <b>{r['nombre']}</b><br>Falta hace <b>{r['dias']}</b> días</small>
-                </div>
-                """, 
-                unsafe_allow_html=True
-            )
+            st.sidebar.markdown(f"🔴 **{r['nombre']}**: {r['dias']} días")
+
 # =========================
 # PAGES
 # =========================
@@ -444,12 +419,12 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         nac_new = cn4.text_input("Fecha Nac. (DD/MM/AAAA) (Opcional)")
         agregar_nueva = st.checkbox("Agregar a la base")
         
-        # ✅ VALIDACIÓN DE DUPLICADOS DNI (NUEVO)
+        # ✅ VALIDACIÓN DE DUPLICADOS DNI
         if agregar_nueva and dni_new.strip() and not df_personas.empty:
             existe_dni = df_personas[df_personas['dni'].astype(str).str.strip() == dni_new.strip()]
             if not existe_dni.empty:
                 nombre_existente = existe_dni.iloc[0]['nombre']
-                st.markdown(f"<div class='validation-error'>⚠️ CUIDADO: El DNI {dni_new} ya pertenece a: <b>{nombre_existente}</b></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='validation-error'>⚠️ ATENCIÓN: El DNI {dni_new} ya pertenece a: <b>{nombre_existente}</b></div>", unsafe_allow_html=True)
 
     df_latest = latest_asistencia(df_asistencia)
     ya = df_latest[(df_latest.get("fecha","")==fecha) & (df_latest.get("centro","")==centro) & (df_latest.get("espacio","")==espacio)]
@@ -462,8 +437,6 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         if not overwrite: st.error("Confirmá sobreescritura"); st.stop()
         
         if agregar_nueva and nueva.strip():
-            # Si hay alerta de DNI duplicado, podrías bloquear el guardado, o dejarlo bajo responsabilidad del usuario.
-            # Aquí lo dejamos pasar pero ya vio el aviso.
             df_personas = upsert_persona(df_personas, nueva, centro, usuario, frecuencia="Nueva", dni=dni_new, telefono=tel_new, fecha_nacimiento=nac_new)
             if nueva not in presentes: presentes.append(nueva)
         
@@ -484,7 +457,6 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     st.subheader("👥 Legajo Digital y Listado")
     
     df_centro = personas_for_centro(df_personas, centro)
-    # Deduplicar por nombre, quedándonos con la última actualización
     df_centro = df_centro.sort_values("timestamp", ascending=True).groupby("nombre").tail(1)
     
     nombres = sorted(df_centro["nombre"].unique())
@@ -493,7 +465,6 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     seleccion = col_sel.selectbox("Seleccionar Persona (Dejar vacío para ver listado completo)", [""] + nombres)
     
     if not seleccion:
-        # LISTADO GENERAL
         st.markdown(f"### Listado Histórico")
         col_filtro1, col_filtro2 = st.columns(2)
         filtro_txt = col_filtro1.text_input("🔍 Buscar por nombre")
@@ -528,7 +499,6 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
         )
         return
 
-    # PERFIL INDIVIDUAL
     datos_persona = df_centro[df_centro["nombre"] == seleccion].iloc[0]
     
     st.markdown(f"## 👤 {seleccion}")
@@ -593,24 +563,16 @@ def page_reportes(df_asistencia, centro):
     df_c["presentes_i"] = df_c["presentes"].apply(lambda x: clean_int(x, 0))
     df_c = df_c.sort_values("fecha_dt")
     
-    # ✅ RANKING DE ASISTENCIA (NUEVO)
     c1, c2 = st.columns([3,1])
     c1.line_chart(df_c.set_index("fecha")["presentes_i"])
     with c2:
-        st.markdown("##### 🏆 Ranking (Últimos 30 días)")
-        # Lógica simple para ranking (si tenemos asistencia_personas cargado en global, sería mejor, pero acá usamos data agregada)
-        # Nota: Como df_c tiene totales diarios, no podemos saber el nombre de la persona aquí.
-        # Para ranking real necesitaríamos df_ap. 
-        # Vamos a mostrar resumen de promedio semanal.
-        promedio = df_c["presentes_i"].mean()
-        st.metric("Promedio Diario", f"{promedio:.1f}")
-        
-        # Botón descarga
-        st.markdown("---")
+        st.markdown("##### 🏆 Ranking (General)")
+        # Se podría mejorar si cruzamos con df_ap para ver nombres
+        st.markdown("Descargar informe completo:")
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
             df_c.to_excel(writer, sheet_name='Asistencia', index=False)
-        st.download_button("📥 Descargar Excel", buffer, f"asistencia_{centro}.xlsx", "application/vnd.ms-excel")
+        st.download_button("📥 Excel", buffer, f"asistencia_{centro}.xlsx", "application/vnd.ms-excel")
     
     st.dataframe(df_c[["fecha", "espacio", "presentes", "coordinador", "notas"]].sort_values("fecha", ascending=False), use_container_width=True)
 
@@ -675,4 +637,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
