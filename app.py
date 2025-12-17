@@ -19,7 +19,7 @@ st.set_page_config(
     page_title="Hogar de Cristo",
     page_icon="🏠",
     layout="wide",
-    initial_sidebar_state="collapsed", # Barra lateral cerrada por defecto
+    initial_sidebar_state="collapsed",
 )
 
 CSS = f"""
@@ -28,11 +28,10 @@ CSS = f"""
   --primary: {PRIMARY};
   --secondary: {SECONDARY};
 }}
-/* Ocultar menú hamburguesa y footer para que se vea limpio */
 #MainMenu {{visibility: hidden;}}
 footer {{visibility: hidden;}}
 
-/* Estilo del Encabezado Superior */
+/* Top Bar */
 .top-bar {{
     background-color: rgba(255,255,255,0.05);
     padding: 15px;
@@ -40,16 +39,10 @@ footer {{visibility: hidden;}}
     border-bottom: 2px solid {PRIMARY};
     margin-bottom: 20px;
 }}
-.user-info {{
-    font-size: 1.1rem;
-    font-weight: bold;
-}}
-.center-info {{
-    color: #aaa;
-    font-size: 0.9rem;
-}}
+.user-info {{ font-size: 1.1rem; font-weight: bold; }}
+.center-info {{ color: #aaa; font-size: 0.9rem; }}
 
-/* KPIs y Tarjetas */
+/* KPIs */
 .kpi {{
   border: 1px solid rgba(255,255,255,.10);
   border-radius: 12px;
@@ -57,45 +50,15 @@ footer {{visibility: hidden;}}
   background: rgba(0,0,0,.20);
   text-align: center;
 }}
-.kpi h3 {{
-  margin: 0;
-  font-size: .8rem;
-  opacity: .8;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}}
-.kpi .v {{
-  font-size: 1.8rem;
-  font-weight: 700;
-  margin-top: .1rem;
-  color: white;
-}}
+.kpi h3 {{ margin: 0; font-size: .8rem; opacity: .8; text-transform: uppercase; letter-spacing: 1px; }}
+.kpi .v {{ font-size: 1.8rem; font-weight: 700; margin-top: .1rem; color: white; }}
 
-/* Alertas en el Top */
-.alert-box {{
-    padding: 10px;
-    border-radius: 8px;
-    margin-bottom: 10px;
-    font-size: 0.9rem;
-    border: 1px solid transparent;
-}}
-.alert-danger {{
-    background-color: rgba(255, 75, 75, 0.15);
-    border-color: #ff4b4b;
-    color: #ffcccb;
-}}
-.alert-success {{
-    background-color: rgba(40, 167, 69, 0.15);
-    border-color: #28a745;
-    color: #d4edda;
-}}
-.alert-info {{
-    background-color: rgba(23, 162, 184, 0.15);
-    border-color: #17a2b8;
-    color: #d1ecf1;
-}}
+/* Alertas */
+.alert-box {{ padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 0.9rem; border: 1px solid transparent; }}
+.alert-danger {{ background-color: rgba(255, 75, 75, 0.15); border-color: #ff4b4b; color: #ffcccb; }}
+.alert-success {{ background-color: rgba(40, 167, 69, 0.15); border-color: #28a745; color: #d4edda; }}
+.alert-info {{ background-color: rgba(23, 162, 184, 0.15); border-color: #17a2b8; color: #d1ecf1; }}
 
-/* Perfil */
 .profile-card {{
     background-color: rgba(255, 255, 255, 0.05);
     padding: 20px;
@@ -108,12 +71,20 @@ footer {{visibility: hidden;}}
 st.markdown(CSS, unsafe_allow_html=True)
 
 # =========================
-# Zona Horaria
+# Zona Horaria & Helpers
 # =========================
 TZ_AR = pytz.timezone('America/Argentina/Buenos_Aires')
 
 def get_now_ar_str(): return datetime.now(TZ_AR).strftime("%Y-%m-%d %H:%M:%S")
 def get_today_ar(): return datetime.now(TZ_AR).date()
+
+def calculate_age(born):
+    try:
+        born = pd.to_datetime(born, dayfirst=True).date()
+        today = get_today_ar()
+        return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+    except:
+        return 0
 
 # =========================
 # Constantes y Schemas
@@ -136,7 +107,7 @@ DEFAULT_ESPACIO = "General"
 CATEGORIAS_SEGUIMIENTO = ["Escucha / Acompañamiento", "Salud", "Trámite (DNI/Social)", "Educación", "Familiar", "Crisis / Conflicto", "Otro"]
 
 # =========================
-# Helpers
+# Google Sheets (Hardcoded)
 # =========================
 def normalize_private_key(pk: str) -> str:
     if not isinstance(pk, str): return pk
@@ -152,12 +123,8 @@ def clean_int(x, default=0):
     try: return int(float(str(x).strip()))
     except: return default
 
-def norm_text(x):
-    return str(x).strip() if x else ""
+def norm_text(x): return str(x).strip() if x else ""
 
-# =========================
-# Google Sheets (HARDCODED)
-# =========================
 @st.cache_resource(show_spinner=False)
 def get_gspread_client():
     sa = {
@@ -192,15 +159,14 @@ def get_or_create_ws(title: str, cols: list):
         ws.update("A1", [cols])
         return ws
     except Exception as e:
-        msg = str(e).lower()
-        if "already exists" in msg: return sh.worksheet(title)
+        if "already exists" in str(e).lower(): return sh.worksheet(title)
         st.error(f"Error crítico: {e}"); st.stop()
 
 def safe_get_all_values(ws, tries=3):
     for i in range(tries):
         try: return ws.get_all_values()
         except: time.sleep(0.5)
-    st.error("Error de conexión con Sheets."); st.stop()
+    st.error("Error conexión Sheets."); st.stop()
 
 def read_ws_df(title: str, cols: list) -> pd.DataFrame:
     ws = get_or_create_ws(title, cols)
@@ -227,11 +193,10 @@ def append_ws_rows(title: str, cols: list, rows: list[list]):
     ws.append_rows(rows, value_input_option="USER_ENTERED")
 
 # =========================
-# Data Loaders
+# Data & Logic
 # =========================
 @st.cache_data(ttl=600, show_spinner=False)
-def get_users_db():
-    return read_ws_df(USUARIOS_TAB, USUARIOS_COLS)
+def get_users_db(): return read_ws_df(USUARIOS_TAB, USUARIOS_COLS)
 
 @st.cache_data(ttl=300, show_spinner="Sincronizando...")
 def load_all_data():
@@ -241,9 +206,6 @@ def load_all_data():
     df_seg = read_ws_df(SEGUIMIENTO_TAB, SEGUIMIENTO_COLS)
     return df_a, df_p, df_ap, df_seg
 
-# =========================
-# Lógica de Negocio
-# =========================
 def year_of(fecha_iso: str) -> str:
     try: return str(pd.to_datetime(fecha_iso).year)
     except: return str(get_today_ar().year)
@@ -311,7 +273,7 @@ def append_seguimiento(fecha, centro, nombre, categoria, observacion, usuario):
     append_ws_rows(SEGUIMIENTO_TAB, SEGUIMIENTO_COLS, [[row.get(c, "") for c in SEGUIMIENTO_COLS]])
 
 # =========================
-# UI COMPONENTES (NUEVOS - ARRIBA)
+# UI COMPONENTES
 # =========================
 def show_login_screen():
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -335,7 +297,6 @@ def show_login_screen():
     st.stop()
 
 def show_top_header(nombre, centro):
-    # Fila superior con Logo, Info y Botones
     c1, c2, c3 = st.columns([1, 4, 1])
     with c1:
         try: st.image("logo_hogar.png", width=100)
@@ -344,32 +305,25 @@ def show_top_header(nombre, centro):
         st.markdown(f"<div class='user-info'>Hola, {nombre}</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='center-info'>📍 {centro}</div>", unsafe_allow_html=True)
     with c3:
-        if st.button("Salir", key="logout_top", use_container_width=True):
+        if st.button("Salir", key="logout", use_container_width=True):
             st.session_state.clear(); st.cache_data.clear(); st.rerun()
-        if st.button("🔄 Refrescar", key="refresh_top", use_container_width=True):
+        if st.button("🔄 Refrescar", key="refresh", use_container_width=True):
             st.cache_data.clear(); st.rerun()
 
 def show_top_alerts(df_latest, df_personas, df_ap, centro):
-    # Panel de Novedades (Estado, Cumples, Ausencias)
     last_date, days = last_load_info(df_latest, centro)
     
-    # Pre-calculos
-    # 1. Cumpleaños
     cumples = []
     if not df_personas.empty:
         df_c = personas_for_centro(df_personas, centro)
-        df_c["timestamp_dt"] = pd.to_datetime(df_c["timestamp"], errors="coerce")
-        df_c = df_c.sort_values("timestamp_dt").groupby("nombre").tail(1)
         today = get_today_ar()
         for _, row in df_c.iterrows():
-            fn_str = str(row.get("fecha_nacimiento", "")).strip()
             try:
-                fn = pd.to_datetime(fn_str, dayfirst=True, errors="coerce")
+                fn = pd.to_datetime(str(row.get("fecha_nacimiento")), dayfirst=True, errors="coerce")
                 if not pd.isna(fn) and fn.month == today.month and fn.day == today.day:
                     cumples.append(row["nombre"])
             except: pass
 
-    # 2. Ausencias
     ausentes = []
     if not df_ap.empty:
         d = df_ap[(df_ap["centro"]==centro) & (df_ap["estado"]=="Presente")].copy()
@@ -378,44 +332,33 @@ def show_top_alerts(df_latest, df_personas, df_ap, centro):
             last = d.groupby("nombre")["fecha_dt"].max().reset_index()
             hoy_ts = pd.Timestamp(get_today_ar())
             last["dias"] = (hoy_ts - last["fecha_dt"]).dt.days
-            # Criterio: > 7 días y < 90 días
             alertas = last[(last["dias"]>7) & (last["dias"]<90)].sort_values("dias", ascending=False)
-            for _, r in alertas.iterrows():
-                ausentes.append(f"{r['nombre']} ({r['dias']} días)")
+            for _, r in alertas.iterrows(): ausentes.append(f"{r['nombre']} ({r['dias']} días)")
 
-    # Renderizar Columnas
     ac1, ac2, ac3 = st.columns(3)
-    
     with ac1:
-        st.markdown("**Estado de Carga**")
-        if last_date is None:
-             st.markdown("<div class='alert-box alert-danger'>⚠️ Sin cargas previas</div>", unsafe_allow_html=True)
-        elif days == 0:
-             st.markdown("<div class='alert-box alert-success'>✅ Al día (Cargado hoy)</div>", unsafe_allow_html=True)
-        else:
-             st.markdown(f"<div class='alert-box alert-info'>⏰ Última: {last_date} ({days}d atrás)</div>", unsafe_allow_html=True)
-
+        st.markdown("**Estado**")
+        if last_date is None: st.markdown("<div class='alert-box alert-danger'>⚠️ Sin cargas</div>", unsafe_allow_html=True)
+        elif days == 0: st.markdown("<div class='alert-box alert-success'>✅ Al día (Hoy)</div>", unsafe_allow_html=True)
+        else: st.markdown(f"<div class='alert-box alert-info'>⏰ Última: {last_date} ({days}d)</div>", unsafe_allow_html=True)
     with ac2:
         if cumples:
-            st.markdown("**🎂 Cumpleaños Hoy**")
-            with st.expander(f"🎉 {len(cumples)} cumplen años!", expanded=True):
+            st.markdown("**🎂 Cumples Hoy**")
+            with st.expander(f"🎉 {len(cumples)}!", expanded=True):
                 for c in cumples: st.write(f"- {c}")
         else:
             st.markdown("**🎂 Cumpleaños**")
-            st.caption("No hay cumples hoy.")
-
+            st.caption("Nadie hoy.")
     with ac3:
         if ausentes:
-            st.markdown("**🚨 Alerta Ausencias**")
-            with st.expander(f"⚠️ {len(ausentes)} en riesgo", expanded=False):
-                st.caption("Faltan hace > 7 días:")
+            st.markdown("**🚨 Alerta**")
+            with st.expander(f"⚠️ {len(ausentes)} ausentes", expanded=False):
                 for a in ausentes: st.write(f"🔴 {a}")
         else:
-            st.markdown("**🚨 Alerta Ausencias**")
-            st.caption("Asistencia regular.")
+            st.markdown("**🚨 Alerta**")
+            st.caption("Todo OK.")
 
 def kpi_row_full(df_latest, centro):
-    # KPIs tradicionales, ahora debajo de las alertas
     hoy_date = get_today_ar()
     hoy = hoy_date.isoformat()
     week_ago = (hoy_date - timedelta(days=6)).isoformat()
@@ -440,10 +383,9 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     st.subheader(f"📝 Carga Diaria: {centro}")
     fecha = st.date_input("Fecha", value=get_today_ar())
     
-    # --- VALIDACIÓN DE FECHA FUTURA (NUEVO) ---
     if fecha > get_today_ar():
         st.error("⛔ No se puede cargar asistencia futura.")
-        return # Corta la función si la fecha es mañana
+        return
     
     fecha_str = fecha.isoformat()
     espacio = st.selectbox("Espacio", ESPACIOS_MARANATHA) if centro == "Casa Maranatha" else DEFAULT_ESPACIO
@@ -467,12 +409,10 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         nac_new = cn4.text_input("Fecha Nac. (DD/MM/AAAA) (Opcional)")
         agregar_nueva = st.checkbox("Agregar a la base")
         
-        # Validación visual de DNI
         if agregar_nueva and dni_new.strip() and not df_personas.empty:
             existe_dni = df_personas[df_personas['dni'].astype(str).str.strip() == dni_new.strip()]
             if not existe_dni.empty:
-                nombre_existente = existe_dni.iloc[0]['nombre']
-                st.markdown(f"<div class='alert-box alert-danger'>⚠️ DNI duplicado: Pertenece a <b>{nombre_existente}</b></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='alert-box alert-danger'>⚠️ DNI duplicado: {existe_dni.iloc[0]['nombre']}</div>", unsafe_allow_html=True)
 
     df_latest = latest_asistencia(df_asistencia)
     ya = df_latest[(df_latest.get("fecha","")==fecha_str) & (df_latest.get("centro","")==centro) & (df_latest.get("espacio","")==espacio)]
@@ -499,7 +439,8 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
             for n in ausentes:
                 append_asistencia_personas(fecha_str, centro, espacio, n, "Ausente", "NO", nombre_visible, usuario)
 
-        st.toast("✅ Guardado"); time.sleep(1.5); st.cache_data.clear(); st.rerun()
+        st.balloons() # ✨ Confeti al guardar
+        st.toast("✅ Guardado Exitoso"); time.sleep(1.5); st.cache_data.clear(); st.rerun()
 
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     st.subheader("👥 Legajo Digital")
@@ -512,6 +453,14 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     
     if not seleccion:
         st.markdown(f"### Listado Histórico")
+        
+        # --- NUEVO: BOTÓN DESCARGAR PADRÓN ---
+        with st.expander("📥 Descargar Padrón Completo"):
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                df_centro.to_excel(writer, sheet_name='Personas', index=False)
+            st.download_button("Bajar Excel de Personas", buffer, f"padron_{centro}.xlsx", "application/vnd.ms-excel")
+
         col_filtro1, col_filtro2 = st.columns(2)
         filtro_txt = col_filtro1.text_input("🔍 Buscar")
         solo_activos = col_filtro2.checkbox("Solo activos", value=False)
@@ -550,16 +499,13 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                 st.toast("Actualizado"); st.cache_data.clear(); st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # --- NUEVO: HISTORIAL DE VISITAS EN PERFIL ---
         if not df_ap.empty:
             st.markdown("#### 🏃 Últimas Visitas")
             hist = df_ap[(df_ap["nombre"]==seleccion) & (df_ap["centro"]==centro) & (df_ap["estado"]=="Presente")].copy()
             if not hist.empty:
                 hist["fecha_dt"] = pd.to_datetime(hist["fecha"], errors="coerce")
-                hist = hist.sort_values("fecha_dt", ascending=False).head(5) # Top 5 recientes
+                hist = hist.sort_values("fecha_dt", ascending=False).head(5)
                 st.dataframe(hist[["fecha", "espacio"]], use_container_width=True, hide_index=True)
-            else:
-                st.info("Sin asistencias registradas.")
 
     with c_bitacora:
         st.markdown("#### 📖 Bitácora")
@@ -592,15 +538,14 @@ def page_reportes(df_asistencia, centro):
     df_latest = latest_asistencia(df_asistencia)
     df_c = df_latest[df_latest["centro"] == centro].copy()
     
-    # --- NUEVO: BOTÓN DE RESPALDO TOTAL ---
     with st.expander("💾 Seguridad / Copia de Seguridad"):
-        st.caption("Descargar una copia de TODAS las asistencias para guardar en tu PC.")
+        st.caption("Descargar copia de TODAS las asistencias.")
         buffer_backup = io.BytesIO()
         with pd.ExcelWriter(buffer_backup, engine='xlsxwriter') as writer:
             df_latest.to_excel(writer, sheet_name='Global_Asistencias', index=False)
         st.download_button("📥 Descargar RESPALDO COMPLETO", buffer_backup, f"BACKUP_TOTAL_{date.today()}.xlsx", "application/vnd.ms-excel")
 
-    if df_c.empty: st.info("Sin datos del centro."); return
+    if df_c.empty: st.info("Sin datos."); return
     
     df_c["fecha_dt"] = pd.to_datetime(df_c["fecha"])
     df_c["presentes_i"] = df_c["presentes"].apply(lambda x: clean_int(x, 0))
@@ -609,7 +554,7 @@ def page_reportes(df_asistencia, centro):
     c1, c2 = st.columns([3,1])
     c1.line_chart(df_c.set_index("fecha")["presentes_i"])
     with c2:
-        st.markdown("##### Ranking (General)")
+        st.markdown("##### Resumen")
         st.metric("Promedio Diario", f"{df_c['presentes_i'].mean():.1f}")
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
@@ -618,23 +563,33 @@ def page_reportes(df_asistencia, centro):
     
     st.dataframe(df_c[["fecha", "espacio", "presentes", "coordinador", "notas"]].sort_values("fecha", ascending=False), use_container_width=True)
 
-def page_global(df_asistencia, df_ap):
+def page_global(df_asistencia, df_personas, df_ap):
     st.subheader("🌍 Panorama Global")
     df = latest_asistencia(df_asistencia).copy()
     if df.empty: return
     df["presentes_i"] = df["presentes"].apply(lambda x: clean_int(x, 0))
     anio = str(get_today_ar().year)
     
+    # --- NUEVO: CÁLCULO DE EDADES PARA EL GRÁFICO ---
+    df_personas_unq = df_personas.sort_values("timestamp").groupby("nombre").tail(1)
+    df_personas_unq["edad_calc"] = df_personas_unq["fecha_nacimiento"].apply(calculate_age)
+    df_personas_unq = df_personas_unq[df_personas_unq["edad_calc"] > 0] # Solo fechas válidas
+    
+    # Categorías de edad
+    bins = [0, 12, 18, 30, 50, 100]
+    labels = ['Niños (0-12)', 'Adolescentes (13-18)', 'Jóvenes (19-30)', 'Adultos (31-50)', 'Mayores (50+)']
+    df_personas_unq['rango_edad'] = pd.cut(df_personas_unq['edad_calc'], bins=bins, labels=labels, right=False)
+    
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(f"**Asistencias {anio}**")
         st.bar_chart(df[df["anio"].astype(str)==anio].groupby("centro")["presentes_i"].sum())
     with c2:
-        st.markdown("**Nuevos Ingresos**")
-        if not df_ap.empty:
-            nuevos = df_ap[(df_ap["es_nuevo"]=="SI") & (df_ap["anio"].astype(str)==anio)]
-            if not nuevos.empty: st.bar_chart(nuevos.groupby("centro").size(), color="#63296C")
-            else: st.info("Sin nuevos ingresos.")
+        st.markdown("**👥 Distribución por Edad (Padrón)**")
+        if not df_personas_unq.empty:
+            st.bar_chart(df_personas_unq['rango_edad'].value_counts().sort_index(), color="#63296C")
+        else:
+            st.info("Falta cargar fechas de nacimiento para ver este gráfico.")
 
 # =========================
 # MAIN
@@ -648,27 +603,22 @@ def main():
     
     centro_clean = clean_string(centro)
     match_centro = next((c for c in CENTROS if clean_string(c) == centro_clean), None)
-    if not match_centro:
-        st.error(f"Error: Centro '{centro}' no válido."); st.stop()
+    if not match_centro: st.error("Centro inválido."); st.stop()
     centro = match_centro
 
-    # 1. MOSTRAR ENCABEZADO SUPERIOR (Ya no hay sidebar)
     show_top_header(nombre, centro)
-
-    # 2. CARGAR DATOS
+    
     df_asistencia, df_personas, df_ap, df_seg = load_all_data()
 
-    # 3. ALERTAS Y KPIs ARRIBA
     show_top_alerts(latest_asistencia(df_asistencia), df_personas, df_ap, centro)
     kpi_row_full(latest_asistencia(df_asistencia), centro)
 
-    # 4. TABS
     st.markdown("---")
     t1, t2, t3, t4 = st.tabs(["📝 Asistencia", "👥 Legajo", "📊 Reportes", "🌍 Global"])
     with t1: page_registrar_asistencia(df_personas, df_asistencia, centro, nombre, u)
     with t2: page_personas_full(df_personas, df_ap, df_seg, centro, u)
     with t3: page_reportes(df_asistencia, centro)
-    with t4: page_global(df_asistencia, df_ap)
+    with t4: page_global(df_asistencia, df_personas, df_ap)
 
 if __name__ == "__main__":
     main()
