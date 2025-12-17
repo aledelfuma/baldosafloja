@@ -6,6 +6,7 @@ import gspread
 from gspread.exceptions import APIError
 import time
 import pytz
+import io # Para la descarga de Excel
 
 # =========================
 # Config UI / Branding
@@ -17,7 +18,7 @@ st.set_page_config(
     page_title="Asistencia — Hogar de Cristo Bahía Blanca",
     page_icon="🧾",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed", # Colapsado al inicio para limpiar el login
 )
 
 CSS = f"""
@@ -53,20 +54,13 @@ section[data-testid="stSidebar"] {{
   font-weight: 700;
   margin-top: .2rem;
 }}
-.alert-box {{
-    padding: 10px;
-    border-left: 4px solid #ff4b4b;
-    background-color: rgba(255, 75, 75, 0.1);
-    margin-bottom: 10px;
-    border-radius: 4px;
-}}
-hr {{
-  border: none;
-  border-top: 1px solid rgba(255,255,255,.10);
-}}
-.small {{
-  opacity: .85;
-  font-size: .9rem;
+/* Estilo para el Login Centralizado */
+.login-container {{
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 2rem;
+    border-radius: 10px;
+    background-color: rgba(255,255,255,0.05);
+    text-align: center;
 }}
 </style>
 """
@@ -89,34 +83,20 @@ def get_today_ar():
 ASISTENCIA_TAB = "asistencia"
 PERSONAS_TAB = "personas"
 ASISTENCIA_PERSONAS_TAB = "asistencia_personas"
-USUARIOS_TAB = "config_usuarios"  # ✅ NUEVA PESTAÑA
+USUARIOS_TAB = "config_usuarios"
 
-ASISTENCIA_COLS = [
-    "timestamp", "fecha", "anio", "centro", "espacio",
-    "presentes", "coordinador", "modo", "notas", "usuario", "accion",
-]
-
-PERSONAS_COLS = [
-    "nombre", "frecuencia", "centro", "edad", "domicilio",
-    "notas", "activo", "timestamp", "usuario",
-]
-
-ASISTENCIA_PERSONAS_COLS = [
-    "timestamp", "fecha", "anio", "centro", "espacio",
-    "nombre", "estado", "es_nuevo", "coordinador", "usuario", "notas",
-]
-
-USUARIOS_COLS = ["usuario", "password", "centro", "nombre"] # ✅ NUEVAS COLUMNAS
+ASISTENCIA_COLS = ["timestamp", "fecha", "anio", "centro", "espacio", "presentes", "coordinador", "modo", "notas", "usuario", "accion"]
+PERSONAS_COLS = ["nombre", "frecuencia", "centro", "edad", "domicilio", "notas", "activo", "timestamp", "usuario"]
+ASISTENCIA_PERSONAS_COLS = ["timestamp", "fecha", "anio", "centro", "espacio", "nombre", "estado", "es_nuevo", "coordinador", "usuario", "notas"]
+USUARIOS_COLS = ["usuario", "password", "centro", "nombre"]
 
 # =========================
 # Centros / espacios
 # =========================
+# IMPORTANTE: Deben coincidir EXACTAMENTE con lo que escribas en el Excel
 CENTROS = ["Calle Belén", "Nudo a Nudo", "Casa Maranatha"]
 
-ESPACIOS_MARANATHA = [
-    "Taller de costura", "Apoyo escolar (Primaria)", "Apoyo escolar (Secundaria)",
-    "Fines", "Espacio Joven", "La Ronda", "General",
-]
+ESPACIOS_MARANATHA = ["Taller de costura", "Apoyo escolar (Primaria)", "Apoyo escolar (Secundaria)", "Fines", "Espacio Joven", "La Ronda", "General"]
 DEFAULT_ESPACIO = "General"
 
 # =========================
@@ -161,10 +141,8 @@ def _open_ws_strict(sh, title: str):
 
 def get_or_create_ws(title: str, cols: list, rows: int = 2000):
     sh = get_spreadsheet()
-    try:
-        return _open_ws_strict(sh, title)
-    except Exception:
-        pass
+    try: return _open_ws_strict(sh, title)
+    except Exception: pass
     try:
         ws = sh.add_worksheet(title=title, rows=rows, cols=max(20, len(cols)))
         ws.update("A1", [cols])
@@ -175,12 +153,9 @@ def get_or_create_ws(title: str, cols: list, rows: int = 2000):
 
 def safe_get_all_values(ws, tries=4):
     for i in range(tries):
-        try:
-            return ws.get_all_values()
-        except APIError as e:
-            time.sleep(2 ** i * 0.5)
-        except Exception:
-            time.sleep(2 ** i * 0.5)
+        try: return ws.get_all_values()
+        except APIError as e: time.sleep(2 ** i * 0.5)
+        except Exception: time.sleep(2 ** i * 0.5)
     st.error("Error leyendo Google Sheets (Timeout/Quota).")
     st.stop()
 
@@ -192,85 +167,38 @@ def read_ws_df(title: str, cols: list) -> pd.DataFrame:
         return pd.DataFrame(columns=cols)
     header = values[0]
     body = values[1:] if len(values) > 1 else []
-    
-    # Manejo robusto de columnas
     df = pd.DataFrame(body)
     if not df.empty:
-        # Si hay más columnas en el sheet que en la config, cortamos
         df = df.iloc[:, :len(header)]
         df.columns = header
     else:
         df = pd.DataFrame(columns=header)
-
-    # Asegurar que existan todas las columnas pedidas
     for c in cols:
-        if c not in df.columns:
-            df[c] = ""
+        if c not in df.columns: df[c] = ""
     return df[cols]
 
 def append_ws_rows(title: str, cols: list, rows: list[list]):
     ws = get_or_create_ws(title, cols)
     first = safe_get_all_values(ws)[:1]
-    if not first or first[0][: len(cols)] != cols:
-        ws.update("A1", [cols])
+    if not first or first[0][: len(cols)] != cols: ws.update("A1", [cols])
     ws.append_rows(rows, value_input_option="USER_ENTERED")
 
 # =========================
-# ✅ CACHING & LOADERS
+# CACHING & LOADERS
 # =========================
-
 @st.cache_data(ttl=600, show_spinner="Cargando usuarios...")
 def get_users_db():
-    """Lee la pestaña de usuarios para el login"""
     return read_ws_df(USUARIOS_TAB, USUARIOS_COLS)
 
 @st.cache_data(ttl=600, show_spinner="Actualizando datos...")
 def load_all_data():
-    """Carga datos masivos una vez logueado"""
     df_a = read_ws_df(ASISTENCIA_TAB, ASISTENCIA_COLS)
     df_p = read_ws_df(PERSONAS_TAB, PERSONAS_COLS)
-    # ✅ AHORA CARGAMOS ESTO PARA LAS ALERTAS
     df_ap = read_ws_df(ASISTENCIA_PERSONAS_TAB, ASISTENCIA_PERSONAS_COLS)
     return df_a, df_p, df_ap
 
 # =========================
-# LOGIN SYSTEM (Sheets Based)
-# =========================
-def login_box():
-    st.sidebar.markdown("## Acceso")
-    if st.session_state.get("logged_in"):
-        usuario = st.session_state.get("usuario")
-        st.sidebar.success(f"Hola, {st.session_state.get('nombre_visible', usuario)}")
-        if st.sidebar.button("Salir"):
-            st.session_state.clear()
-            st.cache_data.clear()
-            st.rerun()
-        return True
-
-    u = st.sidebar.text_input("Usuario", key="login_user")
-    p = st.sidebar.text_input("Contraseña", type="password", key="login_pass")
-    
-    if st.sidebar.button("Ingresar"):
-        df_users = get_users_db()
-        # Filtrar usuario y pass
-        user_row = df_users[
-            (df_users["usuario"].astype(str).str.strip() == u.strip()) & 
-            (df_users["password"].astype(str).str.strip() == p.strip())
-        ]
-        
-        if not user_row.empty:
-            row = user_row.iloc[0]
-            st.session_state["logged_in"] = True
-            st.session_state["usuario"] = row["usuario"]
-            st.session_state["centro_asignado"] = row["centro"]
-            st.session_state["nombre_visible"] = row["nombre"]
-            st.rerun()
-        else:
-            st.sidebar.error("Usuario o contraseña incorrectos.")
-    return False
-
-# =========================
-# Data Helpers
+# UTILS & HELPERS
 # =========================
 def year_of(fecha_iso: str) -> str:
     try: return str(pd.to_datetime(fecha_iso).year)
@@ -301,12 +229,11 @@ def last_load_info(df_latest: pd.DataFrame, centro: str):
     d["fecha_dt"] = pd.to_datetime(d["fecha"], errors="coerce")
     last = d["fecha_dt"].max()
     if pd.isna(last): return None, None
-    today_dt = pd.Timestamp(get_today_ar())
-    days = (today_dt.date() - last.date()).days
+    days = (pd.Timestamp(get_today_ar()).date() - last.date()).days
     return last.date().isoformat(), int(days)
 
 # =========================
-# Write Functions
+# WRITE FUNCTIONS
 # =========================
 def personas_for_centro(df_personas, centro):
     if df_personas.empty: return df_personas
@@ -321,11 +248,9 @@ def upsert_persona(df_personas, nombre, centro, usuario, frecuencia="Nueva"):
     if not df_personas.empty:
         mask = (df_personas.get("nombre", "") == nombre) & (df_personas.get("centro", "") == centro)
         if mask.any(): return df_personas
-
     row = {c: "" for c in PERSONAS_COLS}
     row.update({"nombre": nombre, "frecuencia": frecuencia, "centro": centro, 
                 "activo": "SI", "timestamp": now, "usuario": usuario})
-    
     append_ws_rows(PERSONAS_TAB, PERSONAS_COLS, [[row[c] for c in PERSONAS_COLS]])
     return pd.concat([df_personas, pd.DataFrame([row])], ignore_index=True)
 
@@ -350,40 +275,73 @@ def append_asistencia_personas(fecha, centro, espacio, nombre, estado, es_nuevo,
     append_ws_rows(ASISTENCIA_PERSONAS_TAB, ASISTENCIA_PERSONAS_COLS, [[row.get(c, "") for c in ASISTENCIA_PERSONAS_COLS]])
 
 # =========================
-# ✅ ALERTAS Y SIDEBAR
+# ✅ LOGIN CENTRALIZADO
+# =========================
+def show_login_screen():
+    # Creamos columnas para centrar el contenido
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("<br><br>", unsafe_allow_html=True) # Espacio arriba
+        
+        # LOGO DEL HOGAR
+        try:
+            st.image("logo_hogar.png", width=200) # Ajustar el ancho según el logo
+        except Exception:
+            st.warning("Falta el archivo 'logo_hogar.png' en la carpeta.")
+            st.title("Hogar de Cristo") # Fallback si no está el logo
+
+        st.markdown("### Sistema de Asistencia")
+        st.markdown("Ingresá tus credenciales para continuar.")
+        
+        with st.form("login_form"):
+            u = st.text_input("Usuario")
+            p = st.text_input("Contraseña", type="password")
+            submitted = st.form_submit_button("Ingresar", use_container_width=True)
+            
+            if submitted:
+                df_users = get_users_db()
+                user_row = df_users[
+                    (df_users["usuario"].astype(str).str.strip() == u.strip()) & 
+                    (df_users["password"].astype(str).str.strip() == p.strip())
+                ]
+                
+                if not user_row.empty:
+                    row = user_row.iloc[0]
+                    st.session_state["logged_in"] = True
+                    st.session_state["usuario"] = row["usuario"]
+                    # Normalizamos el centro para evitar errores de mayúsculas/acentos
+                    st.session_state["centro_asignado"] = row["centro"].strip() 
+                    st.session_state["nombre_visible"] = row["nombre"]
+                    st.rerun()
+                else:
+                    st.error("Usuario o contraseña incorrectos.")
+    
+    # Detener la ejecución si no está logueado para que no cargue el resto de la app
+    st.stop()
+
+# =========================
+# UI BLOCKS & PAGES
 # =========================
 def sidebar_alerts(df_ap: pd.DataFrame, centro: str):
-    """Muestra alertas de deserción en el sidebar"""
     st.sidebar.markdown("---")
     st.sidebar.markdown("### ⚠️ Alerta: Sin asistencia")
+    if df_ap.empty: return
     
-    if df_ap.empty:
-        st.sidebar.caption("No hay datos históricos para calcular alertas.")
-        return
-
-    # Filtramos por centro y solo los que estuvieron "Presente" alguna vez
     d = df_ap[(df_ap["centro"] == centro) & (df_ap["estado"] == "Presente")].copy()
-    if d.empty:
-        st.sidebar.success("No hay datos suficientes.")
-        return
+    if d.empty: return
     
-    # Convertir fecha
     d["fecha_dt"] = pd.to_datetime(d["fecha"], errors="coerce")
-    
-    # Agrupar por persona y buscar la última fecha que vino
     last_seen = d.groupby("nombre")["fecha_dt"].max().reset_index()
-    
-    # Calcular días desde la última vez
     hoy = pd.Timestamp(get_today_ar())
     last_seen["dias"] = (hoy - last_seen["fecha_dt"]).dt.days
     
-    # Criterio: Más de 7 días y menos de 60 (para no mostrar gente de hace años)
     alertas = last_seen[(last_seen["dias"] > 7) & (last_seen["dias"] < 60)].sort_values("dias", ascending=False)
     
     if alertas.empty:
-        st.sidebar.success("👏 Todos vienen con regularidad (o faltan hace mucho).")
+        st.sidebar.success("👏 Asistencia regular.")
     else:
-        st.sidebar.caption(f"Personas que no vienen hace > 7 días:")
+        st.sidebar.caption(f"Personas ausentes > 7 días:")
         for _, r in alertas.iterrows():
             st.sidebar.markdown(f"🔴 **{r['nombre']}**: hace {r['dias']} días")
 
@@ -392,7 +350,6 @@ def kpi_row(df_latest, centro):
     hoy = hoy_date.isoformat()
     week_ago = (hoy_date - timedelta(days=6)).isoformat()
     month_start = hoy_date.replace(day=1).isoformat()
-
     d = df_latest.copy()
     if d.empty: c1 = c2 = c3 = 0
     else:
@@ -400,7 +357,7 @@ def kpi_row(df_latest, centro):
         c1 = int(d[(d["centro"] == centro) & (d["fecha"] == hoy)]["presentes_i"].sum())
         c2 = int(d[(d["centro"] == centro) & (d["fecha"] >= week_ago) & (d["fecha"] <= hoy)]["presentes_i"].sum())
         c3 = int(d[(d["centro"] == centro) & (d["fecha"] >= month_start) & (d["fecha"] <= hoy)]["presentes_i"].sum())
-
+    
     col1, col2, col3 = st.columns(3)
     col1.markdown(f"<div class='kpi'><h3>Ingresos HOY</h3><div class='v'>{c1}</div></div>", unsafe_allow_html=True)
     col2.markdown(f"<div class='kpi'><h3>Últimos 7 días</h3><div class='v'>{c2}</div></div>", unsafe_allow_html=True)
@@ -418,24 +375,18 @@ def sidebar_pending(df_latest, centro):
     else:
         st.sidebar.warning(f"⏰ Última carga: {last_date} (hace {days} días)")
 
-# =========================
-# Pages
-# =========================
+# --- PÁGINAS ---
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.subheader(f"Registrar: {centro}")
     fecha = st.date_input("Fecha", value=get_today_ar()).isoformat()
-    
     if centro == "Casa Maranatha":
         espacio = st.selectbox("Espacio", ESPACIOS_MARANATHA, index=ESPACIOS_MARANATHA.index("General"))
     else:
         espacio = DEFAULT_ESPACIO
-    
     modo = st.selectbox("Modo", ["Día habitual", "Actividad especial", "Cerrado"], index=0)
     notas = st.text_area("Notas del día", placeholder="Ocurrencias, visitas, faltantes...")
-    
     st.markdown("---")
     
-    # Personas
     df_centro = personas_for_centro(df_personas, centro)
     nombres = sorted([n for n in df_centro["nombre"].astype(str).tolist() if n.strip()])
     
@@ -445,13 +396,11 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     with c2:
         total_presentes = st.number_input("Total (manual)", min_value=0, value=len(presentes), step=1)
     
-    # Persona nueva
     with st.expander("👤 ¿Vino alguien nuevo?"):
         col_new1, col_new2 = st.columns([3, 1])
         nueva = col_new1.text_input("Nombre completo")
         agregar_nueva = col_new2.checkbox("Es nuevo/a")
     
-    # Check overwrite
     df_latest = latest_asistencia(df_asistencia)
     ya = df_latest[(df_latest.get("fecha","")==fecha) & (df_latest.get("centro","")==centro) & (df_latest.get("espacio","")==espacio)]
     existe = not ya.empty
@@ -460,31 +409,23 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         st.warning("⚠️ Ya existe una carga para hoy/espacio. Se sobreescribirá.")
         overwrite = st.checkbox("Confirmar sobreescritura", value=False)
     
-    guardar_ausentes = st.checkbox("Guardar registro de Ausentes (Recomendado)", value=True)
-    
+    guardar_ausentes = st.checkbox("Guardar Ausentes", value=True)
     st.markdown("<br>", unsafe_allow_html=True)
+    
     if st.button("💾 Guardar Asistencia", type="primary", use_container_width=True):
         if not overwrite:
             st.error("Confirmá la sobreescritura.")
             st.stop()
-        
-        # Procesar nueva persona
         if agregar_nueva and nueva.strip():
             df_personas = upsert_persona(df_personas, nueva, centro, usuario, "Nueva")
             if nueva not in presentes: presentes.append(nueva)
-        
         if len(presentes) > 0: total_presentes = len(presentes)
         accion = "overwrite" if existe else "append"
         
         with st.spinner("Guardando..."):
             append_asistencia(fecha, centro, espacio, total_presentes, nombre_visible, modo, notas, usuario, accion)
-            
-            # Guardar presentes
             for n in presentes:
-                append_asistencia_personas(fecha, centro, espacio, n, "Presente", 
-                                           "SI" if (agregar_nueva and n==nueva) else "NO", nombre_visible, usuario)
-            
-            # Guardar ausentes
+                append_asistencia_personas(fecha, centro, espacio, n, "Presente", "SI" if (agregar_nueva and n==nueva) else "NO", nombre_visible, usuario)
             if guardar_ausentes:
                 ausentes = [n for n in nombres if n not in presentes]
                 for n in ausentes:
@@ -498,20 +439,18 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
 def page_personas(df_personas, centro, usuario):
     st.subheader("Base de Personas")
     df_centro = personas_for_centro(df_personas, centro)
-    
     c1, c2 = st.columns([2, 1])
     q = c1.text_input("🔍 Buscar persona")
     activos = c2.checkbox("Ocultar inactivos", value=True)
-    
     if q: df_centro = df_centro[df_centro["nombre"].str.contains(q, case=False, na=False)]
     if activos: df_centro = df_centro[df_centro["activo"].astype(str).str.upper() != "NO"]
-    
     st.dataframe(df_centro[["nombre", "frecuencia", "edad", "notas", "activo"]], use_container_width=True)
 
 def page_reportes(df_asistencia, centro):
     st.subheader("Reportes")
     df_latest = latest_asistencia(df_asistencia)
     df_c = df_latest[df_latest["centro"] == centro].copy()
+    
     if df_c.empty:
         st.info("Sin datos.")
         return
@@ -520,56 +459,97 @@ def page_reportes(df_asistencia, centro):
     df_c["presentes_i"] = df_c["presentes"].apply(lambda x: clean_int(x, 0))
     df_c = df_c.sort_values("fecha_dt")
     
-    st.line_chart(df_c.set_index("fecha")["presentes_i"])
+    # ✅ NUEVO: Botón de descarga de Excel
+    col_dl1, col_dl2 = st.columns([3,1])
+    with col_dl1:
+        st.line_chart(df_c.set_index("fecha")["presentes_i"])
+    with col_dl2:
+        st.markdown("### Exportar")
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            df_c.to_excel(writer, sheet_name='Asistencia', index=False)
+        st.download_button(
+            label="📥 Descargar Excel",
+            data=buffer,
+            file_name=f"asistencia_{centro.replace(' ', '_')}.xlsx",
+            mime="application/vnd.ms-excel"
+        )
+    
     st.dataframe(df_c[["fecha", "espacio", "presentes", "coordinador", "notas"]].sort_values("fecha", ascending=False), use_container_width=True)
 
-def page_global(df_asistencia):
+def page_global(df_asistencia, df_ap):
     st.subheader("Panorama Global")
     df = latest_asistencia(df_asistencia).copy()
     if df.empty: return
     df["presentes_i"] = df["presentes"].apply(lambda x: clean_int(x, 0))
-    
-    # Barras por centro (Total histórico del año)
     anio = str(get_today_ar().year)
-    d = df[df["anio"].astype(str) == anio]
-    st.markdown(f"**Asistencias Acumuladas {anio}**")
-    st.bar_chart(d.groupby("centro")["presentes_i"].sum())
+    
+    col_g1, col_g2 = st.columns(2)
+    
+    with col_g1:
+        st.markdown(f"**Asistencias Totales {anio} (Por Centro)**")
+        d = df[df["anio"].astype(str) == anio]
+        st.bar_chart(d.groupby("centro")["presentes_i"].sum())
+
+    # ✅ NUEVO: Gráfico de Nuevos vs Recurrentes
+    with col_g2:
+        st.markdown("**Nuevos Ingresos**")
+        if not df_ap.empty:
+            nuevos = df_ap[(df_ap["es_nuevo"] == "SI") & (df_ap["anio"].astype(str) == anio)]
+            if not nuevos.empty:
+                por_centro = nuevos.groupby("centro").size()
+                st.bar_chart(por_centro, color="#63296C") # Color secundario
+            else:
+                st.info("No se registraron nuevos ingresos este año.")
 
 # =========================
 # MAIN APP
 # =========================
 def main():
-    st.title("Sistema Hogar de Cristo")
+    # 1. Chequear estado de login. Si no está, mostrar pantalla Login y frenar.
+    if not st.session_state.get("logged_in"):
+        show_login_screen()
 
-    if not login_box():
-        st.stop()
-
-    # Usuario logueado
+    # 2. Si pasa, cargamos la UI principal
     u = st.session_state["usuario"]
     centro = st.session_state["centro_asignado"]
     nombre = st.session_state["nombre_visible"]
 
-    if centro not in CENTROS:
-        st.error(f"Centro '{centro}' no válido. Avisar al admin.")
+    # Validación de Centro (ahora menos propensa a errores por mayúsculas)
+    # Buscamos coincidencias "flexibles"
+    match_centro = next((c for c in CENTROS if c.lower() == centro.lower()), None)
+    
+    if not match_centro:
+        st.error(f"Error de Configuración: El centro '{centro}' asignado a tu usuario no coincide con la lista válida del sistema. Revisá mayúsculas y acentos en el Excel.")
+        if st.button("Salir"):
+            st.session_state.clear()
+            st.rerun()
         st.stop()
+    else:
+        centro = match_centro # Usamos el nombre oficial (bien escrito)
 
-    st.sidebar.markdown("---")
-    st.sidebar.markdown(f"📍 **{centro}**")
-    st.sidebar.markdown(f"👤 **{nombre}**")
-
-    if st.sidebar.button("🔄 Refrescar"):
+    # SIDEBAR
+    st.sidebar.image("logo_hogar.png", width=120) # Logo en sidebar también queda bien
+    st.sidebar.markdown(f"Hola, **{nombre}**")
+    st.sidebar.caption(f"📍 {centro}")
+    
+    if st.sidebar.button("Cerrar Sesión"):
+        st.session_state.clear()
+        st.cache_data.clear()
+        st.rerun()
+        
+    if st.sidebar.button("🔄 Refrescar Datos"):
         st.cache_data.clear()
         st.rerun()
 
-    # Cargar datos pesados
+    # CARGA DE DATOS
     df_asistencia, df_personas, df_ap = load_all_data()
 
-    # Layout Principal
+    # DASHBOARD
     kpi_row(latest_asistencia(df_asistencia), centro)
     
-    # Alertas en Sidebar
     sidebar_pending(latest_asistencia(df_asistencia), centro)
-    sidebar_alerts(df_ap, centro) # ✅ Alerta de deserción
+    sidebar_alerts(df_ap, centro)
 
     tab1, tab2, tab3, tab4 = st.tabs(["📝 Asistencia", "👥 Personas", "📈 Reportes", "🌍 Global"])
     
@@ -580,7 +560,7 @@ def main():
     with tab3:
         page_reportes(df_asistencia, centro)
     with tab4:
-        page_global(df_asistencia)
+        page_global(df_asistencia, df_ap)
 
 if __name__ == "__main__":
     main()
