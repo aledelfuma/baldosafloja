@@ -131,8 +131,12 @@ def get_gspread_client():
 
 @st.cache_resource(show_spinner=False)
 def get_spreadsheet():
-    sid = get_secret("sheets.spreadsheet_id", "")
-    if not sid: raise KeyError("Falta spreadsheet_id")
+    # ACÁ PEGAS TU ID (El que sacas del link de Google Sheets)
+    sid = "1nCK2Q2ddxUO-erDwa5jgfGsUYsjZD7e4doHXoQ4N9zg" 
+    
+    if not sid:
+        raise KeyError("Falta el ID de la planilla")
+    
     gc = get_gspread_client()
     return gc.open_by_key(sid)
 
@@ -570,3 +574,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
