@@ -19,7 +19,7 @@ st.set_page_config(
     page_title="Hogar de Cristo",
     page_icon="🏠",
     layout="wide",
-    initial_sidebar_state="collapsed", # Barra lateral cerrada por defecto
+    initial_sidebar_state="collapsed", # Barra lateral oculta para usar el Header
 )
 
 CSS = f"""
@@ -28,17 +28,20 @@ CSS = f"""
   --primary: {PRIMARY};
   --secondary: {SECONDARY};
 }}
-/* Ocultar menú hamburguesa y footer para que se vea limpio */
+/* Ocultar elementos nativos */
 #MainMenu {{visibility: hidden;}}
 footer {{visibility: hidden;}}
 
-/* Estilo del Encabezado Superior */
+/* Estilo del Encabezado Superior (Top Bar) */
 .top-bar {{
     background-color: rgba(255,255,255,0.05);
     padding: 15px;
     border-radius: 10px;
     border-bottom: 2px solid {PRIMARY};
     margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }}
 .user-info {{
     font-size: 1.1rem;
@@ -71,24 +74,28 @@ footer {{visibility: hidden;}}
   color: white;
 }}
 
-/* Alertas en el Top */
+/* Alertas */
 .alert-box {{
     padding: 10px;
     border-radius: 8px;
     margin-bottom: 10px;
     font-size: 0.9rem;
+    border: 1px solid;
 }}
 .alert-danger {{
     background-color: rgba(255, 75, 75, 0.15);
-    border: 1px solid #ff4b4b;
+    border-color: #ff4b4b;
+    color: #ffcccb;
 }}
 .alert-success {{
     background-color: rgba(40, 167, 69, 0.15);
-    border: 1px solid #28a745;
+    border-color: #28a745;
+    color: #d4edda;
 }}
 .alert-info {{
     background-color: rgba(23, 162, 184, 0.15);
-    border: 1px solid #17a2b8;
+    border-color: #17a2b8;
+    color: #d1ecf1;
 }}
 
 /* Perfil */
@@ -108,7 +115,7 @@ st.markdown(CSS, unsafe_allow_html=True)
 # =========================
 TZ_AR = pytz.timezone('America/Argentina/Buenos_Aires')
 
-def get_now_ar(): return datetime.now(TZ_AR)
+def get_now_ar_str(): return datetime.now(TZ_AR).strftime("%Y-%m-%d %H:%M:%S")
 def get_today_ar(): return datetime.now(TZ_AR).date()
 
 # =========================
@@ -152,7 +159,7 @@ def norm_text(x):
     return str(x).strip() if x else ""
 
 # =========================
-# Google Sheets (HARDCODED)
+# Google Sheets (HARDCODED & BLINDADO)
 # =========================
 @st.cache_resource(show_spinner=False)
 def get_gspread_client():
@@ -190,7 +197,8 @@ def get_or_create_ws(title: str, cols: list):
     except Exception as e:
         msg = str(e).lower()
         if "already exists" in msg: return sh.worksheet(title)
-        st.error(f"Error crítico: {e}"); st.stop()
+        st.error(f"Error crítico en pestaña '{title}': {e}")
+        st.stop()
 
 def safe_get_all_values(ws, tries=3):
     for i in range(tries):
@@ -272,7 +280,7 @@ def personas_for_centro(df_personas, centro):
 def upsert_persona(df_personas, nombre, centro, usuario, **kwargs):
     nombre = norm_text(nombre)
     if not nombre: return df_personas
-    now = get_now_ar().strftime("%Y-%m-%d %H:%M:%S")
+    now = get_now_ar_str()
     row = {c: "" for c in PERSONAS_COLS}
     row.update({"nombre": nombre, "centro": centro, "activo": "SI", "timestamp": now, "usuario": usuario})
     for k, v in kwargs.items():
@@ -281,7 +289,7 @@ def upsert_persona(df_personas, nombre, centro, usuario, **kwargs):
     return pd.concat([df_personas, pd.DataFrame([row])], ignore_index=True)
 
 def append_asistencia(fecha, centro, espacio, presentes, coordinador, modo, notas, usuario, accion="append"):
-    ts = get_now_ar().strftime("%Y-%m-%d %H:%M:%S")
+    ts = get_now_ar_str()
     row = {
         "timestamp": ts, "fecha": fecha, "anio": year_of(fecha), "centro": centro, 
         "espacio": espacio, "presentes": str(presentes), "coordinador": coordinador, 
@@ -290,16 +298,16 @@ def append_asistencia(fecha, centro, espacio, presentes, coordinador, modo, nota
     append_ws_rows(ASISTENCIA_TAB, ASISTENCIA_COLS, [[row.get(c, "") for c in ASISTENCIA_COLS]])
 
 def append_asistencia_personas(fecha, centro, espacio, nombre, estado, es_nuevo, coordinador, usuario, notas=""):
-    ts = get_now_ar().strftime("%Y-%m-%d %H:%M:%S")
+    ts = get_now_ar_str()
     row = {
         "timestamp": ts, "fecha": fecha, "anio": year_of(fecha), "centro": centro, 
         "espacio": espacio, "nombre": nombre, "estado": estado, "es_nuevo": es_nuevo, 
         "coordinador": coordinador, "usuario": usuario, "notas": notas
     }
-    append_ws_rows(ASISTENCIA_PERSONAS_TAB, ASISTENCIA_PERSONAS_COLS, [[row.get(c, "") for c in ASISTENCIA_PERSONAS_COLS]])
+    append_ws_rows(ASISTENCIA_PERSONAS_COLS, ASISTENCIA_PERSONAS_COLS, [[row.get(c, "") for c in ASISTENCIA_PERSONAS_COLS]])
 
 def append_seguimiento(fecha, centro, nombre, categoria, observacion, usuario):
-    ts = get_now_ar().strftime("%Y-%m-%d %H:%M:%S")
+    ts = get_now_ar_str()
     row = {
         "timestamp": ts, "fecha": fecha, "anio": year_of(fecha), "centro": centro,
         "nombre": nombre, "categoria": categoria, "observacion": observacion, "usuario": usuario
@@ -307,7 +315,7 @@ def append_seguimiento(fecha, centro, nombre, categoria, observacion, usuario):
     append_ws_rows(SEGUIMIENTO_TAB, SEGUIMIENTO_COLS, [[row.get(c, "") for c in SEGUIMIENTO_COLS]])
 
 # =========================
-# UI COMPONENTES (NUEVOS - ARRIBA)
+# UI COMPONENTES (HEADER ARRIBA)
 # =========================
 def show_login_screen():
     col1, col2, col3 = st.columns([1, 2, 1])
