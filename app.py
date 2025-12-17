@@ -5,6 +5,7 @@ from google.oauth2.service_account import Credentials
 import gspread
 from gspread.exceptions import APIError
 import time
+import pytz  # ✅ NUEVO: Para manejar la zona horaria de Argentina
 
 # =========================
 # Config UI / Branding
@@ -63,6 +64,19 @@ hr {{
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
+
+# =========================
+# Zona Horaria (Argentina) ✅
+# =========================
+TZ_AR = pytz.timezone('America/Argentina/Buenos_Aires')
+
+def get_now_ar():
+    """Devuelve datetime actual en hora argentina"""
+    return datetime.now(TZ_AR)
+
+def get_today_ar():
+    """Devuelve date actual en hora argentina"""
+    return datetime.now(TZ_AR).date()
 
 # =========================
 # Sheets schema
@@ -155,6 +169,7 @@ def login_box():
         if st.sidebar.button("Salir"):
             for k in ["logged_in", "usuario", "centro_asignado", "nombre_visible"]:
                 st.session_state.pop(k, None)
+            st.cache_data.clear() # Limpiar cache al salir
             st.rerun()
         return True
 
@@ -203,11 +218,7 @@ def _open_ws_strict(sh, title: str):
     return sh.worksheet(title)
 
 def get_or_create_ws(title: str, cols: list, rows: int = 2000):
-    """
-    FIX: si al crear dice "already exists", re-intenta abrir y listo.
-    """
     sh = get_spreadsheet()
-
     try:
         return _open_ws_strict(sh, title)
     except Exception:
@@ -219,30 +230,16 @@ def get_or_create_ws(title: str, cols: list, rows: int = 2000):
         return ws
     except Exception as e:
         msg = str(e).lower()
-
         if "already exists" in msg or "alreadyexists" in msg:
             try:
                 return _open_ws_strict(sh, title)
             except Exception:
-                st.error(
-                    f"No pude abrir la pestaña '{title}' aunque Google dice que existe.\n\n"
-                    f"Revisá si tiene espacios raros en el nombre (ej: 'asistencia_personas '), "
-                    f"o si está en otra planilla.\n\nDetalle: {e}"
-                )
+                st.error(f"Error abriendo pestaña '{title}': {e}")
                 st.stop()
-
-        st.error(
-            f"No pude crear la pestaña '{title}'.\n\n"
-            f"Solución: creala manualmente en el Google Sheet con ese nombre y recargá.\n\n"
-            f"Detalle: {e}"
-        )
+        st.error(f"No pude crear la pestaña '{title}'. Detalle: {e}")
         st.stop()
 
-# =========================
-# ✅ FIX: Retry/backoff para APIError de Google
-# =========================
 def _apierror_info(e: APIError) -> str:
-    # gspread guarda info HTTP en e.response
     try:
         status = getattr(e.response, "status_code", None)
         text = getattr(e.response, "text", "")
@@ -253,10 +250,6 @@ def _apierror_info(e: APIError) -> str:
         return str(e)
 
 def safe_get_all_values(ws, tries=6):
-    """
-    Evita que la app se caiga por 429/503/temporales.
-    Backoff: 1s, 2s, 4s, 8s...
-    """
     last_err = None
     for i in range(tries):
         try:
@@ -264,11 +257,9 @@ def safe_get_all_values(ws, tries=6):
         except APIError as e:
             last_err = e
             info = _apierror_info(e).lower()
-            # Reintenta en errores típicos temporales / cuota
             if "429" in info or "rate" in info or "quota" in info or "503" in info or "timeout" in info:
                 time.sleep(2 ** i * 0.5)
                 continue
-            # Si no parece temporal, cortar con diagnóstico
             st.error("Google Sheets devolvió un error al leer datos.")
             st.code(_apierror_info(e))
             st.stop()
@@ -276,17 +267,13 @@ def safe_get_all_values(ws, tries=6):
             last_err = e
             time.sleep(2 ** i * 0.5)
 
-    st.error("No pude leer la planilla luego de varios intentos (posible cuota o error temporal).")
-    if isinstance(last_err, APIError):
-        st.code(_apierror_info(last_err))
-    else:
-        st.code(str(last_err))
+    st.error("No pude leer la planilla luego de varios intentos.")
+    st.code(str(last_err))
     st.stop()
 
 def read_ws_df(title: str, cols: list) -> pd.DataFrame:
+    """Lee una pestaña y devuelve DataFrame. NO TIENE CACHE PROPIO (se cachea afuera)."""
     ws = get_or_create_ws(title, cols)
-
-    # ✅ usa lectura con retry
     values = safe_get_all_values(ws)
 
     if not values:
@@ -311,27 +298,24 @@ def read_ws_df(title: str, cols: list) -> pd.DataFrame:
     df.columns = cols
     return df
 
+# =========================
+# ✅ CACHING LOGIC
+# =========================
+@st.cache_data(ttl=600, show_spinner="Actualizando datos...")
+def load_all_data():
+    """Carga todas las bases de datos relevantes de una sola vez."""
+    df_a = read_ws_df(ASISTENCIA_TAB, ASISTENCIA_COLS)
+    df_p = read_ws_df(PERSONAS_TAB, PERSONAS_COLS)
+    # Asistencia por persona se puede cargar si se necesita reporte detallado
+    # df_ap = read_ws_df(ASISTENCIA_PERSONAS_TAB, ASISTENCIA_PERSONAS_COLS)
+    return df_a, df_p
+
 def append_ws_rows(title: str, cols: list, rows: list[list]):
     ws = get_or_create_ws(title, cols)
     first = safe_get_all_values(ws)[:1]
     if not first or first[0][: len(cols)] != cols:
         ws.update("A1", [cols])
     ws.append_rows(rows, value_input_option="USER_ENTERED")
-
-def repair_headers(title: str, cols: list):
-    ws = get_or_create_ws(title, cols)
-    values = safe_get_all_values(ws)
-    if not values:
-        ws.update("A1", [cols])
-        return
-    df = pd.DataFrame(values)
-    for i in range(df.shape[1], len(cols)):
-        df[i] = ""
-    df = df.iloc[:, : len(cols)]
-    data = df.values.tolist()
-    ws.clear()
-    ws.update("A1", [cols])
-    ws.update("A2", data)
 
 # =========================
 # Data normalization
@@ -340,7 +324,7 @@ def year_of(fecha_iso: str) -> str:
     try:
         return str(pd.to_datetime(fecha_iso).year)
     except Exception:
-        return str(date.today().year)
+        return str(get_today_ar().year)
 
 def clean_int(x, default=0):
     try:
@@ -387,7 +371,11 @@ def last_load_info(df_latest: pd.DataFrame, centro: str):
     last = d["fecha_dt"].max()
     if pd.isna(last):
         return None, None
-    days = (pd.Timestamp(date.today()) - last).days
+    
+    # Calcular días respecto a HOY en Argentina
+    today_dt = pd.Timestamp(get_today_ar())
+    # Normalizar last a date para la resta
+    days = (today_dt.date() - last.date()).days
     return last.date().isoformat(), int(days)
 
 # =========================
@@ -405,7 +393,8 @@ def upsert_persona(df_personas: pd.DataFrame, nombre: str, centro: str, usuario:
     if not nombre:
         return df_personas
 
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Usamos hora argentina para el timestamp de creación
+    now = get_now_ar().strftime("%Y-%m-%d %H:%M:%S")
 
     if not df_personas.empty:
         mask = (df_personas.get("nombre", "") == nombre) & (df_personas.get("centro", "") == centro)
@@ -428,10 +417,10 @@ def upsert_persona(df_personas: pd.DataFrame, nombre: str, centro: str, usuario:
     return df2
 
 # =========================
-# Writes
+# Writes (usa hora AR)
 # =========================
 def append_asistencia(fecha, centro, espacio, presentes, coordinador, modo, notas, usuario, accion="append"):
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ts = get_now_ar().strftime("%Y-%m-%d %H:%M:%S") # ✅ Hora AR
     anio = year_of(fecha)
     row = {
         "timestamp": ts,
@@ -449,7 +438,7 @@ def append_asistencia(fecha, centro, espacio, presentes, coordinador, modo, nota
     append_ws_rows(ASISTENCIA_TAB, ASISTENCIA_COLS, [[row.get(c, "") for c in ASISTENCIA_COLS]])
 
 def append_asistencia_personas(fecha, centro, espacio, nombre, estado, es_nuevo, coordinador, usuario, notas=""):
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ts = get_now_ar().strftime("%Y-%m-%d %H:%M:%S") # ✅ Hora AR
     anio = year_of(fecha)
     row = {
         "timestamp": ts,
@@ -474,10 +463,10 @@ def append_asistencia_personas(fecha, centro, espacio, nombre, estado, es_nuevo,
 # UI blocks
 # =========================
 def kpi_row(df_latest, centro):
-    hoy = date.today().isoformat()
-    now = date.today()
-    week_ago = (now - timedelta(days=6)).isoformat()
-    month_start = now.replace(day=1).isoformat()
+    hoy_date = get_today_ar()
+    hoy = hoy_date.isoformat()
+    week_ago = (hoy_date - timedelta(days=6)).isoformat()
+    month_start = hoy_date.replace(day=1).isoformat()
 
     d = df_latest.copy()
     if d.empty:
@@ -509,7 +498,7 @@ def sidebar_pending(df_latest, centro):
     else:
         st.sidebar.warning(f"⏰ Última carga: {last_date} (hace {days} días)")
 
-    today = date.today()
+    today = get_today_ar()
     start = today - timedelta(days=today.weekday())
     days_list = [start + timedelta(days=i) for i in range(7)]
     df_c = df_latest[df_latest["centro"] == centro].copy()
@@ -523,8 +512,8 @@ def sidebar_pending(df_latest, centro):
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.subheader("Registrar asistencia")
 
-    anio = str(date.today().year)
-    fecha = st.date_input("Fecha", value=date.today()).isoformat()
+    anio = str(get_today_ar().year)
+    fecha = st.date_input("Fecha", value=get_today_ar()).isoformat() # ✅ Default hoy Argentina
 
     if centro == "Casa Maranatha":
         espacio = st.selectbox("Espacio (solo Maranatha)", ESPACIOS_MARANATHA, index=ESPACIOS_MARANATHA.index("General"))
@@ -542,6 +531,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         if c not in df_centro.columns:
             df_centro[c] = ""
 
+    # Ordenar y filtrar
     nombres = sorted([n for n in df_centro["nombre"].astype(str).tolist() if n.strip()])
 
     colA, colB = st.columns([2, 1])
@@ -573,7 +563,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     else:
         overwrite = True
 
-    guardar_ausentes = st.checkbox("Guardar también AUSENTES (marca Ausente para todos los que no vinieron)", value=False)
+    guardar_ausentes = st.checkbox("Guardar también AUSENTES", value=False)
 
     st.divider()
 
@@ -633,8 +623,14 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                         notas="",
                     )
 
-        st.toast("✅ Asistencia guardada en Google Sheets", icon="✅")
+        st.toast("✅ Asistencia guardada", icon="✅")
         st.success("Listo. Se guardó correctamente.")
+        
+        # ✅ NUEVO: Limpiar cache para que se vea el cambio inmediatamente
+        st.cache_data.clear()
+        
+        # ✅ NUEVO: Esperar un toque para que el usuario lea el cartel
+        time.sleep(2)
         st.rerun()
 
 def page_personas(df_personas, centro, usuario):
@@ -721,11 +717,14 @@ def main():
     st.sidebar.markdown("### Centro / Coordinador")
     st.sidebar.markdown(f"**Centro asignado:** {centro_asignado}")
     st.sidebar.markdown(f"**Quién carga:** {nombre_visible}")
+    
+    # ✅ NUEVO: Botón para recargar caché manualmente
+    if st.sidebar.button("🔄 Actualizar datos"):
+        st.cache_data.clear()
+        st.rerun()
 
-    with st.spinner("Cargando datos desde Google Sheets..."):
-        df_asistencia = read_ws_df(ASISTENCIA_TAB, ASISTENCIA_COLS)
-        df_personas = read_ws_df(PERSONAS_TAB, PERSONAS_COLS)
-        _ = read_ws_df(ASISTENCIA_PERSONAS_TAB, ASISTENCIA_PERSONAS_COLS)
+    # ✅ NUEVO: Carga optimizada con caché
+    df_asistencia, df_personas = load_all_data()
 
     df_latest = latest_asistencia(df_asistencia)
 
