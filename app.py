@@ -8,6 +8,7 @@ import time
 import pytz
 import io
 import unicodedata
+import re
 
 # =========================
 # Config UI / Branding
@@ -39,31 +40,28 @@ footer {{visibility: hidden;}}
     border-bottom: 2px solid {PRIMARY};
     margin-bottom: 20px;
 }}
-.user-info {{ font-size: 1.1rem; font-weight: bold; }}
-.center-info {{ color: #aaa; font-size: 0.9rem; }}
 
 /* KPIs */
 .kpi {{
   border: 1px solid rgba(255,255,255,.10);
   border-radius: 12px;
-  padding: 10px 14px;
+  padding: 15px;
   background: rgba(0,0,0,.20);
   text-align: center;
 }}
 .kpi h3 {{ margin: 0; font-size: .8rem; opacity: .8; text-transform: uppercase; letter-spacing: 1px; }}
-.kpi .v {{ font-size: 1.8rem; font-weight: 700; margin-top: .1rem; color: white; }}
+.kpi .v {{ font-size: 2.2rem; font-weight: 700; margin-top: .2rem; color: white; }}
 
 /* Alertas */
 .alert-box {{ padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 0.9rem; border: 1px solid transparent; }}
 .alert-danger {{ background-color: rgba(255, 75, 75, 0.15); border-color: #ff4b4b; color: #ffcccb; }}
 .alert-success {{ background-color: rgba(40, 167, 69, 0.15); border-color: #28a745; color: #d4edda; }}
-.alert-info {{ background-color: rgba(23, 162, 184, 0.15); border-color: #17a2b8; color: #d1ecf1; }}
 
-/* Carnet Digital Style */
+/* Carnet Digital Style (Inspirado en el Mockup) */
 .id-card {{
     background: linear-gradient(135deg, {PRIMARY} 0%, {SECONDARY} 100%);
     border-radius: 15px;
-    padding: 20px;
+    padding: 25px;
     color: white;
     box-shadow: 0 10px 20px rgba(0,0,0,0.3);
     border: 1px solid rgba(255,255,255,0.2);
@@ -81,10 +79,40 @@ footer {{visibility: hidden;}}
     background: rgba(255,255,255,0.1);
     border-radius: 50%;
 }}
-.id-title {{ font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; opacity: 0.8; margin-bottom: 10px; }}
-.id-name {{ font-size: 1.8rem; font-weight: 800; margin-bottom: 5px; line-height: 1.1; }}
-.id-data {{ font-size: 0.9rem; opacity: 0.9; margin-bottom: 2px; }}
-.id-footer {{ margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); font-size: 0.7rem; display: flex; justify-content: space-between; }}
+.id-title {{ font-size: 0.75rem; letter-spacing: 1px; text-transform: uppercase; opacity: 0.8; margin-bottom: 5px; font-weight: bold;}}
+.id-name {{ font-size: 2rem; font-weight: 800; margin-bottom: 15px; line-height: 1.1; }}
+.id-data-row {{ display: flex; gap: 20px; margin-bottom: 15px; }}
+.id-data-col {{ display: flex; flex-direction: column; }}
+.id-label {{ font-size: 0.7rem; opacity: 0.7; text-transform: uppercase; }}
+.id-value {{ font-size: 1rem; font-weight: 600; }}
+
+/* Etiquetas Visuales (Tags) */
+.tag-container {{ display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }}
+.tag-badge {{
+    background-color: rgba(255,255,255,0.2);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 1px solid rgba(255,255,255,0.3);
+}}
+
+/* Botón WhatsApp */
+.btn-wa {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #25D366;
+    color: white !important;
+    padding: 8px 15px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 0.9rem;
+    margin-top: 10px;
+    transition: 0.3s;
+}}
+.btn-wa:hover {{ background-color: #128C7E; }}
 
 .profile-card {{
     background-color: rgba(255, 255, 255, 0.05);
@@ -112,6 +140,10 @@ def calculate_age(born):
         return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
     except: return 0
 
+def format_wa_number(phone):
+    # Extrae solo números para el link de WhatsApp
+    return re.sub(r'\D', '', str(phone))
+
 # =========================
 # Schemas
 # =========================
@@ -122,8 +154,8 @@ USUARIOS_TAB = "config_usuarios"
 SEGUIMIENTO_TAB = "seguimiento"
 
 ASISTENCIA_COLS = ["timestamp", "fecha", "anio", "centro", "espacio", "presentes", "coordinador", "modo", "notas", "usuario", "accion"]
-# ✅ AGREGADO "contacto_emergencia"
-PERSONAS_COLS = ["nombre", "frecuencia", "centro", "edad", "domicilio", "notas", "activo", "timestamp", "usuario", "dni", "fecha_nacimiento", "telefono", "contacto_emergencia"]
+# ✅ AGREGADO "etiquetas" para el visual
+PERSONAS_COLS = ["nombre", "frecuencia", "centro", "edad", "domicilio", "notas", "activo", "timestamp", "usuario", "dni", "fecha_nacimiento", "telefono", "contacto_emergencia", "etiquetas"]
 ASISTENCIA_PERSONAS_COLS = ["timestamp", "fecha", "anio", "centro", "espacio", "nombre", "estado", "es_nuevo", "coordinador", "usuario", "notas"]
 USUARIOS_COLS = ["usuario", "password", "centro", "nombre"]
 SEGUIMIENTO_COLS = ["timestamp", "fecha", "anio", "centro", "nombre", "categoria", "observacion", "usuario"]
@@ -343,6 +375,8 @@ def show_top_alerts(df_latest, df_personas, df_ap, centro):
     cumples = []
     if not df_personas.empty:
         df_c = personas_for_centro(df_personas, centro)
+        df_c["timestamp_dt"] = pd.to_datetime(df_c["timestamp"], errors="coerce")
+        df_c = df_c.sort_values("timestamp_dt").groupby("nombre").tail(1)
         today = get_today_ar()
         for _, row in df_c.iterrows():
             try:
@@ -362,28 +396,25 @@ def show_top_alerts(df_latest, df_personas, df_ap, centro):
             alertas = last[(last["dias"]>7) & (last["dias"]<90)].sort_values("dias", ascending=False)
             for _, r in alertas.iterrows(): ausentes.append(f"{r['nombre']} ({r['dias']} días)")
 
+    # Dashboard Inspirado en tu diseño
+    st.markdown("### 📊 Resumen de Asistencia y Alertas")
     ac1, ac2, ac3 = st.columns(3)
     with ac1:
-        st.markdown("**Estado**")
-        if last_date is None: st.markdown("<div class='alert-box alert-danger'>⚠️ Sin cargas</div>", unsafe_allow_html=True)
-        elif days == 0: st.markdown("<div class='alert-box alert-success'>✅ Al día (Hoy)</div>", unsafe_allow_html=True)
-        else: st.markdown(f"<div class='alert-box alert-info'>⏰ Última: {last_date} ({days}d)</div>", unsafe_allow_html=True)
+        if last_date is None: st.markdown("<div class='alert-box alert-danger'>⚠️ Estado: Sin cargas</div>", unsafe_allow_html=True)
+        elif days == 0: st.markdown("<div class='alert-box alert-success'>✅ Estado: Al día (Hoy)</div>", unsafe_allow_html=True)
+        else: st.markdown(f"<div class='alert-box alert-danger'>⚠️ Faltan cargar asistencias (hace {days}d)</div>", unsafe_allow_html=True)
     with ac2:
         if cumples:
-            st.markdown("**🎂 Cumples Hoy**")
-            with st.expander(f"🎉 {len(cumples)}!", expanded=True):
+            with st.expander(f"🎉 Cumpleaños Hoy ({len(cumples)})", expanded=True):
                 for c in cumples: st.write(f"- {c}")
         else:
-            st.markdown("**🎂 Cumpleaños**")
-            st.caption("Nadie hoy.")
+            st.markdown("<div class='alert-box' style='color:grey; border:1px solid #ccc;'>🎂 Sin cumpleaños hoy</div>", unsafe_allow_html=True)
     with ac3:
         if ausentes:
-            st.markdown("**🚨 Alerta**")
-            with st.expander(f"⚠️ {len(ausentes)} ausentes", expanded=False):
+            with st.expander(f"⚠️ Alerta de Inasistencia ({len(ausentes)})", expanded=False):
                 for a in ausentes: st.write(f"🔴 {a}")
         else:
-            st.markdown("**🚨 Alerta**")
-            st.caption("Todo OK.")
+            st.markdown("<div class='alert-box' style='color:grey; border:1px solid #ccc;'>✔️ Sin alertas de inasistencia</div>", unsafe_allow_html=True)
 
 def kpi_row_full(df_latest, centro):
     hoy_date = get_today_ar()
@@ -398,10 +429,17 @@ def kpi_row_full(df_latest, centro):
         c2 = int(d[(d["centro"] == centro) & (d["fecha"] >= week_ago) & (d["fecha"] <= hoy)]["presentes_i"].sum())
         c3 = int(d[(d["centro"] == centro) & (d["fecha"] >= month_start) & (d["fecha"] <= hoy)]["presentes_i"].sum())
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns([1,1,1,1])
     col1.markdown(f"<div class='kpi'><h3>Ingresos HOY</h3><div class='v'>{c1}</div></div>", unsafe_allow_html=True)
     col2.markdown(f"<div class='kpi'><h3>Últimos 7 días</h3><div class='v'>{c2}</div></div>", unsafe_allow_html=True)
     col3.markdown(f"<div class='kpi'><h3>Este mes</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
+    
+    # Accesos Directos (Mockup inspiration)
+    with col4:
+        st.markdown("<div style='text-align:center; padding-top:10px; opacity:0.8;'><b>Accesos Rápidos</b></div>", unsafe_allow_html=True)
+        st.caption("Ve a las pestañas de abajo para:")
+        st.markdown("📝 **Cargar Asistencia**")
+        st.markdown("👤 **Nuevo Ingreso / Legajo**")
 
 # =========================
 # PAGES
@@ -448,11 +486,14 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     
     if st.button("💾 Guardar Asistencia", type="primary", use_container_width=True):
         if not overwrite: st.error("Confirmá sobreescritura"); st.stop()
+        
         if agregar_nueva and nueva.strip():
             df_personas = upsert_persona(df_personas, nueva, centro, usuario, frecuencia="Nueva", dni=dni_new, telefono=tel_new, fecha_nacimiento=nac_new)
             if nueva not in presentes: presentes.append(nueva)
+        
         if len(presentes)>0: total_presentes = len(presentes)
         accion = "overwrite" if not ya.empty else "append"
+        
         with st.spinner("Guardando..."):
             append_asistencia(fecha_str, centro, espacio, total_presentes, nombre_visible, modo, notas, usuario, accion)
             for n in presentes:
@@ -460,6 +501,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
             ausentes = [n for n in nombres if n not in presentes]
             for n in ausentes:
                 append_asistencia_personas(fecha_str, centro, espacio, n, "Ausente", "NO", nombre_visible, usuario)
+
         st.balloons()
         st.toast("✅ Guardado Exitoso"); time.sleep(1.5); st.cache_data.clear(); st.rerun()
 
@@ -486,7 +528,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
         if filtro_txt: df_show = df_show[df_show["nombre"].str.contains(filtro_txt, case=False, na=False)]
         if solo_activos: df_show = df_show[df_show["activo"].str.upper() == "SI"]
         df_show = df_show.sort_values("nombre", ascending=True)
-        cols_to_show = ["nombre", "frecuencia", "dni", "fecha_nacimiento", "activo"]
+        cols_to_show = ["nombre", "frecuencia", "dni", "fecha_nacimiento", "telefono", "activo"]
         for c in cols_to_show:
             if c not in df_show.columns: df_show[c] = ""
         st.dataframe(df_show[cols_to_show], use_container_width=True, hide_index=True)
@@ -494,49 +536,77 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
 
     datos_persona = df_centro[df_centro["nombre"] == seleccion].iloc[0]
     
-    # --- CARNET DIGITAL ---
+    # Renderizar Etiquetas HTML
+    tags_str = str(datos_persona.get("etiquetas", ""))
+    tags_html = ""
+    if tags_str and tags_str.lower() != "nan":
+        tags = [t.strip() for t in tags_str.split(",")]
+        for t in tags:
+            tags_html += f"<span class='tag-badge'>{t}</span>"
+
+    # Generar Link WhatsApp
+    telefono = str(datos_persona.get("telefono", ""))
+    wa_btn_html = ""
+    if telefono and telefono.lower() != "nan":
+        num_clean = format_wa_number(telefono)
+        if num_clean:
+            wa_btn_html = f"<a href='https://wa.me/{num_clean}' target='_blank' class='btn-wa'>💬 Contactar por WhatsApp</a>"
+
+    # CARNET DIGITAL MOCKUP STYLE
     st.markdown(f"""
     <div class="id-card">
         <div class="id-title">HOGAR DE CRISTO • {centro.upper()}</div>
         <div class="id-name">{seleccion}</div>
-        <div class="id-data">DNI: {datos_persona.get('dni', '---')}</div>
-        <div class="id-data">F. Nac: {datos_persona.get('fecha_nacimiento', '---')}</div>
-        <div class="id-footer">
-            <span>SOCIO/A ACTIVO</span>
-            <span>ALTA: {datos_persona.get('timestamp', '')[:10]}</span>
+        <div class="id-data-row">
+            <div class="id-data-col">
+                <span class="id-label">DNI</span>
+                <span class="id-value">{datos_persona.get('dni', '---')}</span>
+            </div>
+            <div class="id-data-col">
+                <span class="id-label">Fecha Nac.</span>
+                <span class="id-value">{datos_persona.get('fecha_nacimiento', '---')}</span>
+            </div>
+        </div>
+        <div>
+            <span style="font-weight:bold; background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 12px; font-size: 0.8rem;">
+                Socio/a Activo
+            </span>
+        </div>
+        <div class="tag-container">
+            {tags_html}
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    c_info, c_bitacora = st.columns([1, 2])
+    c_info, c_bitacora = st.columns([1.5, 2])
+    
     with c_info:
+        # Boton de WA
+        if wa_btn_html:
+            st.markdown(wa_btn_html, unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+
         st.markdown('<div class="profile-card">', unsafe_allow_html=True)
-        st.markdown("#### Datos")
+        st.markdown("#### Editar Datos / Contacto")
         with st.form("edit_persona"):
             dni = st.text_input("DNI", value=datos_persona.get("dni", ""))
             tel = st.text_input("Teléfono", value=datos_persona.get("telefono", ""))
-            # ✅ NUEVO CAMPO CONTACTO EMERGENCIA
             contacto_em = st.text_input("🚑 Contacto Emergencia", value=datos_persona.get("contacto_emergencia", ""))
             nac = st.text_input("Fecha Nac.", value=datos_persona.get("fecha_nacimiento", ""))
             dom = st.text_input("Domicilio", value=datos_persona.get("domicilio", ""))
+            # NUEVO CAMPO ETIQUETAS
+            etiquetas = st.text_input("Etiquetas (Separadas por coma)", value=datos_persona.get("etiquetas", ""), help="Ej: Vianda, Medicación, Alergia")
             notas_fija = st.text_area("Notas Fijas", value=datos_persona.get("notas", ""))
             activo_chk = st.checkbox("Activo", value=(str(datos_persona.get("activo")).upper() != "NO"))
-            if st.form_submit_button("💾 Actualizar"):
+            
+            if st.form_submit_button("💾 Guardar Cambios"):
                 nuevo_estado = "SI" if activo_chk else "NO"
-                upsert_persona(df_personas, seleccion, centro, usuario, dni=dni, telefono=tel, fecha_nacimiento=nac, domicilio=dom, notas=notas_fija, activo=nuevo_estado, contacto_emergencia=contacto_em)
+                upsert_persona(df_personas, seleccion, centro, usuario, dni=dni, telefono=tel, fecha_nacimiento=nac, domicilio=dom, notas=notas_fija, activo=nuevo_estado, contacto_emergencia=contacto_em, etiquetas=etiquetas)
                 st.toast("Actualizado"); st.cache_data.clear(); st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
         
-        if not df_ap.empty:
-            st.markdown("#### 🏃 Últimas Visitas")
-            hist = df_ap[(df_ap["nombre"]==seleccion) & (df_ap["centro"]==centro) & (df_ap["estado"]=="Presente")].copy()
-            if not hist.empty:
-                hist["fecha_dt"] = pd.to_datetime(hist["fecha"], errors="coerce")
-                hist = hist.sort_values("fecha_dt", ascending=False).head(5)
-                st.dataframe(hist[["fecha", "espacio"]], use_container_width=True, hide_index=True)
-
     with c_bitacora:
-        st.markdown("#### 📖 Bitácora")
+        st.markdown("#### 📖 Bitácora Reciente")
         with st.expander("➕ Nueva Nota", expanded=False):
             with st.form("new_seg"):
                 fecha_seg = st.date_input("Fecha", value=get_today_ar())
@@ -545,6 +615,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                 if st.form_submit_button("Guardar"):
                     append_seguimiento(str(fecha_seg), centro, seleccion, cat, obs, usuario)
                     st.toast("Guardado"); st.cache_data.clear(); st.rerun()
+        
         if not df_seg.empty:
             mis_notas = df_seg[(df_seg["nombre"]==seleccion) & (df_seg["centro"]==centro)].copy()
             if not mis_notas.empty:
@@ -553,12 +624,15 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                 for _, note in mis_notas.iterrows():
                     icon = "🩺" if "Salud" in note["categoria"] else "📝"
                     st.markdown(f"""
-                    <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:5px; margin-bottom:10px; border-left: 3px solid {SECONDARY}">
-                        <small>{note['fecha']} | <b>{note['categoria']}</b> ({note['usuario']})</small><br>
-                        {icon} {note['observacion']}
+                    <div style="background:rgba(255,255,255,0.05); padding:15px; border-radius:10px; margin-bottom:10px; border-left: 4px solid {SECONDARY}">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <strong style="color:{PRIMARY}">{icon} {note['categoria']}</strong>
+                            <small style="color:grey">{note['fecha']}</small>
+                        </div>
+                        <div style="font-size:0.95rem;">{note['observacion']}</div>
                     </div>
                     """, unsafe_allow_html=True)
-            else: st.info("Sin notas.")
+            else: st.info("Sin notas en la bitácora.")
 
 def page_reportes(df_asistencia, centro):
     st.subheader("📊 Reportes")
@@ -597,11 +671,9 @@ def page_global(df_asistencia, df_personas, df_ap):
     df["presentes_i"] = df["presentes"].apply(lambda x: clean_int(x, 0))
     anio = str(get_today_ar().year)
     
-    # --- GRÁFICO DE EDADES AUTOMÁTICO ---
     df_personas_unq = df_personas.sort_values("timestamp").groupby("nombre").tail(1)
     df_personas_unq["edad_calc"] = df_personas_unq["fecha_nacimiento"].apply(calculate_age)
     df_personas_unq = df_personas_unq[df_personas_unq["edad_calc"] > 0]
-    
     bins = [0, 12, 18, 30, 50, 100]
     labels = ['Niños (0-12)', 'Adolescentes (13-18)', 'Jóvenes (19-30)', 'Adultos (31-50)', 'Mayores (50+)']
     df_personas_unq['rango_edad'] = pd.cut(df_personas_unq['edad_calc'], bins=bins, labels=labels, right=False)
