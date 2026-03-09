@@ -743,7 +743,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
         <!-- CARD PRINCIPAL (CABECERA) -->
         <div class="id-card" style="margin-bottom:0px;">
             <div style="display:flex; justify-content: space-between; align-items:flex-start; margin-bottom: 5px;">
-                <div class="id-title">HOGAR DE CRISTO • {centro.upper()}</div>
+                <div class="id-title">HOGAR DE CRISTO • {{centro.upper()}}</div>
                 <span style="font-weight:800; background: rgba(255,255,255,0.25); padding: 5px 12px; border-radius: 12px; font-size: 0.70rem; letter-spacing:1px;">
                     {estado_badge}
                 </span>
