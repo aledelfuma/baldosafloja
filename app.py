@@ -36,8 +36,8 @@ CSS = f"""
   --secondary: {SECONDARY};
   --bg-color: #f8f9fa;
   --surface-color: #ffffff;
-  --text-dark: #1e293b;
-  --text-gray: #64748b;
+  --text-dark: #1e293b !important;
+  --text-gray: #475569 !important;
   --radius-sm: 12px;
   --radius-lg: 20px;
   --radius-xl: 28px;
@@ -45,33 +45,40 @@ CSS = f"""
   --shadow-inner: inset 0 2px 4px 0 rgba(0, 0, 0, 0.02);
 }}
 
-/* Escondiendo elementos nativos innecesarios de Streamlit */
+/* Escondiendo y ajustando elementos nativos de Streamlit */
 #MainMenu {{visibility: hidden;}}
 footer {{visibility: hidden;}}
-header {{visibility: hidden;}} /* Oculta la barra blanca superior que dice "Deploy" */
+header {{visibility: hidden;}} 
 
-/* Fondo Global y estructura Mobile */
+/* Fondo Global, Forzando texto oscuro y estructura Mobile */
 .stApp {{
     background-color: var(--bg-color);
     font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+    color: var(--text-dark);
+}}
+.stMarkdown, .stText, p, h1, h2, h3, h4, h5, h6, label {{
+    color: var(--text-dark) !important;
 }}
 
-/* Ajuste de márgenes superiores para que no haya un hueco en blanco gigante */
 .css-18e3th9, .st-emotion-cache-1jicfl2 {{
     padding-top: 1rem !important; 
     padding-left: 1rem !important;
     padding-right: 1rem !important;
-    padding-bottom: 90px !important; /* Espacio para la Bottom Bar simulada */
-    max-width: 600px !important; /* Emulando ancho de teléfono/tablet si se abre en PC */
+    padding-bottom: 90px !important; 
+    max-width: 600px !important; 
     margin: 0 auto;
 }}
 
-/* Top Bar - Header Moderno */
+/* Tarjetas y Layouts (Sobrescribiendo Theme oscuro accidental de Streamlit) */
+div[data-testid="stVerticalBlock"] > div {{
+    color: var(--text-dark);
+}}
+
 .top-bar {{
     background-color: var(--surface-color);
     padding: 20px;
     border-radius: var(--radius-xl);
-    border: 1px solid rgba(0,0,0,0.02);
+    border: 1px solid rgba(0,0,0,0.05);
     margin-bottom: 25px;
     box-shadow: var(--shadow-soft);
     display: flex;
@@ -81,13 +88,13 @@ header {{visibility: hidden;}} /* Oculta la barra blanca superior que dice "Depl
 div.user-info {{
     font-size: 1.35rem; 
     font-weight: 800; 
-    color: var(--text-dark);
+    color: var(--text-dark) !important;
     line-height: 1.2;
 }}
 div.center-info {{
     font-size: 0.85rem; 
     font-weight: 600; 
-    color: var(--text-gray);
+    color: var(--text-gray) !important;
     margin-top: 4px;
 }}
 
@@ -109,13 +116,21 @@ div.center-info {{
     background-color: #004269;
 }}
 
-/* Layout de Tarjetas Glassmorphism (Usado en inputs y paneles) */
+/* Inputs Forzados a Claros con Texto Oscuro */
 .stTextInput>div>div>input, .stSelectbox>div>div>div, .stDateInput>div>div>input, .stTextArea>div>div>textarea, .stMultiSelect>div>div>div {{
-    border-radius: var(--radius-sm);
-    border: 1px solid rgba(0,0,0,0.05);
-    background-color: var(--surface-color);
+    border-radius: var(--radius-sm) !important;
+    border: 1px solid rgba(0,0,0,0.1) !important;
+    background-color: var(--surface-color) !important;
+    color: var(--text-dark) !important;
     box-shadow: var(--shadow-inner);
     padding: 0.5rem;
+}}
+
+/* Fijando el Color de los Títulos de los Expanders */
+.streamlit-expanderHeader {{
+    color: var(--text-dark) !important;
+    background-color: rgba(255,255,255,0.8);
+    border-radius: var(--radius-sm);
 }}
 
 /* KPIs Modernos (Métricas Resumen) */
@@ -131,7 +146,7 @@ div.center-info {{
 .kpi h3 {{ 
     margin: 0; 
     font-size: 0.70rem; 
-    color: var(--text-gray);
+    color: var(--text-gray) !important;
     text-transform: uppercase; 
     font-weight: 700;
     letter-spacing: 0.5px; 
@@ -140,7 +155,7 @@ div.center-info {{
     font-size: 2.2rem; 
     font-weight: 800; 
     margin-top: 5px; 
-    color: var(--primary); 
+    color: var(--primary) !important; 
     line-height: 1;
 }}
 
@@ -155,9 +170,9 @@ div.center-info {{
     align-items: center;
     gap: 8px;
 }}
-.alert-danger {{ background-color: #FEF2F2; color: #991B1B; border: 1px solid #FEE2E2; }}
-.alert-success {{ background-color: #F0FDF4; color: #166534; border: 1px solid #DCFCE7; }}
-.alert-gray {{ background-color: var(--surface-color); color: var(--text-gray); border: 1px solid rgba(0,0,0,0.05); shadow: var(--shadow-soft); }}
+.alert-danger {{ background-color: #FEF2F2; color: #991B1B !important; border: 1px solid #FEE2E2; }}
+.alert-success {{ background-color: #F0FDF4; color: #166534 !important; border: 1px solid #DCFCE7; }}
+.alert-gray {{ background-color: var(--surface-color); color: var(--text-gray) !important; border: 1px solid rgba(0,0,0,0.05); box-shadow: var(--shadow-soft); }}
 
 /* ===============================================
    💳 CARNET DIGITAL (Legajo Profile Card)
@@ -166,14 +181,14 @@ div.center-info {{
     background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
     border-radius: var(--radius-xl);
     padding: 30px;
-    color: white;
+    color: white !important;
     box-shadow: 0 15px 35px rgba(0, 78, 123, 0.25);
     border: 1px solid rgba(255,255,255,0.1);
     margin-bottom: 25px;
     position: relative;
     overflow: hidden;
 }}
-/* Efectos circulares para que parezca una tarjeta de crédito moderna */
+.id-card * {{ color: white !important; }}
 .id-card::before {{
     content: "";
     position: absolute;
@@ -239,6 +254,7 @@ div.center-info {{
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-soft);
     margin-bottom: 20px;
+    border: 1px solid rgba(0,0,0,0.05);
 }}
 
 /* ===============================================
@@ -264,7 +280,7 @@ div.center-info {{
     justify-content: center;
     font-size: 0.8rem !important;
     font-weight: 600;
-    color: var(--text-gray);
+    color: var(--text-gray) !important;
     padding: 10px 0;
     border: none !important;
     background: transparent !important;
@@ -272,12 +288,13 @@ div.center-info {{
 .stTabs [aria-selected="true"] {{
     color: var(--primary) !important;
     border-radius: 10px;
+    background-color: rgba(0, 78, 123, 0.05) !important;
 }}
 .stTabs [aria-selected="true"]::after {{
-    display: none; /* Quitamos la línea de subrayado naranja clásica de Streamlit */
+    display: none;
 }}
 div[role="tabpanel"] {{
-    padding-bottom: 40px; /* Para que el contenido no quede tapado por la navbar fija */
+    padding-bottom: 40px; 
 }}
 </style>
 """
