@@ -35,10 +35,15 @@ CSS = """
 
 /* =========================================
    COMPORTAMIENTO 100% NATIVO MOBILE
+   (Ocultar botones flotantes de Streamlit)
    ========================================= */
 header[data-testid="stHeader"] {display: none !important;}
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
+.viewerBadge_container {display: none !important;} /* Oculta "Made with Streamlit" */
+[data-testid="stToolbar"] {display: none !important;} /* Oculta tu avatar y menú flotante inferior */
+[data-testid="stAppDeployButton"] {display: none !important;}
+.stDeployButton {display: none !important;}
 
 .stApp {
     background-color: var(--background) !important;
@@ -148,14 +153,14 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     bottom: 0; 
     left: 0; 
     right: 0;
-    background-color: rgba(18, 18, 18, 0.85); 
+    background-color: rgba(18, 18, 18, 0.95); 
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-top: 1px solid rgba(255,255,255,0.1);
     display: flex;
     justify-content: space-around;
     padding: 10px 5px env(safe-area-inset-bottom, 20px) 5px; 
-    z-index: 9999;
+    z-index: 999999 !important; /* Capa super alta para que nada lo tape */
 }
 .stTabs [data-baseweb="tab"] {
     flex-grow: 1; text-align: center; justify-content: center;
@@ -643,7 +648,6 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     else:
         nacimiento_mostrar = f"{nac_val} ({calculate_age(nac_val)} años)"
 
-    # 🚨 FIX HTML (Alineado a la izquierda sin espacios) 🚨
     html_carnet = f"""
 <div class="id-card">
 <div style="display:flex; justify-content: space-between; align-items:flex-start; margin-bottom: 5px;">
@@ -804,7 +808,6 @@ def page_reportes(df_asistencia, centro):
     st.markdown("#### Detalle Diario")
     st.dataframe(df_c[["fecha", "espacio", "presentes", "coordinador"]].sort_values("fecha", ascending=False), use_container_width=True)
 
-    # 📩 MENSAJE DE SOPORTE EN REPORTES
     st.markdown("""
     <br><hr style='opacity:0.2;'>
     <div style='text-align: center; color: var(--text-secondary); font-size: 0.8rem; margin-top: 20px;'>
@@ -872,7 +875,7 @@ def page_global(df_asistencia, df_personas, df_ap):
             st.info("Falta cargar fechas de nacimiento.")
 
 # =========================
-# MAIN APP (CONTROLADOR)
+# MAIN APP
 # =========================
 def main():
     if not st.session_state.get("logged_in"): 
@@ -889,7 +892,6 @@ def main():
         st.stop()
     centro = match_centro
 
-    # 🚨 REGLA ESTRICTA NATASHA PARA CALLE BELÉN
     mostrar_app = True
     if centro == C_BELEN and u.upper() != "NATASHA":
         st.error("🔒 ACCESO DENEGADO: El centro Calle Belén es de acceso exclusivo para la administración.")
@@ -904,7 +906,6 @@ def main():
     
     df_asistencia, df_personas, df_ap, df_seg = load_all_data()
 
-    # 📱 PANTALLA PRINCIPAL DE INICIO
     list_tabs = ["🏠 Inicio", "👥 Legajos", "📊 Reportes"]
     if u.upper() == "NATASHA": list_tabs.append("🌍 Global")
     
