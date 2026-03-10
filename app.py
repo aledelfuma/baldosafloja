@@ -36,24 +36,21 @@ CSS = """
 /* =========================================
    COMPORTAMIENTO 100% NATIVO MOBILE
    ========================================= */
-/* Ocultar UI propia de Streamlit para parecer una app */
 header[data-testid="stHeader"] {display: none !important;}
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 
-/* Forzar fondo oscuro y remover márgenes molestos */
 .stApp {
     background-color: var(--background) !important;
     font-family: 'Inter', -apple-system, sans-serif !important;
     color: var(--text-primary) !important;
 }
 
-/* Padding inteligente para el celular (Aprovecha los bordes) */
 .block-container {
     padding-top: 1rem !important; 
     padding-left: 0.8rem !important;
     padding-right: 0.8rem !important;
-    padding-bottom: 120px !important; /* Deja espacio para que el menú inferior no tape contenido */
+    padding-bottom: 120px !important; 
     max-width: 650px !important; 
     margin: 0 auto;
     overflow-x: hidden;
@@ -63,7 +60,6 @@ footer {visibility: hidden;}
     color: var(--text-primary) !important;
 }
 
-/* Tarjetas base */
 .top-bar {
     background-color: var(--surface);
     padding: 15px 20px;
@@ -77,7 +73,6 @@ footer {visibility: hidden;}
 div.user-info { font-size: 1.2rem; font-weight: 700; line-height: 1.2; }
 div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary) !important; margin-top: 2px; }
 
-/* Botones con estilo App */
 .stButton>button {
     background-color: var(--primary);
     color: #000000 !important;
@@ -88,9 +83,8 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     transition: 0.2s;
     width: 100%;
 }
-.stButton>button:active { transform: scale(0.98); } /* Efecto click nativo */
+.stButton>button:active { transform: scale(0.98); } 
 
-/* Inputs en modo oscuro */
 .stTextInput>div>div>input, .stSelectbox>div>div>div, .stDateInput>div>div>input, .stTextArea>div>div>textarea, .stMultiSelect>div>div>div {
     border-radius: var(--radius-sm) !important;
     border: 1px solid rgba(255,255,255,0.1) !important;
@@ -99,14 +93,12 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     padding: 0.6rem;
 }
 
-/* Acordeones */
 .streamlit-expanderHeader {
     color: var(--text-primary) !important;
     background-color: var(--surface);
     border-radius: var(--radius-sm);
 }
 
-/* KPIs para Dashboard */
 .kpi {
   border-radius: var(--radius-lg);
   padding: 15px;
@@ -118,13 +110,11 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
 .kpi h3 { margin: 0; font-size: 0.65rem; color: var(--text-secondary) !important; text-transform: uppercase; letter-spacing: 0.5px; }
 .kpi .v { font-size: 2rem; font-weight: 800; color: var(--primary) !important; line-height: 1; margin-top: 5px; }
 
-/* Alertas iOS Style */
 .alert-box { padding: 12px 15px; border-radius: var(--radius-sm); margin-bottom: 10px; font-size: 0.9rem; font-weight: 600; }
 .alert-danger { background-color: rgba(239, 68, 68, 0.15); color: #FCA5A5 !important; border: 1px solid rgba(239, 68, 68, 0.3); }
 .alert-success { background-color: rgba(34, 197, 94, 0.15); color: #86EFAC !important; border: 1px solid rgba(34, 197, 94, 0.3); }
 .alert-gray { background-color: var(--surface); color: var(--text-secondary) !important; border: 1px solid rgba(255,255,255,0.05); }
 
-/* Carnet Digital */
 .id-card {
     background: linear-gradient(135deg, #004E7B 0%, #63296C 100%);
     border-radius: 20px;
@@ -153,10 +143,6 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     margin-top: 10px; transition: 0.3s; width: 100%;
 }
 
-/* =========================================
-   BARRA DE NAVEGACIÓN INFERIOR (BOTTOM NAV)
-   Efecto Vidrio e Integración iOS
-   ========================================= */
 .stTabs [data-baseweb="tab-list"] {
     position: fixed; 
     bottom: 0; 
@@ -168,7 +154,7 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     border-top: 1px solid rgba(255,255,255,0.1);
     display: flex;
     justify-content: space-around;
-    padding: 10px 5px env(safe-area-inset-bottom, 20px) 5px; /* Evita pisar la barra de iPhone */
+    padding: 10px 5px env(safe-area-inset-bottom, 20px) 5px; 
     z-index: 9999;
 }
 .stTabs [data-baseweb="tab"] {
@@ -434,7 +420,6 @@ def show_login_screen():
                 else:
                     st.error("Error de credenciales.")
         
-        # 📩 MENSAJE DE SOPORTE EN LOGIN
         st.markdown("""
         <div style='text-align: center; margin-top: 30px; font-size: 0.85rem; color: #888;'>
             ¿Problemas con la App o tu clave? <br>
@@ -630,7 +615,6 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                 st.dataframe(df_show[cols_to_show].sort_values("nombre"), use_container_width=True, hide_index=True)
         return
 
-    # === CARGAMOS LA FICHA INDIVIDUAL ===
     datos_persona = df_centro[df_centro["nombre"] == seleccion].iloc[0]
     
     tags_str = str(datos_persona.get("etiquetas", ""))
@@ -659,6 +643,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     else:
         nacimiento_mostrar = f"{nac_val} ({calculate_age(nac_val)} años)"
 
+    # 🚨 FIX HTML (Alineado a la izquierda sin espacios) 🚨
     html_carnet = f"""
 <div class="id-card">
 <div style="display:flex; justify-content: space-between; align-items:flex-start; margin-bottom: 5px;">
@@ -688,34 +673,35 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
 """
     st.markdown(html_carnet, unsafe_allow_html=True)
     
-    # Datos Rápidos
     domicilio_val = str(datos_persona.get('domicilio', '')).strip()
     if domicilio_val.lower() == 'nan' or not domicilio_val: domicilio_val = 'No registrado'
     tel_val = str(datos_persona.get('telefono', '')).strip()
     if tel_val.lower() == 'nan' or not tel_val: tel_val = 'No registrado'
         
-    st.markdown(f"""
-    <div style="background:var(--surface); padding:15px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.05); margin-bottom:15px;">
-        <div style="margin-bottom:10px;">
-            <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">📱 Teléfono</div>
-            <div style="font-size:1.1rem;">{tel_val}</div>
-            {wa_btn_html}
-        </div>
-        <div>
-            <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">🏠 Dirección</div>
-            <div style="font-size:1.1rem;">{domicilio_val}</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    html_contacto = f"""
+<div style="background:var(--surface); padding:15px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.05); margin-bottom:15px;">
+<div style="margin-bottom:10px;">
+<div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">📱 Teléfono</div>
+<div style="font-size:1.1rem;">{tel_val}</div>
+{wa_btn_html}
+</div>
+<div>
+<div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">🏠 Dirección</div>
+<div style="font-size:1.1rem;">{domicilio_val}</div>
+</div>
+</div>
+"""
+    st.markdown(html_contacto, unsafe_allow_html=True)
         
     emergencia = str(datos_persona.get('contacto_emergencia', '')).strip()
     if emergencia and emergencia.lower() != 'nan':
-        st.markdown(f"""
-        <div style="background:rgba(239, 68, 68, 0.1); padding:15px; border-radius:var(--radius-sm); border-left:4px solid #EF4444; margin-bottom:15px;">
-            <div style="font-size:0.75rem; color:#EF4444; text-transform:uppercase; font-weight:800;">🚨 Emergencia</div>
-            <div style="font-weight:700; font-size:1.1rem; color:#FCA5A5;">{emergencia}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        html_emergencia = f"""
+<div style="background:rgba(239, 68, 68, 0.1); padding:15px; border-radius:var(--radius-sm); border-left:4px solid #EF4444; margin-bottom:15px;">
+<div style="font-size:0.75rem; color:#EF4444; text-transform:uppercase; font-weight:800;">🚨 Emergencia</div>
+<div style="font-weight:700; font-size:1.1rem; color:#FCA5A5;">{emergencia}</div>
+</div>
+"""
+        st.markdown(html_emergencia, unsafe_allow_html=True)
             
     notas_str = str(datos_persona.get('notas', '')).strip()
     if notas_str and notas_str.lower() != 'nan':
@@ -769,18 +755,19 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                 icon = "🩺" if "salud" in cat else "📝" if "trámite" in cat else "🫂" if 'escucha' in cat else "🚨" if 'crisis' in cat else "📌"
                 color_left = "#EF4444" if "crisis" in cat else SECONDARY
                 
-                st.markdown(f"""
-                <div style="background-color: var(--surface); padding:15px; border-radius:var(--radius-sm); margin-bottom:12px; border-left: 4px solid {color_left}; border: 1px solid rgba(255,255,255,0.02);">
-                    <div style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom:8px; margin-bottom:8px;">
-                        <strong style="color:var(--primary); font-size:1.0rem;">{icon} {note['categoria']}</strong>
-                        <div style="text-align:right;">
-                            <div style="color:var(--text-secondary); font-size:0.75rem; font-weight:700;">{note['fecha']}</div>
-                            <div style="color:var(--text-secondary); font-size:0.65rem;">Por {str(note.get('usuario', ''))}</div>
-                        </div>
-                    </div>
-                    <div style="font-size:0.95rem; line-height:1.4;">{note['observacion']}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                html_nota = f"""
+<div style="background-color: var(--surface); padding:15px; border-radius:var(--radius-sm); margin-bottom:12px; border-left: 4px solid {color_left}; border: 1px solid rgba(255,255,255,0.02);">
+<div style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom:8px; margin-bottom:8px;">
+<strong style="color:var(--primary); font-size:1.0rem;">{icon} {note['categoria']}</strong>
+<div style="text-align:right;">
+<div style="color:var(--text-secondary); font-size:0.75rem; font-weight:700;">{note['fecha']}</div>
+<div style="color:var(--text-secondary); font-size:0.65rem;">Por {str(note.get('usuario', ''))}</div>
+</div>
+</div>
+<div style="font-size:0.95rem; line-height:1.4;">{note['observacion']}</div>
+</div>
+"""
+                st.markdown(html_nota, unsafe_allow_html=True)
         else: st.info("Esta persona todavía no tiene registros en la bitácora.")
 
 def page_reportes(df_asistencia, centro):
@@ -817,7 +804,7 @@ def page_reportes(df_asistencia, centro):
     st.markdown("#### Detalle Diario")
     st.dataframe(df_c[["fecha", "espacio", "presentes", "coordinador"]].sort_values("fecha", ascending=False), use_container_width=True)
 
-    # 📩 MENSAJE DE SOPORTE EN REPORTES (Discreto al fondo)
+    # 📩 MENSAJE DE SOPORTE EN REPORTES
     st.markdown("""
     <br><hr style='opacity:0.2;'>
     <div style='text-align: center; color: var(--text-secondary); font-size: 0.8rem; margin-top: 20px;'>
@@ -888,16 +875,6 @@ def page_global(df_asistencia, df_personas, df_ap):
 # MAIN APP (CONTROLADOR)
 # =========================
 def main():
-    # 1. Seguridad: Desconectar menús de Streamlit por si el CSS falla
-    hide_st_style = """
-                <style>
-                #MainMenu {visibility: hidden;}
-                footer {visibility: hidden;}
-                header {visibility: hidden;}
-                </style>
-                """
-    st.markdown(hide_st_style, unsafe_allow_html=True)
-
     if not st.session_state.get("logged_in"): 
         show_login_screen()
     
@@ -928,28 +905,23 @@ def main():
     df_asistencia, df_personas, df_ap, df_seg = load_all_data()
 
     # 📱 PANTALLA PRINCIPAL DE INICIO
-    # Como tenemos Bottom Nav, armamos la interfaz en Tabs
     list_tabs = ["🏠 Inicio", "👥 Legajos", "📊 Reportes"]
     if u.upper() == "NATASHA": list_tabs.append("🌍 Global")
     
     tabs = st.tabs(list_tabs)
     
-    # TAB 1: INICIO (Dashboard + Formulario de Carga)
     with tabs[0]: 
         show_top_alerts(latest_asistencia(df_asistencia), df_personas, df_ap, centro)
         kpi_row_full(latest_asistencia(df_asistencia), centro)
         st.markdown("<hr style='opacity:0.2;'>", unsafe_allow_html=True)
         page_registrar_asistencia(df_personas, df_asistencia, centro, nombre, u)
         
-    # TAB 2: LEGAJOS (Buscador y Bitácora)
     with tabs[1]: 
         page_personas_full(df_personas, df_ap, df_seg, centro, u)
         
-    # TAB 3: REPORTES
     with tabs[2]: 
         page_reportes(df_asistencia, centro)
         
-    # TAB 4: GLOBAL (Solo Admin)
     if len(tabs) > 3:
         with tabs[3]: page_global(df_asistencia, df_personas, df_ap)
 
