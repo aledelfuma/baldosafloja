@@ -234,13 +234,20 @@ def format_wa_number(phone):
     return re.sub(r'\D', '', str(phone))
 
 # =========================
-# Schemas y Nombres
+# Schemas y Nombres (AQUÍ ESTABAN FALTANDO LAS COLUMNAS)
 # =========================
 ASISTENCIA_TAB = "asistencia"
 PERSONAS_TAB = "personas"
 ASISTENCIA_PERSONAS_TAB = "asistencia_personas"
 USUARIOS_TAB = "config_usuarios"
 SEGUIMIENTO_TAB = "seguimiento"
+
+# 🚨 VARIABLES RESTAURADAS PARA EVITAR EL NAMEERROR 🚨
+ASISTENCIA_COLS = ["timestamp", "fecha", "anio", "centro", "espacio", "presentes", "coordinador", "modo", "notas", "usuario", "accion"]
+PERSONAS_COLS = ["nombre", "frecuencia", "centro", "edad", "domicilio", "notas", "activo", "timestamp", "usuario", "dni", "fecha_nacimiento", "telefono", "contacto_emergencia", "etiquetas"]
+ASISTENCIA_PERSONAS_COLS = ["timestamp", "fecha", "anio", "centro", "espacio", "nombre", "estado", "es_nuevo", "coordinador", "usuario", "notas"]
+USUARIOS_COLS = ["usuario", "password", "centro", "nombre"]
+SEGUIMIENTO_COLS = ["timestamp", "fecha", "anio", "centro", "nombre", "categoria", "observacion", "usuario"]
 
 C_BELEN = "Calle Belén"
 C_NUDO = "Nudo a Nudo"
@@ -407,7 +414,6 @@ def append_asistencia_personas(fecha, centro, espacio, nombre, estado, es_nuevo,
         "espacio": espacio, "nombre": nombre, "estado": estado, "es_nuevo": es_nuevo, 
         "coordinador": coordinador, "usuario": usuario, "notas": notas
     }
-    # ERROR CORREGIDO: Se guardaba en COLS en lugar de TAB
     append_ws_rows(ASISTENCIA_PERSONAS_TAB, ASISTENCIA_PERSONAS_COLS, [[row.get(c, "") for c in ASISTENCIA_PERSONAS_COLS]])
 
 def append_seguimiento(fecha, centro, nombre, categoria, observacion, usuario):
@@ -627,14 +633,12 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     # === CARGAMOS LA FICHA INDIVIDUAL ===
     datos_persona = df_centro[df_centro["nombre"] == seleccion].iloc[0]
     
-    # Procesar Etiquetas Html
     tags_str = str(datos_persona.get("etiquetas", ""))
     tags_html = ""
     if tags_str and tags_str.lower() != "nan":
         tags = [t.strip() for t in tags_str.split(",") if t.strip()]
         for t in tags: tags_html += f"<span class='tag-badge'>{t}</span>"
 
-    # Preparar Datos de Contacto
     telefono = str(datos_persona.get("telefono", ""))
     wa_btn_html = ""
     if telefono and telefono.lower() != "nan" and format_wa_number(telefono):
@@ -642,11 +646,9 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
         
     estado_badge = "🟢 SOCIO/A ACTIVO" if str(datos_persona.get("activo")).upper() != "NO" else "🔴 INACTIVO"
     
-    # Avatar Dinámico Generado
     import urllib.parse
     avatar_url = f"https://api.dicebear.com/7.x/initials/svg?seed={urllib.parse.quote(seleccion)}&backgroundColor=004e7b&textColor=ffffff"
 
-    # Limpieza de DNI y Edad
     dni_val = str(datos_persona.get('dni', '')).strip()
     if dni_val.lower() == 'nan' or not dni_val:
         dni_val = "No registrado"
@@ -657,7 +659,6 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     else:
         nacimiento_mostrar = f"{nac_val} ({calculate_age(nac_val)} años)"
 
-    # HTML Carnet sin espacios
     html_carnet = f"""
 <div style="display: flex; flex-direction: column; gap: 20px;">
 <div class="id-card" style="margin-bottom:0px;">
@@ -761,10 +762,11 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                 fecha_seg = st.date_input("Fecha de Consulta", value=get_today_ar())
                 cat = st.selectbox("Categoría / Área", CATEGORIAS_SEGUIMIENTO)
                 obs = st.text_area("Detalle de lo hablado o sucedido...")
+                
                 if st.form_submit_button("📝 Guardar Registro", use_container_width=True):
                     if len(obs) > 5:
                         append_seguimiento(str(fecha_seg), centro, seleccion, cat, obs, usuario)
-                        st.success("Guardado correctamente")
+                        st.success("Guardado correctamente.")
                         time.sleep(1)
                         st.cache_data.clear(); st.rerun()
                     else:
@@ -866,18 +868,19 @@ def main():
     if not match_centro: st.error("Centro inválido."); st.stop()
     centro = match_centro
 
-    # REGLA ESTRICTA NATASHA
+    # 🚨 REGLA ESTRICTA NATASHA PARA CALLE BELÉN 🚨
     mostrar_app = True
     if centro == C_BELEN and u.upper() != "NATASHA":
         st.error("🔒 Este centro es exclusivo de Natasha. Acceso denegado.")
         st.markdown("---")
-        if st.button("Salir"):
+        if st.button("Salir de la cuenta"):
             st.session_state.clear(); st.rerun()
         mostrar_app = False
         
     if not mostrar_app: return
 
     show_top_header(nombre, centro)
+    
     df_asistencia, df_personas, df_ap, df_seg = load_all_data()
 
     show_top_alerts(latest_asistencia(df_asistencia), df_personas, df_ap, centro)
