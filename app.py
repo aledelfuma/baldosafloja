@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 from google.oauth2.service_account import Credentials
 import gspread
 from gspread.exceptions import APIError
@@ -31,7 +31,6 @@ CSS = """
   --text-secondary: #AAAAAA;
   --radius-sm: 10px;
   --radius-lg: 15px;
-  --shadow: 0 4px 6px rgba(0,0,0,0.3);
 }
 
 /* Fondo Global, Forzando texto claro y estructura Mobile */
@@ -41,17 +40,14 @@ CSS = """
     color: var(--text-primary) !important;
 }
 
-/* Títulos y etiquetas de widgets en blanco */
 .stMarkdown, .stText, p, h1, h2, h3, h4, h5, h6, label {
     color: var(--text-primary) !important;
 }
 
-/* Elementos Nativos Ocultos */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 header {visibility: hidden;} 
 
-/* Layout Mobile Centrado */
 .css-18e3th9, .st-emotion-cache-1jicfl2 {
     padding-top: 1rem !important; 
     padding-left: 1rem !important;
@@ -61,7 +57,6 @@ header {visibility: hidden;}
     margin: 0 auto;
 }
 
-/* Tarjetas y Contenedores */
 div[data-testid="stVerticalBlock"] > div {
     color: var(--text-primary);
 }
@@ -89,7 +84,6 @@ div.center-info {
     margin-top: 2px;
 }
 
-/* Custom Buttons */
 .stButton>button {
     background-color: var(--primary);
     color: #000000 !important;
@@ -105,7 +99,6 @@ div.center-info {
     box-shadow: 0 4px 10px rgba(96, 165, 250, 0.3);
 }
 
-/* Inputs para Modo Oscuro */
 .stTextInput>div>div>input, .stSelectbox>div>div>div, .stDateInput>div>div>input, .stTextArea>div>div>textarea, .stMultiSelect>div>div>div {
     border-radius: var(--radius-sm) !important;
     border: 1px solid rgba(255,255,255,0.1) !important;
@@ -114,14 +107,12 @@ div.center-info {
     padding: 0.5rem;
 }
 
-/* FAQs y Expanders en negro */
 .streamlit-expanderHeader {
     color: var(--text-primary) !important;
     background-color: var(--surface);
     border-radius: var(--radius-sm);
 }
 
-/* KPIs Modernos */
 .kpi {
   border-radius: var(--radius-lg);
   padding: 15px;
@@ -131,26 +122,15 @@ div.center-info {
   height: 100%;
 }
 .kpi h3 { 
-    margin: 0; 
-    font-size: 0.65rem; 
-    color: var(--text-secondary) !important;
-    text-transform: uppercase; 
-    letter-spacing: 0.5px; 
+    margin: 0; font-size: 0.65rem; color: var(--text-secondary) !important;
+    text-transform: uppercase; letter-spacing: 0.5px; 
 }
 .kpi .v { 
-    font-size: 2rem; 
-    font-weight: 800; 
-    color: var(--primary) !important; 
-    line-height: 1;
+    font-size: 2rem; font-weight: 800; color: var(--primary) !important; line-height: 1;
 }
 
-/* Alertas */
 .alert-box { 
-    padding: 12px 15px; 
-    border-radius: var(--radius-sm); 
-    margin-bottom: 10px; 
-    font-size: 0.9rem; 
-    font-weight: 600;
+    padding: 12px 15px; border-radius: var(--radius-sm); margin-bottom: 10px; font-size: 0.9rem; font-weight: 600;
 }
 .alert-danger { background-color: rgba(239, 68, 68, 0.1); color: #EF4444 !important; border: 1px solid rgba(239, 68, 68, 0.3); }
 .alert-success { background-color: rgba(34, 197, 94, 0.1); color: #22C55E !important; border: 1px solid rgba(34, 197, 94, 0.3); }
@@ -186,29 +166,17 @@ div.center-info {
     margin-top: 10px; transition: 0.3s;
 }
 
-/* Pestañas (Tabs) estilo APP inferior */
 .stTabs [data-baseweb="tab-list"] {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background-color: #0A0A0A; 
-    border-top: 1px solid rgba(255,255,255,0.05);
-    display: flex;
-    justify-content: space-around;
-    padding: 8px 10px 18px 10px;
-    z-index: 9999;
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background-color: #0A0A0A; border-top: 1px solid rgba(255,255,255,0.05);
+    display: flex; justify-content: space-around; padding: 8px 10px 18px 10px; z-index: 9999;
 }
 .stTabs [data-baseweb="tab"] {
-    flex-grow: 1; text-align: center; justify-content: center;
-    font-size: 0.75rem !important; font-weight: 600;
-    color: var(--text-secondary) !important; padding: 8px 0;
-    border: none !important; background: transparent !important;
+    flex-grow: 1; text-align: center; justify-content: center; font-size: 0.75rem !important; font-weight: 600;
+    color: var(--text-secondary) !important; padding: 8px 0; border: none !important; background: transparent !important;
 }
 .stTabs [aria-selected="true"] {
-    color: var(--primary) !important;
-    background-color: rgba(96, 165, 250, 0.05) !important;
-    border-radius: 8px;
+    color: var(--primary) !important; background-color: rgba(96, 165, 250, 0.05) !important; border-radius: 8px;
 }
 .stTabs [aria-selected="true"]::after { display: none; }
 </style>
@@ -258,7 +226,7 @@ DEFAULT_ESPACIO = "General"
 CATEGORIAS_SEGUIMIENTO = ["Escucha / Acompañamiento", "Salud", "Trámite (DNI/Social)", "Educación", "Familiar", "Crisis / Conflicto", "Otro"]
 
 # =========================
-# Google Sheets (Con Credenciales Incluidas)
+# Google Sheets
 # =========================
 def normalize_private_key(pk: str) -> str:
     if not isinstance(pk, str): return pk
@@ -301,7 +269,8 @@ def get_spreadsheet():
     gc = get_gspread_client()
     return gc.open_by_key(sid)
 
-def get_or_create_ws(sh, title, cols):
+def get_or_create_ws(title: str, cols: list):
+    sh = get_spreadsheet()
     try: return sh.worksheet(title)
     except Exception: pass
     try:
@@ -319,7 +288,7 @@ def safe_get_all_values(ws, tries=3):
     st.error("Error conexión Sheets."); st.stop()
 
 def read_ws_df(title: str, cols: list) -> pd.DataFrame:
-    ws = get_or_create_ws(get_spreadsheet(), title, cols)
+    ws = get_or_create_ws(title, cols)
     values = safe_get_all_values(ws)
     if not values:
         ws.update("A1", [cols])
@@ -337,17 +306,15 @@ def read_ws_df(title: str, cols: list) -> pd.DataFrame:
     return df[cols]
 
 def append_ws_rows(title: str, cols: list, rows: list[list]):
-    sh = get_spreadsheet()
-    ws = get_or_create_ws(sh, title, cols)
-    first = safe_get_all_values(ws)[:1]
-    if not first or first[0][: len(cols)] != cols: ws.update("A1", [cols])
+    ws = get_or_create_ws(title, cols)
     ws.append_rows(rows, value_input_option="USER_ENTERED")
 
 # =========================
 # Data & Logic
 # =========================
 @st.cache_data(ttl=600, show_spinner=False)
-def get_users_db(): return read_ws_df(USUARIOS_TAB, USUARIOS_COLS)
+def get_users_db(): 
+    return read_ws_df(USUARIOS_TAB, USUARIOS_COLS)
 
 @st.cache_data(ttl=300, show_spinner="Sincronizando...")
 def load_all_data():
@@ -377,15 +344,6 @@ def last_load_info(df_latest, centro):
     days = (pd.Timestamp(get_today_ar()).date() - last.date()).days
     return last.date().isoformat(), int(days)
 
-# 🚨 CORRECCIÓN DEL ERROR KEYERROR: BLINDAJE DE TABLAS VACÍAS 🚨
-def get_today_asistencia_summary(df_a):
-    if df_a.empty: return df_a.copy() # Conserva las columnas aunque esté vacío
-    hoy = get_today_ar().isoformat()
-    d = df_a[df_a["fecha"] == hoy].copy()
-    if d.empty: return d.copy() # Conserva las columnas aunque esté vacío
-    d["timestamp_dt"] = pd.to_datetime(d["timestamp"], errors="coerce")
-    return d.sort_values("timestamp_dt").groupby(["centro", "espacio"]).tail(1)
-
 def personas_for_centro(df_personas, centro):
     if df_personas.empty: return df_personas
     if "centro" in df_personas.columns:
@@ -398,8 +356,10 @@ def personas_for_centro(df_personas, centro):
 def filter_personas_centro(df_personas, centro):
     if df_personas.empty: return df_personas
     df_c = personas_for_centro(df_personas, centro)
-    df_c["timestamp_dt"] = pd.to_datetime(df_c["timestamp"], errors="coerce")
-    return df_c.sort_values("timestamp_dt").groupby("nombre").tail(1)
+    if not df_c.empty and "timestamp" in df_c.columns:
+        df_c["timestamp_dt"] = pd.to_datetime(df_c["timestamp"], errors="coerce")
+        return df_c.sort_values("timestamp_dt").groupby("nombre").tail(1)
+    return df_c
 
 def upsert_persona(df_personas, nombre, centro, usuario, **kwargs):
     nombre = norm_text(nombre)
@@ -503,19 +463,11 @@ def show_top_alerts(df_latest, df_personas, df_ap, centro):
             for _, r in alertas.iterrows(): ausentes.append(f"{r['nombre']} ({r['dias']} días)")
 
     st.markdown("### 📊 Resumen de Asistencia y Alertas")
-    
-    today_a = get_today_asistencia_summary(df_latest)
-    
-    # Blindaje contra KeyError
-    if today_a.empty or "centro" not in today_a.columns:
-        c_a = pd.DataFrame()
-    else:
-        c_a = today_a[today_a["centro"] == centro]
-
     ac1, ac2, ac3 = st.columns(3)
     with ac1:
-        if c_a.empty: st.markdown("<div class='alert-box alert-danger'>⚠️ Faltan Cargar Asistencias Hoy</div>", unsafe_allow_html=True)
-        else: st.markdown("<div class='alert-box alert-success'>✅ Carga al día (Hoy)</div>", unsafe_allow_html=True)
+        if last_date is None: st.markdown("<div class='alert-box alert-danger'>⚠️ Estado: Sin cargas</div>", unsafe_allow_html=True)
+        elif days == 0: st.markdown("<div class='alert-box alert-success'>✅ Estado: Al día (Hoy)</div>", unsafe_allow_html=True)
+        else: st.markdown(f"<div class='alert-box alert-danger'>⚠️ Faltan cargar asistencias (hace {days}d)</div>", unsafe_allow_html=True)
     with ac2:
         if cumples:
             with st.expander(f"🎉 Cumpleaños Hoy ({len(cumples)})", expanded=True):
@@ -827,7 +779,6 @@ def page_reportes(df_asistencia, centro):
     
     df_latest = latest_asistencia(df_asistencia)
     
-    # Manejo si no hay Dataframe completo
     if df_latest.empty or "centro" not in df_latest.columns:
         st.info("Sin datos registrados en la plataforma.")
         return
@@ -861,10 +812,10 @@ def page_reportes(df_asistencia, centro):
     
     st.dataframe(df_c[["fecha", "espacio", "presentes", "coordinador", "notas"]].sort_values("fecha", ascending=False), use_container_width=True)
 
-def page_global(dfs):
+def page_global(df_asistencia, df_personas, df_ap):
     st.subheader("🌍 Panorama Global Institucional")
     
-    df_a = latest_asistencia(dfs[ASISTENCIA_TAB]).copy()
+    df_a = latest_asistencia(df_asistencia).copy()
     if not df_a.empty and "presentes" in df_a.columns:
         df_a["presentes_i"] = df_a["presentes"].apply(lambda x: clean_int(x, 0))
     else:
@@ -872,15 +823,11 @@ def page_global(dfs):
         
     anio = str(get_today_ar().year)
     
-    df_p = dfs[PERSONAS_TAB]
     df_personas_unq = pd.DataFrame()
-    if not df_p.empty and "nombre" in df_p.columns:
-        df_personas_unq = df_p.sort_values("timestamp").groupby("nombre").tail(1)
+    if not df_personas.empty and "nombre" in df_personas.columns:
+        df_personas_unq = df_personas.sort_values("timestamp").groupby("nombre").tail(1)
         df_personas_unq["edad_calc"] = df_personas_unq["fecha_nacimiento"].apply(calculate_age)
         
-    df_ap = dfs[ASISTENCIA_PERSONAS_TAB]
-
-    # Cálculos Totales Sumados
     total_personas = len(df_personas_unq) if not df_personas_unq.empty else 0
     total_asist_anio = 0
     promedio_global = 0.0
@@ -924,12 +871,10 @@ def page_global(dfs):
             st.info("No hay personas cargadas.")
 
 # =========================
-# MAIN APP
+# MAIN
 # =========================
 def main():
-    dfs = load_all_data()
-    
-    if not st.session_state.get("logged_in"):
+    if not st.session_state.get("logged_in"): 
         show_login_screen()
     
     u = st.session_state["usuario"]
@@ -938,10 +883,14 @@ def main():
     
     centro_clean = clean_string(centro)
     match_centro = next((c for c in CENTROS if clean_string(c) == centro_clean), None)
-    if not match_centro: st.error("Centro inválido."); st.stop()
+    if not match_centro:
+        st.error(f"Error Crítico: El centro asignado '{centro}' no coincide con los centros de la App. Avise a NATASHA.")
+        st.stop()
     centro = match_centro
 
-    # 🚨 REGLA ESTRICTA NATASHA PARA CALLE BELÉN 🚨
+    show_top_header(nombre, centro)
+    
+    # REGLA ESTRICTA NATASHA PARA CALLE BELÉN
     mostrar_app = True
     if centro == C_BELEN and u.upper() != "NATASHA":
         st.error("🔒 ACCESO DENEGADO: El centro Calle Belén es de acceso exclusivo para Natasha.")
@@ -952,8 +901,6 @@ def main():
         
     if not mostrar_app: return
 
-    show_top_header(nombre, centro)
-    
     df_asistencia, df_personas, df_ap, df_seg = load_all_data()
 
     show_top_alerts(latest_asistencia(df_asistencia), df_personas, df_ap, centro)
@@ -970,7 +917,7 @@ def main():
     with tabs[1]: page_personas_full(df_personas, df_ap, df_seg, centro, u)
     with tabs[2]: page_reportes(df_asistencia, centro)
     if len(tabs) > 3:
-        with tabs[3]: page_global(dfs)
+        with tabs[3]: page_global(df_asistencia, df_personas, df_ap)
 
 if __name__ == "__main__":
     main()
