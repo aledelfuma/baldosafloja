@@ -11,7 +11,7 @@ import unicodedata
 import re
 
 # ======================================================
-# 🌑 CONFIGURACIÓN DE TEMA OSCURO PREMIUM
+# 🌑 CONFIGURACIÓN DE TEMA OSCURO PREMIUM Y MOBILE
 # ======================================================
 st.set_page_config(
     page_title="Hogar de Cristo - Gestión",
@@ -29,38 +29,41 @@ CSS = """
   --surface: #1E1E1E;
   --text-primary: #FFFFFF;
   --text-secondary: #AAAAAA;
-  --radius-sm: 10px;
-  --radius-lg: 15px;
+  --radius-sm: 12px;
+  --radius-lg: 18px;
 }
 
-/* Fondo Global, Forzando texto claro y estructura Mobile */
+/* =========================================
+   COMPORTAMIENTO 100% NATIVO MOBILE
+   ========================================= */
+/* Ocultar UI propia de Streamlit para parecer una app */
+header[data-testid="stHeader"] {display: none !important;}
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+
+/* Forzar fondo oscuro y remover márgenes molestos */
 .stApp {
     background-color: var(--background) !important;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+    font-family: 'Inter', -apple-system, sans-serif !important;
     color: var(--text-primary) !important;
+}
+
+/* Padding inteligente para el celular (Aprovecha los bordes) */
+.block-container {
+    padding-top: 1rem !important; 
+    padding-left: 0.8rem !important;
+    padding-right: 0.8rem !important;
+    padding-bottom: 120px !important; /* Deja espacio para que el menú inferior no tape contenido */
+    max-width: 650px !important; 
+    margin: 0 auto;
+    overflow-x: hidden;
 }
 
 .stMarkdown, .stText, p, h1, h2, h3, h4, h5, h6, label {
     color: var(--text-primary) !important;
 }
 
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;} 
-
-.css-18e3th9, .st-emotion-cache-1jicfl2 {
-    padding-top: 1rem !important; 
-    padding-left: 1rem !important;
-    padding-right: 1rem !important;
-    padding-bottom: 90px !important; 
-    max-width: 600px !important; 
-    margin: 0 auto;
-}
-
-div[data-testid="stVerticalBlock"] > div {
-    color: var(--text-primary);
-}
-
+/* Tarjetas base */
 .top-bar {
     background-color: var(--surface);
     padding: 15px 20px;
@@ -71,48 +74,39 @@ div[data-testid="stVerticalBlock"] > div {
     justify-content: space-between;
     align-items: center;
 }
-div.user-info {
-    font-size: 1.2rem; 
-    font-weight: 700; 
-    color: var(--text-primary) !important;
-    line-height: 1.2;
-}
-div.center-info {
-    font-size: 0.85rem; 
-    font-weight: 600; 
-    color: var(--text-secondary) !important;
-    margin-top: 2px;
-}
+div.user-info { font-size: 1.2rem; font-weight: 700; line-height: 1.2; }
+div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary) !important; margin-top: 2px; }
 
+/* Botones con estilo App */
 .stButton>button {
     background-color: var(--primary);
     color: #000000 !important;
     border-radius: var(--radius-sm);
     border: none;
-    font-weight: 700;
-    padding: 0.6rem 1rem;
+    font-weight: 800;
+    padding: 0.7rem 1rem;
     transition: 0.2s;
     width: 100%;
 }
-.stButton>button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 10px rgba(96, 165, 250, 0.3);
-}
+.stButton>button:active { transform: scale(0.98); } /* Efecto click nativo */
 
+/* Inputs en modo oscuro */
 .stTextInput>div>div>input, .stSelectbox>div>div>div, .stDateInput>div>div>input, .stTextArea>div>div>textarea, .stMultiSelect>div>div>div {
     border-radius: var(--radius-sm) !important;
     border: 1px solid rgba(255,255,255,0.1) !important;
     background-color: #1A1A1A !important;
     color: var(--text-primary) !important;
-    padding: 0.5rem;
+    padding: 0.6rem;
 }
 
+/* Acordeones */
 .streamlit-expanderHeader {
     color: var(--text-primary) !important;
     background-color: var(--surface);
     border-radius: var(--radius-sm);
 }
 
+/* KPIs para Dashboard */
 .kpi {
   border-radius: var(--radius-lg);
   padding: 15px;
@@ -121,19 +115,13 @@ div.center-info {
   text-align: center;
   height: 100%;
 }
-.kpi h3 { 
-    margin: 0; font-size: 0.65rem; color: var(--text-secondary) !important;
-    text-transform: uppercase; letter-spacing: 0.5px; 
-}
-.kpi .v { 
-    font-size: 2rem; font-weight: 800; color: var(--primary) !important; line-height: 1;
-}
+.kpi h3 { margin: 0; font-size: 0.65rem; color: var(--text-secondary) !important; text-transform: uppercase; letter-spacing: 0.5px; }
+.kpi .v { font-size: 2rem; font-weight: 800; color: var(--primary) !important; line-height: 1; margin-top: 5px; }
 
-.alert-box { 
-    padding: 12px 15px; border-radius: var(--radius-sm); margin-bottom: 10px; font-size: 0.9rem; font-weight: 600;
-}
-.alert-danger { background-color: rgba(239, 68, 68, 0.1); color: #EF4444 !important; border: 1px solid rgba(239, 68, 68, 0.3); }
-.alert-success { background-color: rgba(34, 197, 94, 0.1); color: #22C55E !important; border: 1px solid rgba(34, 197, 94, 0.3); }
+/* Alertas iOS Style */
+.alert-box { padding: 12px 15px; border-radius: var(--radius-sm); margin-bottom: 10px; font-size: 0.9rem; font-weight: 600; }
+.alert-danger { background-color: rgba(239, 68, 68, 0.15); color: #FCA5A5 !important; border: 1px solid rgba(239, 68, 68, 0.3); }
+.alert-success { background-color: rgba(34, 197, 94, 0.15); color: #86EFAC !important; border: 1px solid rgba(34, 197, 94, 0.3); }
 .alert-gray { background-color: var(--surface); color: var(--text-secondary) !important; border: 1px solid rgba(255,255,255,0.05); }
 
 /* Carnet Digital */
@@ -142,7 +130,7 @@ div.center-info {
     border-radius: 20px;
     padding: 25px;
     color: white !important;
-    box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     border: 1px solid rgba(255,255,255,0.1);
     margin-bottom: 20px;
     position: relative;
@@ -155,28 +143,44 @@ div.center-info {
 .id-data-col { display: flex; flex-direction: column; }
 .id-label { font-size: 0.6rem; opacity: 0.7; text-transform: uppercase; }
 .id-value { font-size: 0.95rem; font-weight: 600; }
-
 .tag-container { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-.tag-badge { background-color: rgba(255,255,255,0.15); padding: 3px 9px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; }
+.tag-badge { background-color: rgba(255,255,255,0.15); padding: 4px 10px; border-radius: 15px; font-size: 0.75rem; font-weight: 600; }
 
 .btn-wa {
     display: inline-flex; align-items: center; justify-content: center;
-    background-color: #25D366; color: white !important; padding: 8px 15px;
-    border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 0.9rem;
-    margin-top: 10px; transition: 0.3s;
+    background-color: #25D366; color: white !important; padding: 10px 15px;
+    border-radius: var(--radius-sm); text-decoration: none; font-weight: bold; font-size: 0.9rem;
+    margin-top: 10px; transition: 0.3s; width: 100%;
 }
 
+/* =========================================
+   BARRA DE NAVEGACIÓN INFERIOR (BOTTOM NAV)
+   Efecto Vidrio e Integración iOS
+   ========================================= */
 .stTabs [data-baseweb="tab-list"] {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    background-color: #0A0A0A; border-top: 1px solid rgba(255,255,255,0.05);
-    display: flex; justify-content: space-around; padding: 8px 10px 18px 10px; z-index: 9999;
+    position: fixed; 
+    bottom: 0; 
+    left: 0; 
+    right: 0;
+    background-color: rgba(18, 18, 18, 0.85); 
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    justify-content: space-around;
+    padding: 10px 5px env(safe-area-inset-bottom, 20px) 5px; /* Evita pisar la barra de iPhone */
+    z-index: 9999;
 }
 .stTabs [data-baseweb="tab"] {
-    flex-grow: 1; text-align: center; justify-content: center; font-size: 0.75rem !important; font-weight: 600;
-    color: var(--text-secondary) !important; padding: 8px 0; border: none !important; background: transparent !important;
+    flex-grow: 1; text-align: center; justify-content: center;
+    font-size: 0.70rem !important; font-weight: 700;
+    color: var(--text-secondary) !important; padding: 10px 0; 
+    border: none !important; background: transparent !important;
 }
 .stTabs [aria-selected="true"] {
-    color: var(--primary) !important; background-color: rgba(96, 165, 250, 0.05) !important; border-radius: 8px;
+    color: var(--primary) !important; 
+    background-color: rgba(96, 165, 250, 0.1) !important; 
+    border-radius: 12px;
 }
 .stTabs [aria-selected="true"]::after { display: none; }
 </style>
@@ -269,8 +273,7 @@ def get_spreadsheet():
     gc = get_gspread_client()
     return gc.open_by_key(sid)
 
-def get_or_create_ws(title: str, cols: list):
-    sh = get_spreadsheet()
+def get_or_create_ws(sh, title, cols):
     try: return sh.worksheet(title)
     except Exception: pass
     try:
@@ -288,7 +291,7 @@ def safe_get_all_values(ws, tries=3):
     st.error("Error conexión Sheets."); st.stop()
 
 def read_ws_df(title: str, cols: list) -> pd.DataFrame:
-    ws = get_or_create_ws(title, cols)
+    ws = get_or_create_ws(get_spreadsheet(), title, cols)
     values = safe_get_all_values(ws)
     if not values:
         ws.update("A1", [cols])
@@ -306,7 +309,8 @@ def read_ws_df(title: str, cols: list) -> pd.DataFrame:
     return df[cols]
 
 def append_ws_rows(title: str, cols: list, rows: list[list]):
-    ws = get_or_create_ws(title, cols)
+    sh = get_spreadsheet()
+    ws = get_or_create_ws(sh, title, cols)
     ws.append_rows(rows, value_input_option="USER_ENTERED")
 
 # =========================
@@ -416,6 +420,7 @@ def show_login_screen():
         try: st.image("logo_hogar.png", width=200)
         except: st.title("Hogar de Cristo")
         st.markdown("### Acceso al Sistema")
+        
         with st.form("login_form"):
             u = st.text_input("Usuario")
             p = st.text_input("Contraseña", type="password")
@@ -428,21 +433,32 @@ def show_login_screen():
                     st.rerun()
                 else:
                     st.error("Error de credenciales.")
+        
+        # 📩 MENSAJE DE SOPORTE EN LOGIN
+        st.markdown("""
+        <div style='text-align: center; margin-top: 30px; font-size: 0.85rem; color: #888;'>
+            ¿Problemas con la App o tu clave? <br>
+            <a href='mailto:alejandrodelfuma@gmail.com' style='color: #60A5FA; text-decoration: none; font-weight: bold;'>
+                ✉️ Contactame: alejandrodelfuma@gmail.com
+            </a>
+        </div>
+        """, unsafe_allow_html=True)
     st.stop()
 
 def show_top_header(nombre, centro):
-    c1, c2, c3 = st.columns([1, 4, 1])
-    with c1:
-        try: st.image("logo_hogar.png", width=100)
-        except: st.write("🏠")
-    with c2:
-        st.markdown(f"<div class='user-info'>Hola, {nombre}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='center-info'>📍 {centro}</div>", unsafe_allow_html=True)
-    with c3:
-        if st.button("Salir", key="logout", use_container_width=True):
-            st.session_state.clear(); st.cache_data.clear(); st.rerun()
-        if st.button("🔄 Refrescar", key="refresh", use_container_width=True):
-            st.cache_data.clear(); st.rerun()
+    st.markdown(f"""
+<div class='top-bar'>
+    <div style='display:flex; align-items:center; gap:15px;'>
+        <div style='background-color: var(--primary); width: 45px; height: 45px; border-radius: 50%; display:flex; align-items:center; justify-content:center; color:black; font-weight:bold; font-size:1.2rem;'>
+            {nombre[0].upper() if nombre else 'U'}
+        </div>
+        <div>
+            <div class='user-info'>Hola, {nombre}</div>
+            <div class='center-info'>📍 {centro}</div>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 def show_top_alerts(df_latest, df_personas, df_ap, centro):
     last_date, days = last_load_info(df_latest, centro)
@@ -470,30 +486,28 @@ def show_top_alerts(df_latest, df_personas, df_ap, centro):
             alertas = last[(last["dias"]>7) & (last["dias"]<90)].sort_values("dias", ascending=False)
             for _, r in alertas.iterrows(): ausentes.append(f"{r['nombre']} ({r['dias']} días)")
 
-    st.markdown("### 📊 Resumen de Asistencia y Alertas")
+    st.markdown("<h4 style='font-size:1rem; margin-bottom:10px;'>📊 Novedades del Centro</h4>", unsafe_allow_html=True)
     
     today_a = get_today_asistencia_summary(df_latest)
-    if today_a.empty or "centro" not in today_a.columns:
-        c_a = pd.DataFrame()
-    else:
-        c_a = today_a[today_a["centro"] == centro]
+    if today_a.empty or "centro" not in today_a.columns: c_a = pd.DataFrame()
+    else: c_a = today_a[today_a["centro"] == centro]
 
     ac1, ac2, ac3 = st.columns(3)
     with ac1:
-        if c_a.empty: st.markdown("<div class='alert-box alert-danger'>⚠️ Faltan Cargar Asistencias Hoy</div>", unsafe_allow_html=True)
-        else: st.markdown("<div class='alert-box alert-success'>✅ Carga al día (Hoy)</div>", unsafe_allow_html=True)
+        if c_a.empty: st.markdown("<div class='alert-box alert-danger'>⚠️ Faltan Asistencias</div>", unsafe_allow_html=True)
+        else: st.markdown("<div class='alert-box alert-success'>✅ Asistencias al día</div>", unsafe_allow_html=True)
     with ac2:
         if cumples:
-            with st.expander(f"🎉 Cumpleaños Hoy ({len(cumples)})", expanded=True):
+            with st.expander(f"🎉 Cumpleaños ({len(cumples)})", expanded=True):
                 for c in cumples: st.write(f"- {c}")
         else:
-             st.markdown("<div class='alert-box alert-gray'>🎂 Sin cumpleaños hoy</div>", unsafe_allow_html=True)
+             st.markdown("<div class='alert-box alert-gray'>🎂 Sin cumples</div>", unsafe_allow_html=True)
     with ac3:
         if ausentes:
-            with st.expander(f"⚠️ Alerta de Inasistencia ({len(ausentes)})", expanded=False):
+            with st.expander(f"⚠️ Inasistencias ({len(ausentes)})", expanded=False):
                 for a in ausentes: st.write(f"🔴 {a}")
         else:
-            st.markdown("<div class='alert-box alert-gray'>✔️ Sin alertas de inasistencia</div>", unsafe_allow_html=True)
+            st.markdown("<div class='alert-box alert-gray'>✔️ Sin Inasistencias</div>", unsafe_allow_html=True)
 
 def kpi_row_full(df_latest, centro):
     hoy_date = get_today_ar()
@@ -508,50 +522,45 @@ def kpi_row_full(df_latest, centro):
         c2 = int(d[(d["centro"] == centro) & (d["fecha"] >= week_ago) & (d["fecha"] <= hoy)]["presentes_i"].sum())
         c3 = int(d[(d["centro"] == centro) & (d["fecha"] >= month_start) & (d["fecha"] <= hoy)]["presentes_i"].sum())
     
-    col1, col2, col3, col4 = st.columns([1,1,1,1])
+    st.markdown("<br>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns(3)
     col1.markdown(f"<div class='kpi'><h3>Ingresos HOY</h3><div class='v'>{c1}</div></div>", unsafe_allow_html=True)
     col2.markdown(f"<div class='kpi'><h3>Últimos 7 días</h3><div class='v'>{c2}</div></div>", unsafe_allow_html=True)
-    col3.markdown(f"<div class='kpi'><h3>Este mes</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
-    
-    with col4:
-        st.markdown("<div style='text-align:center; padding-top:10px; opacity:0.8;'><b>Accesos Rápidos</b></div>", unsafe_allow_html=True)
-        st.caption("Navegá en las pestañas de abajo para:")
-        st.markdown("📝 **Cargar Asistencia**")
-        st.markdown("👤 **Nuevo Ingreso / Legajo**")
+    col3.markdown(f"<div class='kpi'><h3>Mes actual</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
 
 # =========================
 # PAGES
 # =========================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
-    st.subheader(f"📝 Carga Diaria: {centro}")
-    fecha = st.date_input("Fecha", value=get_today_ar())
+    st.markdown("<h3 style='margin-bottom:15px;'>📝 Carga Diaria</h3>", unsafe_allow_html=True)
+    fecha = st.date_input("Fecha de carga", value=get_today_ar())
     if fecha > get_today_ar():
-        st.error("⛔ No se puede cargar asistencia futura.")
+        st.error("⛔ No se puede cargar asistencia de días futuros.")
         return
     fecha_str = fecha.isoformat()
-    espacio = st.selectbox("Espacio", ESPACIOS_MARANATHA) if centro == C_MARANATHA else DEFAULT_ESPACIO
-    modo = st.selectbox("Modo", ["Día habitual", "Actividad especial", "Cerrado"])
-    notas = st.text_area("Notas generales del día")
-    st.markdown("---")
+    
+    col_e, col_m = st.columns(2)
+    with col_e: espacio = st.selectbox("Espacio", ESPACIOS_MARANATHA) if centro == C_MARANATHA else DEFAULT_ESPACIO
+    with col_m: modo = st.selectbox("Modo / Actividad", ["Día habitual", "Actividad especial", "Cerrado"])
+    
+    notas = st.text_area("Notas generales del día (Opcional)", height=70)
 
     df_centro = filter_personas_centro(df_personas, centro)
     df_activos = df_centro[df_centro["activo"].str.upper() == "SI"]
     nombres = sorted(list(set([n for n in df_activos["nombre"].astype(str).tolist() if n.strip()])))
     
-    c1, c2 = st.columns([3, 1])
-    presentes = c1.multiselect("Asistentes", options=nombres)
+    st.markdown("#### 👥 Marcar Asistencia")
+    presentes = st.multiselect("Buscador de personas (Escribí para filtrar)", options=nombres, placeholder="Seleccionar asistentes...")
+    total_presentes = st.number_input("Total numérico (En caso de visitas rápidas)", min_value=0, value=len(presentes))
+    if not presentes: total_presentes = total_presentes
+    else: total_presentes = len(presentes)
     
-    total_input = c2.number_input("Total Presentes", min_value=0, value=len(presentes))
-    total_presentes = total_input if not presentes else len(presentes)
-    
-    with st.expander("👤 ¿Vino alguien nuevo?"):
-        cn1, cn2 = st.columns(2)
-        nueva = cn1.text_input("Nombre completo")
-        dni_new = cn2.text_input("DNI (Opcional)")
-        cn3, cn4 = st.columns(2)
-        tel_new = cn3.text_input("Tel (Opcional)")
-        nac_new = cn4.text_input("Fecha Nac. (DD/MM/AAAA) (Opcional)")
-        agregar_nueva = st.checkbox("Agregar a la base")
+    with st.expander("➕ ¿Vino alguien nuevo?"):
+        nueva = st.text_input("Nombre completo")
+        dni_new = st.text_input("DNI")
+        tel_new = st.text_input("Teléfono")
+        nac_new = st.text_input("Fecha Nac. (DD/MM/AAAA)")
+        agregar_nueva = st.checkbox("Agregar al Padrón Oficial")
         
         if agregar_nueva and dni_new.strip() and not df_personas.empty:
             existe_dni = df_personas[df_personas['dni'].astype(str).str.strip() == dni_new.strip()]
@@ -565,11 +574,12 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         
     overwrite = True
     if not ya.empty:
-        st.warning("⚠️ Ya existe carga para hoy. Se sobreescribirá.")
-        overwrite = st.checkbox("Confirmar Sobreescritura", value=False)
+        st.warning("⚠️ Ya existe una carga de asistencia para hoy en este espacio. Si guardás, se sobreescribirá.")
+        overwrite = st.checkbox("Confirmar que quiero sobreescribir", value=False)
     
-    if st.button("💾 Guardar Asistencia", type="primary", use_container_width=True):
-        if not overwrite: st.error("Confirmá sobreescritura"); st.stop()
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("💾 GUARDAR ASISTENCIA", type="primary", use_container_width=True):
+        if not overwrite: st.error("Debes tildar la confirmación para sobreescribir."); st.stop()
         if total_presentes <= 0 and modo != "Cerrado":
             st.error("⛔ Debes marcar asistentes o indicar 'Cerrado'."); st.stop()
             
@@ -580,7 +590,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         if len(presentes)>0: total_presentes = len(presentes)
         accion = "overwrite" if not ya.empty else "append"
         
-        with st.spinner("Guardando..."):
+        with st.spinner("Sincronizando con la nube..."):
             append_asistencia(fecha_str, centro, espacio, total_presentes, nombre_visible, modo, notas, usuario, accion)
             for n in presentes:
                 append_asistencia_personas(fecha_str, centro, espacio, n, "Presente", "SI" if (agregar_nueva and n==nueva) else "NO", nombre_visible, usuario)
@@ -592,29 +602,29 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         st.toast("✅ Guardado Exitoso"); time.sleep(1.5); st.cache_data.clear(); st.rerun()
 
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
-    st.subheader("👥 Legajo Digital")
+    st.markdown("<h3 style='margin-bottom:15px;'>👥 Buscador y Legajos</h3>", unsafe_allow_html=True)
     df_centro = filter_personas_centro(df_personas, centro)
     nombres = sorted(df_centro["nombre"].unique()) if not df_centro.empty else []
 
-    col_sel, col_act = st.columns([3, 1])
-    seleccion = col_sel.selectbox("🔍 Buscar a una persona en el padrón:", [""] + nombres, help="Escriba aquí para buscar por nombre")
+    seleccion = st.selectbox("Escribí el nombre para ver su ficha:", [""] + nombres, help="Buscador inteligente")
     
     if not seleccion:
-        st.markdown("<div class='alert-box alert-gray'>ℹ️ Utilice el buscador para abrir una ficha individual, o revise el listado histórico debajo.</div>", unsafe_allow_html=True)
-        st.markdown(f"### Listado Histórico ({len(nombres)} personas)")
+        st.markdown("<div class='alert-box alert-gray' style='margin-top:20px;'>🔍 Buscá a alguien arriba para ver su carnet y bitácora, o mirá la tabla completa abajo.</div>", unsafe_allow_html=True)
         
-        with st.expander("📥 Descargar Padrón o Ver Tabla", expanded=False):
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.markdown(f"#### 📋 Padrón Completo ({len(nombres)})")
+        with st.expander("Ver / Descargar Tabla Excel", expanded=False):
             if not df_centro.empty:
                 buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
                     df_centro.to_excel(writer, sheet_name='Personas', index=False)
-                st.download_button("Descargar Excel de Padrón", buffer, f"padron_{centro}.xlsx", "application/vnd.ms-excel", use_container_width=True)
+                st.download_button("📥 Descargar Excel", buffer, f"padron_{centro}.xlsx", "application/vnd.ms-excel", use_container_width=True)
                 
                 solo_activos = st.checkbox("Mostrar Solo activos", value=True)
                 df_show = df_centro.copy()
                 if solo_activos: df_show = df_show[df_show["activo"].astype(str).str.upper() == "SI"]
                 
-                cols_to_show = ["nombre", "dni", "fecha_nacimiento", "telefono", "activo", "etiquetas", "contacto_emergencia"]
+                cols_to_show = ["nombre", "dni", "fecha_nacimiento", "telefono", "activo"]
                 for c in cols_to_show:
                     if c not in df_show.columns: df_show[c] = ""
                 st.dataframe(df_show[cols_to_show].sort_values("nombre"), use_container_width=True, hide_index=True)
@@ -632,43 +642,42 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     telefono = str(datos_persona.get("telefono", ""))
     wa_btn_html = ""
     if telefono and telefono.lower() != "nan" and format_wa_number(telefono):
-        wa_btn_html = f"<div style='margin-top:10px;'><a href='https://wa.me/{format_wa_number(telefono)}' target='_blank' class='btn-wa'>💬 Contactar por WhatsApp</a></div>"
+        wa_btn_html = f"<div style='margin-top:5px;'><a href='https://wa.me/{format_wa_number(telefono)}' target='_blank' class='btn-wa'>💬 Enviar WhatsApp</a></div>"
         
-    estado_badge = "🟢 SOCIO/A ACTIVO" if str(datos_persona.get("activo")).upper() != "NO" else "🔴 INACTIVO"
+    estado_badge = "🟢 ACTIVO" if str(datos_persona.get("activo")).upper() != "NO" else "🔴 INACTIVO"
     
     import urllib.parse
     avatar_url = f"https://api.dicebear.com/7.x/initials/svg?seed={urllib.parse.quote(seleccion)}&backgroundColor=004e7b&textColor=ffffff"
 
     dni_val = str(datos_persona.get('dni', '')).strip()
     if dni_val.lower() == 'nan' or not dni_val:
-        dni_val = "No registrado"
+        dni_val = "S/D"
         
     nac_val = str(datos_persona.get('fecha_nacimiento', '')).strip()
     if nac_val.lower() == 'nan' or not nac_val:
-        nacimiento_mostrar = "No registrada"
+        nacimiento_mostrar = "S/D"
     else:
         nacimiento_mostrar = f"{nac_val} ({calculate_age(nac_val)} años)"
 
     html_carnet = f"""
-<div style="display: flex; flex-direction: column; gap: 20px;">
-<div class="id-card" style="margin-bottom:0px;">
+<div class="id-card">
 <div style="display:flex; justify-content: space-between; align-items:flex-start; margin-bottom: 5px;">
-<div class="id-title">HOGAR DE CRISTO • {centro.upper()}</div>
+<div class="id-title">HOGAR DE CRISTO</div>
 <span style="font-weight:800; background: rgba(255,255,255,0.25); padding: 5px 12px; border-radius: 12px; font-size: 0.70rem; letter-spacing:1px;">
 {estado_badge}
 </span>
 </div>
-<div style="display:flex; gap: 20px; align-items: center; margin-bottom: 20px;">
-<img src="{avatar_url}" style="width: 70px; height: 70px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.8); box-shadow: 0 4px 10px rgba(0,0,0,0.1);"/>
+<div style="display:flex; gap: 15px; align-items: center; margin-bottom: 20px;">
+<img src="{avatar_url}" style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.8); box-shadow: 0 4px 10px rgba(0,0,0,0.1);"/>
 <div class="id-name" style="margin-bottom:0;">{seleccion}</div>
 </div>
 <div class="id-data-row">
 <div class="id-data-col">
-<span class="id-label">DNI / Documento</span>
+<span class="id-label">Documento</span>
 <span class="id-value">{dni_val}</span>
 </div>
 <div class="id-data-col">
-<span class="id-label">Nacimiento (Edad)</span>
+<span class="id-label">Nacimiento</span>
 <span class="id-value">{nacimiento_mostrar}</span>
 </div>
 </div>
@@ -676,158 +685,149 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
 {tags_html}
 </div>
 </div>
-</div>
-<br>
 """
     st.markdown(html_carnet, unsafe_allow_html=True)
     
-    # ==========================
-    # PANELES DE INFORMACIÓN
-    # ==========================
-    c_info, c_bitacora = st.columns([1.2, 1.8], gap="medium")
-    
-    with c_info:
-        st.markdown("### 📞 Datos de Contacto")
+    # Datos Rápidos
+    domicilio_val = str(datos_persona.get('domicilio', '')).strip()
+    if domicilio_val.lower() == 'nan' or not domicilio_val: domicilio_val = 'No registrado'
+    tel_val = str(datos_persona.get('telefono', '')).strip()
+    if tel_val.lower() == 'nan' or not tel_val: tel_val = 'No registrado'
         
-        domicilio_val = str(datos_persona.get('domicilio', '')).strip()
-        if domicilio_val.lower() == 'nan' or not domicilio_val: domicilio_val = 'No registrado'
-        
-        st.markdown(f"""
-        <div class="profile-card" style="padding: 15px;">
-            <div style="font-size: 0.8rem; color:var(--text-secondary); text-transform:uppercase; font-weight:700;">🏠 Domicilio Actual</div>
-            <div style="font-weight: 600; font-size:1.1rem; color:var(--text-primary); margin-top:2px;">{domicilio_val}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        tel_val = str(datos_persona.get('telefono', '')).strip()
-        if tel_val.lower() == 'nan' or not tel_val: tel_val = 'No registrado'
-        
-        st.markdown(f"""
-        <div class="profile-card" style="padding: 15px; border-left: 4px solid var(--primary);">
-            <div style="font-size: 0.8rem; color:var(--text-secondary); text-transform:uppercase; font-weight:700;">📱 Celular Principal</div>
-            <div style="font-weight: 600; font-size:1.2rem; color:var(--text-primary); margin-top:2px;">{tel_val}</div>
+    st.markdown(f"""
+    <div style="background:var(--surface); padding:15px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.05); margin-bottom:15px;">
+        <div style="margin-bottom:10px;">
+            <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">📱 Teléfono</div>
+            <div style="font-size:1.1rem;">{tel_val}</div>
             {wa_btn_html}
         </div>
-        """, unsafe_allow_html=True)
+        <div>
+            <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">🏠 Dirección</div>
+            <div style="font-size:1.1rem;">{domicilio_val}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
         
-        emergencia = str(datos_persona.get('contacto_emergencia', '')).strip()
-        if emergencia and emergencia.lower() != 'nan':
-            st.markdown(f"""
-            <div class="profile-card" style="padding: 15px; background-color: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-left: 4px solid #EF4444;">
-                <div style="font-size: 0.8rem; color:#EF4444; text-transform:uppercase; font-weight:800;">🚨 Contacto de Emergencia</div>
-                <div style="font-weight: 700; font-size:1.0rem; color:#FCA5A5; margin-top:2px;">{emergencia}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.warning("🚨 No posee contacto de emergencia cargado.")
+    emergencia = str(datos_persona.get('contacto_emergencia', '')).strip()
+    if emergencia and emergencia.lower() != 'nan':
+        st.markdown(f"""
+        <div style="background:rgba(239, 68, 68, 0.1); padding:15px; border-radius:var(--radius-sm); border-left:4px solid #EF4444; margin-bottom:15px;">
+            <div style="font-size:0.75rem; color:#EF4444; text-transform:uppercase; font-weight:800;">🚨 Emergencia</div>
+            <div style="font-weight:700; font-size:1.1rem; color:#FCA5A5;">{emergencia}</div>
+        </div>
+        """, unsafe_allow_html=True)
             
-        notas_str = str(datos_persona.get('notas', '')).strip()
-        if notas_str and notas_str.lower() != 'nan':
-            st.info(f"**Notas Fijas (Alergias/Contexto):**\n\n{notas_str}")
+    notas_str = str(datos_persona.get('notas', '')).strip()
+    if notas_str and notas_str.lower() != 'nan':
+        st.info(f"**📌 Notas (Salud/Contexto):**\n\n{notas_str}")
 
-        with st.expander("✏️ Editar Ficha de la Persona"):
-            with st.form("edit_persona"):
-                dni = st.text_input("DNI", value=datos_persona.get("dni", ""))
-                tel = st.text_input("Teléfono", value=datos_persona.get("telefono", ""))
-                contacto_em = st.text_input("🚨 Contacto Emergencia", value=datos_persona.get("contacto_emergencia", ""))
-                nac = st.text_input("Fecha Nac. (DD/MM/AAAA)", value=datos_persona.get("fecha_nacimiento", ""))
-                dom = st.text_input("Domicilio", value=datos_persona.get("domicilio", ""))
-                etiquetas = st.text_input("Etiquetas (Separadas por coma)", value=datos_persona.get("etiquetas", ""), help="Ej: Diabético, Medicación, Pensionado")
-                notas_fija = st.text_area("Notas Fijas (Alergias, Condiciones crónicas)", value=datos_persona.get("notas", ""))
-                activo_chk = st.checkbox("Sigue Activo (Si se desmarca, no saldrá en el padrón)", value=(str(datos_persona.get("activo")).upper() != "NO"))
-                
-                if st.form_submit_button("💾 Guardar Cambios Permanentes", use_container_width=True):
-                    nuevo_estado = "SI" if activo_chk else "NO"
-                    upsert_persona(df_personas, seleccion, centro, usuario, dni=dni, telefono=tel, fecha_nacimiento=nac, domicilio=dom, notas=notas_fija, activo=nuevo_estado, contacto_emergencia=contacto_em, etiquetas=etiquetas)
-                    st.success("¡Ficha actualizada!")
+    with st.expander("✏️ Editar Ficha (DNI, Tel, etc)"):
+        with st.form("edit_persona"):
+            dni = st.text_input("DNI", value=datos_persona.get("dni", ""))
+            tel = st.text_input("Teléfono", value=datos_persona.get("telefono", ""))
+            contacto_em = st.text_input("Contacto de Emergencia", value=datos_persona.get("contacto_emergencia", ""))
+            nac = st.text_input("Fecha Nacimiento (DD/MM/AAAA)", value=datos_persona.get("fecha_nacimiento", ""))
+            dom = st.text_input("Dirección", value=datos_persona.get("domicilio", ""))
+            etiquetas = st.text_input("Etiquetas (Separadas por coma)", value=datos_persona.get("etiquetas", ""), help="Ej: Diabético, Medicación")
+            notas_fija = st.text_area("Notas Permanentes", value=datos_persona.get("notas", ""))
+            activo_chk = st.checkbox("Persona Activa (Desmarcar para ocultar del padrón)", value=(str(datos_persona.get("activo")).upper() != "NO"))
+            
+            if st.form_submit_button("💾 Guardar Cambios", use_container_width=True):
+                nuevo_estado = "SI" if activo_chk else "NO"
+                upsert_persona(df_personas, seleccion, centro, usuario, dni=dni, telefono=tel, fecha_nacimiento=nac, domicilio=dom, notas=notas_fija, activo=nuevo_estado, contacto_emergencia=contacto_em, etiquetas=etiquetas)
+                st.success("¡Ficha actualizada!")
+                time.sleep(1)
+                st.cache_data.clear(); st.rerun()
+        
+    st.markdown("---")
+    st.markdown("### 📖 Bitácora Reciente")
+    
+    with st.expander("➕ Cargar un Nuevo Registro", expanded=False):
+        with st.form("new_seg"):
+            fecha_seg = st.date_input("Fecha", value=get_today_ar())
+            cat = st.selectbox("Área", CATEGORIAS_SEGUIMIENTO)
+            obs = st.text_area("Describí la intervención o charla...")
+            
+            if st.form_submit_button("📝 Guardar Registro", use_container_width=True):
+                if len(obs) > 5:
+                    append_seguimiento(str(fecha_seg), centro, seleccion, cat, obs, usuario)
+                    st.success("Guardado en la bitácora.")
                     time.sleep(1)
                     st.cache_data.clear(); st.rerun()
-        
-    with c_bitacora:
-        st.markdown("### 📖 Bitácora Reciente")
-        st.caption("Carga aquí cualquier seguimiento médico, trabajador social, psicólogo, o charla importante que hayas tenido con esta persona.")
-        
-        with st.expander("➕ Escribir en la Bitácora", expanded=False):
-            with st.form("new_seg"):
-                fecha_seg = st.date_input("Fecha de Consulta", value=get_today_ar())
-                cat = st.selectbox("Categoría / Área", CATEGORIAS_SEGUIMIENTO)
-                obs = st.text_area("Detalle de lo hablado o sucedido...")
+                else:
+                    st.error("Escribí un poco más de detalle.")
+    
+    if not df_seg.empty:
+        mis_notas = df_seg[(df_seg["nombre"]==seleccion) & (df_seg["centro"]==centro)].copy()
+        if not mis_notas.empty:
+            mis_notas["fecha_dt"] = pd.to_datetime(mis_notas["fecha"], errors="coerce")
+            mis_notas = mis_notas.sort_values("fecha_dt", ascending=False)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            for _, note in mis_notas.iterrows():
+                cat = str(note['categoria']).lower()
+                icon = "🩺" if "salud" in cat else "📝" if "trámite" in cat else "🫂" if 'escucha' in cat else "🚨" if 'crisis' in cat else "📌"
+                color_left = "#EF4444" if "crisis" in cat else SECONDARY
                 
-                if st.form_submit_button("📝 Guardar Registro", use_container_width=True):
-                    if len(obs) > 5:
-                        append_seguimiento(str(fecha_seg), centro, seleccion, cat, obs, usuario)
-                        st.success("Guardado correctamente.")
-                        time.sleep(1)
-                        st.cache_data.clear(); st.rerun()
-                    else:
-                        st.error("Por favor escriba más detalles.")
-        
-        if not df_seg.empty:
-            mis_notas = df_seg[(df_seg["nombre"]==seleccion) & (df_seg["centro"]==centro)].copy()
-            if not mis_notas.empty:
-                mis_notas["fecha_dt"] = pd.to_datetime(mis_notas["fecha"], errors="coerce")
-                mis_notas = mis_notas.sort_values("fecha_dt", ascending=False)
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                for _, note in mis_notas.iterrows():
-                    cat = str(note['categoria']).lower()
-                    icon = "🩺" if "salud" in cat else "📝" if "trámite" in cat else "🫂" if 'escucha' in cat else "🚨" if 'crisis' in cat else "📌"
-                    color_left = "#EF4444" if "crisis" in cat else SECONDARY
-                    
-                    st.markdown(f"""
-                    <div style="background-color: var(--surface); padding:15px; border-radius:var(--radius-sm); margin-bottom:12px; border-left: 5px solid {color_left}; border: 1px solid rgba(255,255,255,0.05);">
-                        <div style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom:8px; margin-bottom:8px;">
-                            <strong style="color:var(--primary); font-size:1.05rem;">{icon} {note['categoria']}</strong>
-                            <div style="text-align:right;">
-                                <div style="color:var(--text-secondary); font-size:0.75rem; font-weight:700;">{note['fecha']}</div>
-                                <div style="color:var(--text-secondary); font-size:0.65rem; padding-top:2px;">Por: {str(note.get('usuario', ''))}</div>
-                            </div>
+                st.markdown(f"""
+                <div style="background-color: var(--surface); padding:15px; border-radius:var(--radius-sm); margin-bottom:12px; border-left: 4px solid {color_left}; border: 1px solid rgba(255,255,255,0.02);">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom:8px; margin-bottom:8px;">
+                        <strong style="color:var(--primary); font-size:1.0rem;">{icon} {note['categoria']}</strong>
+                        <div style="text-align:right;">
+                            <div style="color:var(--text-secondary); font-size:0.75rem; font-weight:700;">{note['fecha']}</div>
+                            <div style="color:var(--text-secondary); font-size:0.65rem;">Por {str(note.get('usuario', ''))}</div>
                         </div>
-                        <div style="font-size:0.95rem; color:var(--text-primary); line-height:1.5;">{note['observacion']}</div>
                     </div>
-                    """, unsafe_allow_html=True)
-            else: st.info("Sin registros en la bitácora aún. (Pulsa '+ Escribir' arriba).")
+                    <div style="font-size:0.95rem; line-height:1.4;">{note['observacion']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        else: st.info("Esta persona todavía no tiene registros en la bitácora.")
 
 def page_reportes(df_asistencia, centro):
-    st.subheader("📊 Reportes y Resumen")
+    st.markdown("<h3 style='margin-bottom:15px;'>📊 Reportes</h3>", unsafe_allow_html=True)
     
     df_latest = latest_asistencia(df_asistencia)
     
     if df_latest.empty or "centro" not in df_latest.columns:
-        st.info("Sin datos registrados en la plataforma.")
+        st.info("No hay datos en la plataforma aún.")
         return
         
     df_c = df_latest[df_latest["centro"] == centro].copy()
     
-    with st.expander("💾 Seguridad / Copia de Seguridad"):
-        st.caption("Descargar copia de TODAS las asistencias.")
+    with st.expander("📥 Exportar Datos (Backup)", expanded=False):
+        st.caption("Bajá un Excel con absolutamente todo el registro histórico de asistencias de este centro.")
         buffer_backup = io.BytesIO()
         with pd.ExcelWriter(buffer_backup, engine='xlsxwriter') as writer:
             df_latest.to_excel(writer, sheet_name='Global_Asistencias', index=False)
-        st.download_button("📥 Descargar RESPALDO COMPLETO", buffer_backup, f"BACKUP_TOTAL_{date.today()}.xlsx", "application/vnd.ms-excel")
+        st.download_button("Descargar Respaldo Completo", buffer_backup, f"BACKUP_HC_{date.today()}.xlsx", "application/vnd.ms-excel", use_container_width=True)
 
     if df_c.empty: 
-        st.info("Sin datos para este centro específico.")
+        st.info("Sin datos para este centro.")
         return
     
     df_c["fecha_dt"] = pd.to_datetime(df_c["fecha"])
     df_c["presentes_i"] = df_c["presentes"].apply(lambda x: clean_int(x, 0))
     df_c = df_c.sort_values("fecha_dt")
     
-    c1, c2 = st.columns([3,1])
-    c1.line_chart(df_c.set_index("fecha")["presentes_i"])
-    with c2:
-        st.markdown("##### Resumen")
-        st.metric("Promedio Diario", f"{df_c['presentes_i'].mean():.1f}")
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            df_c.to_excel(writer, sheet_name='Asistencia', index=False)
-        st.download_button("📥 Bajar Excel Centro", buffer, f"asistencia_{centro}.xlsx", "application/vnd.ms-excel")
+    st.markdown("#### Evolución de Asistencias")
+    st.line_chart(df_c.set_index("fecha")["presentes_i"], color="#60A5FA")
     
-    st.dataframe(df_c[["fecha", "espacio", "presentes", "coordinador", "notas"]].sort_values("fecha", ascending=False), use_container_width=True)
+    st.markdown(f"**Promedio general:** {df_c['presentes_i'].mean():.1f} chicos/as por día.")
+    
+    st.markdown("#### Detalle Diario")
+    st.dataframe(df_c[["fecha", "espacio", "presentes", "coordinador"]].sort_values("fecha", ascending=False), use_container_width=True)
+
+    # 📩 MENSAJE DE SOPORTE EN REPORTES (Discreto al fondo)
+    st.markdown("""
+    <br><hr style='opacity:0.2;'>
+    <div style='text-align: center; color: var(--text-secondary); font-size: 0.8rem; margin-top: 20px;'>
+        🔧 ¿Encontraste un error o necesitas ayuda?<br>
+        Contactá al desarrollador en: <a href='mailto:alejandrodelfuma@gmail.com' style='color: var(--primary);'>alejandrodelfuma@gmail.com</a>
+    </div>
+    """, unsafe_allow_html=True)
 
 def page_global(df_asistencia, df_personas, df_ap):
-    st.subheader("🌍 Panorama Global Institucional")
+    st.markdown("<h3 style='margin-bottom:15px;'>🌍 Consola Central</h3>", unsafe_allow_html=True)
     
     df_a = latest_asistencia(df_asistencia).copy()
     if not df_a.empty and "presentes" in df_a.columns:
@@ -857,37 +857,47 @@ def page_global(df_asistencia, df_personas, df_ap):
     if not df_ap.empty and "es_nuevo" in df_ap.columns:
         nuevos_anio = len(df_ap[(df_ap["es_nuevo"]=="SI") & (df_ap["anio"].astype(str)==anio)])
         
-    st.markdown("#### 📊 Métricas Totales (Suma Todos los Centros)")
-    k1, k2, k3, k4 = st.columns(4)
+    st.caption("Suma de todos los centros a nivel institución.")
+    k1, k2 = st.columns(2)
     k1.markdown(f"<div class='kpi'><h3>Padrón Total</h3><div class='v'>{total_personas}</div></div>", unsafe_allow_html=True)
-    k2.markdown(f"<div class='kpi'><h3>Asistencias {anio}</h3><div class='v'>{total_asist_anio}</div></div>", unsafe_allow_html=True)
-    k3.markdown(f"<div class='kpi'><h3>Nuevos {anio}</h3><div class='v'>{nuevos_anio}</div></div>", unsafe_allow_html=True)
-    k4.markdown(f"<div class='kpi'><h3>Promedio Diario</h3><div class='v'>{promedio_global:.1f}</div></div>", unsafe_allow_html=True)
-    st.markdown("<br><hr>", unsafe_allow_html=True)
+    k2.markdown(f"<div class='kpi'><h3>Promedio Día</h3><div class='v'>{promedio_global:.1f}</div></div>", unsafe_allow_html=True)
     
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown(f"**Asistencias por Centro ({anio})**")
-        if not df_a.empty and "anio" in df_a.columns:
-            st.bar_chart(df_a[df_a["anio"].astype(str)==anio].groupby("centro")["presentes_i"].sum(), color="#60A5FA")
-    with c2:
-        st.markdown("**👥 Distribución por Edad Global**")
-        if not df_personas_unq.empty and "edad_calc" in df_personas_unq.columns:
-            df_edades = df_personas_unq[df_personas_unq["edad_calc"] > 0].copy()
-            if not df_edades.empty:
-                bins = [0, 12, 18, 30, 50, 100]
-                labels = ['Niños (0-12)', 'Adolescentes (13-18)', 'Jóvenes (19-30)', 'Adultos (31-50)', 'Mayores (50+)']
-                df_edades['rango_edad'] = pd.cut(df_edades['edad_calc'], bins=bins, labels=labels, right=False)
-                st.bar_chart(df_edades['rango_edad'].value_counts().sort_index(), color="#A78BFA")
-            else:
-                st.info("Falta cargar fechas de nacimiento válidas.")
+    st.markdown("<br>", unsafe_allow_html=True)
+    k3, k4 = st.columns(2)
+    k3.markdown(f"<div class='kpi'><h3>Asistencias {anio}</h3><div class='v'>{total_asist_anio}</div></div>", unsafe_allow_html=True)
+    k4.markdown(f"<div class='kpi'><h3>Nuevos {anio}</h3><div class='v'>{nuevos_anio}</div></div>", unsafe_allow_html=True)
+    
+    st.markdown("<hr style='opacity:0.2;'>", unsafe_allow_html=True)
+    
+    st.markdown(f"#### 🏢 Ingresos por Centro ({anio})")
+    if not df_a.empty and "anio" in df_a.columns:
+        st.bar_chart(df_a[df_a["anio"].astype(str)==anio].groupby("centro")["presentes_i"].sum(), color="#60A5FA")
+    
+    st.markdown("#### 👥 Edades (Toda la institución)")
+    if not df_personas_unq.empty and "edad_calc" in df_personas_unq.columns:
+        df_edades = df_personas_unq[df_personas_unq["edad_calc"] > 0].copy()
+        if not df_edades.empty:
+            bins = [0, 12, 18, 30, 50, 100]
+            labels = ['Niños (0-12)', 'Adolescentes (13-18)', 'Jóvenes (19-30)', 'Adultos (31-50)', 'Mayores (50+)']
+            df_edades['rango_edad'] = pd.cut(df_edades['edad_calc'], bins=bins, labels=labels, right=False)
+            st.bar_chart(df_edades['rango_edad'].value_counts().sort_index(), color="#A78BFA")
         else:
-            st.info("No hay personas cargadas.")
+            st.info("Falta cargar fechas de nacimiento.")
 
 # =========================
-# MAIN
+# MAIN APP (CONTROLADOR)
 # =========================
 def main():
+    # 1. Seguridad: Desconectar menús de Streamlit por si el CSS falla
+    hide_st_style = """
+                <style>
+                #MainMenu {visibility: hidden;}
+                footer {visibility: hidden;}
+                header {visibility: hidden;}
+                </style>
+                """
+    st.markdown(hide_st_style, unsafe_allow_html=True)
+
     if not st.session_state.get("logged_in"): 
         show_login_screen()
     
@@ -898,38 +908,48 @@ def main():
     centro_clean = clean_string(centro)
     match_centro = next((c for c in CENTROS if clean_string(c) == centro_clean), None)
     if not match_centro:
-        st.error(f"Error Crítico: El centro asignado '{centro}' no coincide con los centros de la App. Avise a NATASHA.")
+        st.error(f"Error: El centro '{centro}' no está registrado.")
         st.stop()
     centro = match_centro
 
-    show_top_header(nombre, centro)
-    
-    # REGLA ESTRICTA NATASHA PARA CALLE BELÉN
+    # 🚨 REGLA ESTRICTA NATASHA PARA CALLE BELÉN
     mostrar_app = True
     if centro == C_BELEN and u.upper() != "NATASHA":
-        st.error("🔒 ACCESO DENEGADO: El centro Calle Belén es de acceso exclusivo para Natasha.")
+        st.error("🔒 ACCESO DENEGADO: El centro Calle Belén es de acceso exclusivo para la administración.")
         st.markdown("---")
-        if st.button("Salir de la cuenta", type="primary"):
+        if st.button("⬅️ Salir de la cuenta", type="primary"):
             st.session_state.clear(); st.rerun()
         mostrar_app = False
         
     if not mostrar_app: return
 
+    show_top_header(nombre, centro)
+    
     df_asistencia, df_personas, df_ap, df_seg = load_all_data()
 
-    show_top_alerts(latest_asistencia(df_asistencia), df_personas, df_ap, centro)
-    kpi_row_full(latest_asistencia(df_asistencia), centro)
-
-    st.markdown("---")
-    
-    list_tabs = ["📝 Asistencia", "👥 Legajo", "📊 Reportes"]
+    # 📱 PANTALLA PRINCIPAL DE INICIO
+    # Como tenemos Bottom Nav, armamos la interfaz en Tabs
+    list_tabs = ["🏠 Inicio", "👥 Legajos", "📊 Reportes"]
     if u.upper() == "NATASHA": list_tabs.append("🌍 Global")
     
     tabs = st.tabs(list_tabs)
     
-    with tabs[0]: page_registrar_asistencia(df_personas, df_asistencia, centro, nombre, u)
-    with tabs[1]: page_personas_full(df_personas, df_ap, df_seg, centro, u)
-    with tabs[2]: page_reportes(df_asistencia, centro)
+    # TAB 1: INICIO (Dashboard + Formulario de Carga)
+    with tabs[0]: 
+        show_top_alerts(latest_asistencia(df_asistencia), df_personas, df_ap, centro)
+        kpi_row_full(latest_asistencia(df_asistencia), centro)
+        st.markdown("<hr style='opacity:0.2;'>", unsafe_allow_html=True)
+        page_registrar_asistencia(df_personas, df_asistencia, centro, nombre, u)
+        
+    # TAB 2: LEGAJOS (Buscador y Bitácora)
+    with tabs[1]: 
+        page_personas_full(df_personas, df_ap, df_seg, centro, u)
+        
+    # TAB 3: REPORTES
+    with tabs[2]: 
+        page_reportes(df_asistencia, centro)
+        
+    # TAB 4: GLOBAL (Solo Admin)
     if len(tabs) > 3:
         with tabs[3]: page_global(df_asistencia, df_personas, df_ap)
 
