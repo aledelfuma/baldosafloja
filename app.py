@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 from google.oauth2.service_account import Credentials
 import gspread
 from gspread.exceptions import APIError
@@ -344,6 +344,14 @@ def last_load_info(df_latest, centro):
     days = (pd.Timestamp(get_today_ar()).date() - last.date()).days
     return last.date().isoformat(), int(days)
 
+def get_today_asistencia_summary(df_a):
+    if df_a.empty: return df_a.copy()
+    hoy = get_today_ar().isoformat()
+    d = df_a[df_a["fecha"] == hoy].copy()
+    if d.empty: return d.copy()
+    d["timestamp_dt"] = pd.to_datetime(d["timestamp"], errors="coerce")
+    return d.sort_values("timestamp_dt").groupby(["centro", "espacio"]).tail(1)
+
 def personas_for_centro(df_personas, centro):
     if df_personas.empty: return df_personas
     if "centro" in df_personas.columns:
@@ -463,11 +471,17 @@ def show_top_alerts(df_latest, df_personas, df_ap, centro):
             for _, r in alertas.iterrows(): ausentes.append(f"{r['nombre']} ({r['dias']} días)")
 
     st.markdown("### 📊 Resumen de Asistencia y Alertas")
+    
+    today_a = get_today_asistencia_summary(df_latest)
+    if today_a.empty or "centro" not in today_a.columns:
+        c_a = pd.DataFrame()
+    else:
+        c_a = today_a[today_a["centro"] == centro]
+
     ac1, ac2, ac3 = st.columns(3)
     with ac1:
-        if last_date is None: st.markdown("<div class='alert-box alert-danger'>⚠️ Estado: Sin cargas</div>", unsafe_allow_html=True)
-        elif days == 0: st.markdown("<div class='alert-box alert-success'>✅ Estado: Al día (Hoy)</div>", unsafe_allow_html=True)
-        else: st.markdown(f"<div class='alert-box alert-danger'>⚠️ Faltan cargar asistencias (hace {days}d)</div>", unsafe_allow_html=True)
+        if c_a.empty: st.markdown("<div class='alert-box alert-danger'>⚠️ Faltan Cargar Asistencias Hoy</div>", unsafe_allow_html=True)
+        else: st.markdown("<div class='alert-box alert-success'>✅ Carga al día (Hoy)</div>", unsafe_allow_html=True)
     with ac2:
         if cumples:
             with st.expander(f"🎉 Cumpleaños Hoy ({len(cumples)})", expanded=True):
