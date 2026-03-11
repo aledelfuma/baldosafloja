@@ -35,7 +35,6 @@ CSS = """
 
 /* =========================================
    COMPORTAMIENTO 100% NATIVO MOBILE
-   (Ocultar botones flotantes de Streamlit)
    ========================================= */
 header[data-testid="stHeader"] {display: none !important;}
 #MainMenu {visibility: hidden;}
@@ -594,7 +593,6 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>👥 Buscador y Legajos</h3>", unsafe_allow_html=True)
     
-    # ➕ NUEVA SECCIÓN: ALTA DE PERSONA AL PADRÓN
     with st.expander("➕ Dar de Alta a una Persona (Padrón Histórico)", expanded=False):
         st.caption("Completá este formulario para ingresar al sistema a alguien que ya participa del centro, con todos sus datos.")
         with st.form("alta_directa_form"):
@@ -850,10 +848,10 @@ def page_reportes(df_asistencia, centro):
     </div>
     """, unsafe_allow_html=True)
 
-def page_global(df_asistencia, df_personas, df_ap):
+def page_global(dfs):
     st.markdown("<h3 style='margin-bottom:15px;'>🌍 Consola Central</h3>", unsafe_allow_html=True)
     
-    df_a = latest_asistencia(df_asistencia).copy()
+    df_a = latest_asistencia(dfs[ASISTENCIA_TAB]).copy()
     if not df_a.empty and "presentes" in df_a.columns:
         df_a["presentes_i"] = df_a["presentes"].apply(lambda x: clean_int(x, 0))
     else:
@@ -861,11 +859,14 @@ def page_global(df_asistencia, df_personas, df_ap):
         
     anio = str(get_today_ar().year)
     
+    df_p = dfs[PERSONAS_TAB]
     df_personas_unq = pd.DataFrame()
-    if not df_personas.empty and "nombre" in df_personas.columns:
-        df_personas_unq = df_personas.sort_values("timestamp").groupby("nombre").tail(1)
+    if not df_p.empty and "nombre" in df_p.columns:
+        df_personas_unq = df_p.sort_values("timestamp").groupby("nombre").tail(1)
         df_personas_unq["edad_calc"] = df_personas_unq["fecha_nacimiento"].apply(calculate_age)
         
+    df_ap = dfs[ASISTENCIA_PERSONAS_TAB]
+
     total_personas = len(df_personas_unq) if not df_personas_unq.empty else 0
     total_asist_anio = 0
     promedio_global = 0.0
@@ -967,7 +968,7 @@ def main():
         page_reportes(df_asistencia, centro)
         
     if len(tabs) > 3:
-        with tabs: page_global(df_asistencia, df_personas, df_ap)
+        with tabs: page_global(load_all_data())
 
 if __name__ == "__main__":
     main()
