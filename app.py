@@ -305,7 +305,9 @@ def page_glo(df_a, df_p, df_ap):
         dp_u["e"] = dp_u["fecha_nacimiento"].apply(calculate_age)
         de = dp_u[dp_u["e"]>0].copy()
         if not de.empty:
-            de['Rango'] = pd.cut(de['e'], bins=, labels=['Niños','Adolescentes','Jóvenes','Adultos','Mayores'], right=False)
+            b_list =
+            l_list = ['Niños','Adolescentes','Jóvenes','Adultos','Mayores']
+            de['Rango'] = pd.cut(de['e'], bins=b_list, labels=l_list, right=False)
             st.bar_chart(de['Rango'].value_counts().sort_index(), color="#A78BFA")
 
 # --- MAIN ---
