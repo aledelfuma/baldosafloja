@@ -14,7 +14,7 @@ import re
 # 🌑 CONFIGURACIÓN DE TEMA OSCURO PREMIUM Y MOBILE
 # ======================================================
 st.set_page_config(
-    page_title="Hogar de Cristo - Gestión",
+    page_title="Baldosa Floja - Gestión",
     page_icon="🏠",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -40,8 +40,8 @@ CSS = """
 header[data-testid="stHeader"] {display: none !important;}
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-.viewerBadge_container {display: none !important;} /* Oculta "Made with Streamlit" */
-[data-testid="stToolbar"] {display: none !important;} /* Oculta tu avatar y menú flotante inferior */
+.viewerBadge_container {display: none !important;}
+[data-testid="stToolbar"] {display: none !important;}
 [data-testid="stAppDeployButton"] {display: none !important;}
 .stDeployButton {display: none !important;}
 
@@ -160,7 +160,7 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     display: flex;
     justify-content: space-around;
     padding: 10px 5px env(safe-area-inset-bottom, 20px) 5px; 
-    z-index: 999999 !important; /* Capa super alta para que nada lo tape */
+    z-index: 999999 !important; 
 }
 .stTabs [data-baseweb="tab"] {
     flex-grow: 1; text-align: center; justify-content: center;
@@ -287,7 +287,7 @@ def read_ws_df(title: str, cols: list) -> pd.DataFrame:
     if not values:
         ws.update("A1", [cols])
         return pd.DataFrame(columns=cols)
-    header = values[0]
+    header = values
     body = values[1:] if len(values) > 1 else []
     df = pd.DataFrame(body)
     if not df.empty:
@@ -405,11 +405,11 @@ def append_seguimiento(fecha, centro, nombre, categoria, observacion, usuario):
 # UI COMPONENTES
 # =========================
 def show_login_screen():
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2, col3 = st.columns()
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
         try: st.image("logo_hogar.png", width=200)
-        except: st.title("Hogar de Cristo")
+        except: st.title("Baldosa Floja")
         st.markdown("### Acceso al Sistema")
         
         with st.form("login_form"):
@@ -419,7 +419,7 @@ def show_login_screen():
                 df_users = get_users_db()
                 row = df_users[(df_users["usuario"].astype(str).str.strip()==u.strip()) & (df_users["password"].astype(str).str.strip()==p.strip())]
                 if not row.empty:
-                    r = row.iloc[0]
+                    r = row.iloc
                     st.session_state.update({"logged_in": True, "usuario": r["usuario"], "centro_asignado": r["centro"].strip(), "nombre_visible": r["nombre"]})
                     st.rerun()
                 else:
@@ -440,7 +440,7 @@ def show_top_header(nombre, centro):
 <div class='top-bar'>
     <div style='display:flex; align-items:center; gap:15px;'>
         <div style='background-color: var(--primary); width: 45px; height: 45px; border-radius: 50%; display:flex; align-items:center; justify-content:center; color:black; font-weight:bold; font-size:1.2rem;'>
-            {nombre[0].upper() if nombre else 'U'}
+            {nombre.upper() if nombre else 'U'}
         </div>
         <div>
             <div class='user-info'>Hola, {nombre}</div>
@@ -555,7 +555,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         if agregar_nueva and dni_new.strip() and not df_personas.empty:
             existe_dni = df_personas[df_personas['dni'].astype(str).str.strip() == dni_new.strip()]
             if not existe_dni.empty:
-                st.markdown(f"<div class='alert-box alert-danger'>⚠️ DNI duplicado: {existe_dni.iloc[0]['nombre']}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='alert-box alert-danger'>⚠️ DNI duplicado: {existe_dni.iloc['nombre']}</div>", unsafe_allow_html=True)
 
     df_latest = latest_asistencia(df_asistencia)
     ya = pd.DataFrame()
@@ -593,6 +593,39 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
 
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>👥 Buscador y Legajos</h3>", unsafe_allow_html=True)
+    
+    with st.expander("➕ Dar de Alta a una Persona (Padrón Histórico)", expanded=False):
+        st.caption("Completá este formulario para ingresar al sistema a alguien que ya participa del centro, con todos sus datos.")
+        with st.form("alta_directa_form"):
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                new_nom = st.text_input("Nombre Completo *")
+                new_dni = st.text_input("DNI")
+                new_nac = st.text_input("Fecha de Nacimiento (DD/MM/AAAA)")
+            with col_a2:
+                new_tel = st.text_input("Teléfono")
+                new_em = st.text_input("Contacto de Emergencia")
+                new_dom = st.text_input("Dirección / Barrio")
+            
+            new_etq = st.text_input("Etiquetas (Separadas por coma)", help="Ej: Diabético, Vianda, Taller costura")
+            new_notas = st.text_area("Notas Permanentes (Salud, contexto familiar, alergias, etc.)")
+            
+            if st.form_submit_button("💾 Guardar en el Padrón", use_container_width=True):
+                if not new_nom.strip():
+                    st.error("El Nombre Completo es obligatorio.")
+                else:
+                    existe = df_personas[df_personas['nombre'].str.upper() == new_nom.strip().upper()]
+                    if not existe.empty:
+                        st.warning(f"⚠️ {new_nom} ya existe en la base. Buscalo abajo para editarlo.")
+                    else:
+                        upsert_persona(df_personas, new_nom, centro, usuario, dni=new_dni, telefono=new_tel, fecha_nacimiento=new_nac, domicilio=new_dom, contacto_emergencia=new_em, etiquetas=new_etq, notas=new_notas)
+                        st.success(f"✅ {new_nom} ingresado correctamente al sistema.")
+                        time.sleep(1.5)
+                        st.cache_data.clear()
+                        st.rerun()
+
+    st.markdown("---")
+    
     df_centro = filter_personas_centro(df_personas, centro)
     nombres = sorted(df_centro["nombre"].unique()) if not df_centro.empty else []
 
@@ -620,7 +653,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                 st.dataframe(df_show[cols_to_show].sort_values("nombre"), use_container_width=True, hide_index=True)
         return
 
-    datos_persona = df_centro[df_centro["nombre"] == seleccion].iloc[0]
+    datos_persona = df_centro[df_centro["nombre"] == seleccion].iloc
     
     tags_str = str(datos_persona.get("etiquetas", ""))
     tags_html = ""
@@ -816,10 +849,10 @@ def page_reportes(df_asistencia, centro):
     </div>
     """, unsafe_allow_html=True)
 
-def page_global(df_asistencia, df_personas, df_ap):
+def page_global(dfs):
     st.markdown("<h3 style='margin-bottom:15px;'>🌍 Consola Central</h3>", unsafe_allow_html=True)
     
-    df_a = latest_asistencia(df_asistencia).copy()
+    df_a = latest_asistencia(dfs[ASISTENCIA_TAB]).copy()
     if not df_a.empty and "presentes" in df_a.columns:
         df_a["presentes_i"] = df_a["presentes"].apply(lambda x: clean_int(x, 0))
     else:
@@ -827,11 +860,14 @@ def page_global(df_asistencia, df_personas, df_ap):
         
     anio = str(get_today_ar().year)
     
+    df_p = dfs[PERSONAS_TAB]
     df_personas_unq = pd.DataFrame()
-    if not df_personas.empty and "nombre" in df_personas.columns:
-        df_personas_unq = df_personas.sort_values("timestamp").groupby("nombre").tail(1)
+    if not df_p.empty and "nombre" in df_p.columns:
+        df_personas_unq = df_p.sort_values("timestamp").groupby("nombre").tail(1)
         df_personas_unq["edad_calc"] = df_personas_unq["fecha_nacimiento"].apply(calculate_age)
         
+    df_ap = dfs[ASISTENCIA_PERSONAS_TAB]
+
     total_personas = len(df_personas_unq) if not df_personas_unq.empty else 0
     total_asist_anio = 0
     promedio_global = 0.0
@@ -867,15 +903,17 @@ def page_global(df_asistencia, df_personas, df_ap):
     if not df_personas_unq.empty and "edad_calc" in df_personas_unq.columns:
         df_edades = df_personas_unq[df_personas_unq["edad_calc"] > 0].copy()
         if not df_edades.empty:
-            bins = [0, 12, 18, 30, 50, 100]
+            bins =
             labels = ['Niños (0-12)', 'Adolescentes (13-18)', 'Jóvenes (19-30)', 'Adultos (31-50)', 'Mayores (50+)']
             df_edades['rango_edad'] = pd.cut(df_edades['edad_calc'], bins=bins, labels=labels, right=False)
             st.bar_chart(df_edades['rango_edad'].value_counts().sort_index(), color="#A78BFA")
         else:
-            st.info("Falta cargar fechas de nacimiento.")
+            st.info("Falta cargar fechas de nacimiento válidas.")
+    else:
+        st.info("No hay personas cargadas.")
 
 # =========================
-# MAIN APP
+# MAIN APP (CONTROLADOR)
 # =========================
 def main():
     if not st.session_state.get("logged_in"): 
@@ -911,20 +949,20 @@ def main():
     
     tabs = st.tabs(list_tabs)
     
-    with tabs[0]: 
+    with tabs: 
         show_top_alerts(latest_asistencia(df_asistencia), df_personas, df_ap, centro)
         kpi_row_full(latest_asistencia(df_asistencia), centro)
         st.markdown("<hr style='opacity:0.2;'>", unsafe_allow_html=True)
         page_registrar_asistencia(df_personas, df_asistencia, centro, nombre, u)
         
-    with tabs[1]: 
+    with tabs: 
         page_personas_full(df_personas, df_ap, df_seg, centro, u)
         
-    with tabs[2]: 
+    with tabs: 
         page_reportes(df_asistencia, centro)
         
     if len(tabs) > 3:
-        with tabs[3]: page_global(df_asistencia, df_personas, df_ap)
+        with tabs: page_global(load_all_data())
 
 if __name__ == "__main__":
     main()
