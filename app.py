@@ -907,7 +907,9 @@ def page_global(dfs):
             df_edades['rango_edad'] = pd.cut(df_edades['edad_calc'], bins=bins, labels=labels, right=False)
             st.bar_chart(df_edades['rango_edad'].value_counts().sort_index(), color="#A78BFA")
         else:
-            st.info("Falta cargar fechas de nacimiento.")
+            st.info("Falta cargar fechas de nacimiento válidas.")
+    else:
+        st.info("No hay personas cargadas.")
 
 # =========================
 # MAIN APP (CONTROLADOR)
