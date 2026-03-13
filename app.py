@@ -161,7 +161,7 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
 }
 .stTabs [data-baseweb="tab"] {
     flex-grow: 1; text-align: center; justify-content: center;
-    font-size: 0.65rem !important; /* Achicado un poquito para que entren 5 pestañas sin problema */
+    font-size: 0.65rem !important; /* Achicado para que entren más pestañas */
     font-weight: 700;
     color: var(--text-secondary) !important; padding: 10px 0; 
     border: none !important; background: transparent !important;
@@ -590,7 +590,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         st.balloons()
         st.toast("✅ Guardado Exitoso"); time.sleep(1.5); st.cache_data.clear(); st.rerun()
 
-# ➕ NUEVA SECCIÓN: ALTA EXCLUSIVA AL PADRÓN (SIN ASISTENCIA)
+# ➕ NUEVA PESTAÑA: ALTA DE PERSONAS
 def page_alta_persona(df_personas, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>➕ Alta de Persona al Padrón</h3>", unsafe_allow_html=True)
     st.info("💡 Completá este formulario para ingresar al sistema a alguien que ya participa del centro, **sin necesidad de registrarle asistencia de hoy**.")
@@ -615,7 +615,6 @@ def page_alta_persona(df_personas, centro, usuario):
             if not new_nom.strip():
                 st.error("⚠️ El Nombre Completo es obligatorio.")
             else:
-                # Buscar si ya existe en este centro
                 df_centro = filter_personas_centro(df_personas, centro)
                 existe = df_centro[df_centro['nombre'].str.upper() == new_nom.strip().upper()]
                 
@@ -854,10 +853,10 @@ def page_reportes(df_asistencia, centro):
     </div>
     """, unsafe_allow_html=True)
 
-def page_global(dfs):
+def page_global(df_asistencia, df_personas, df_ap):
     st.markdown("<h3 style='margin-bottom:15px;'>🌍 Consola Central</h3>", unsafe_allow_html=True)
     
-    df_a = latest_asistencia(dfs[ASISTENCIA_TAB]).copy()
+    df_a = latest_asistencia(df_asistencia).copy()
     if not df_a.empty and "presentes" in df_a.columns:
         df_a["presentes_i"] = df_a["presentes"].apply(lambda x: clean_int(x, 0))
     else:
@@ -865,10 +864,9 @@ def page_global(dfs):
         
     anio = str(get_today_ar().year)
     
-    df_p = dfs[PERSONAS_TAB]
     df_personas_unq = pd.DataFrame()
-    if not df_p.empty and "nombre" in df_p.columns:
-        df_personas_unq = df_p.sort_values("timestamp").groupby("nombre").tail(1)
+    if not df_personas.empty and "nombre" in df_personas.columns:
+        df_personas_unq = df_personas.sort_values("timestamp").groupby("nombre").tail(1)
         df_personas_unq["edad_calc"] = df_personas_unq["fecha_nacimiento"].apply(calculate_age)
         
     total_personas = len(df_personas_unq) if not df_personas_unq.empty else 0
@@ -883,7 +881,6 @@ def page_global(dfs):
             promedio_global = total_asist_anio / dias_unicos
             
     nuevos_anio = 0
-    df_ap = dfs[ASISTENCIA_PERSONAS_TAB]
     if not df_ap.empty and "es_nuevo" in df_ap.columns:
         nuevos_anio = len(df_ap[(df_ap["es_nuevo"]=="SI") & (df_ap["anio"].astype(str)==anio)])
         
@@ -907,9 +904,9 @@ def page_global(dfs):
     if not df_personas_unq.empty and "edad_calc" in df_personas_unq.columns:
         df_edades = df_personas_unq[df_personas_unq["edad_calc"] > 0].copy()
         if not df_edades.empty:
-            bins = [0, 12, 18, 30, 50, 100]
-            labels = ['Niños (0-12)', 'Adolescentes (13-18)', 'Jóvenes (19-30)', 'Adultos (31-50)', 'Mayores (50+)']
-            df_edades['rango_edad'] = pd.cut(df_edades['edad_calc'], bins=bins, labels=labels, right=False)
+            b_list = [0, 12, 18, 30, 50, 100]
+            l_list = ['Niños','Adolescentes','Jóvenes','Adultos','Mayores']
+            df_edades['rango_edad'] = pd.cut(df_edades['edad_calc'], bins=b_list, labels=l_list, right=False)
             st.bar_chart(df_edades['rango_edad'].value_counts().sort_index(), color="#A78BFA")
         else:
             st.info("Falta cargar fechas de nacimiento válidas.")
@@ -979,7 +976,7 @@ def main():
         page_reportes(df_asistencia, centro)
         
     if len(tabs) > 4:
-        with tabs[4]: page_global(load_all_data())
+        with tabs[4]: page_global(df_asistencia, df_personas, df_ap)
 
 if __name__ == "__main__":
     main()
