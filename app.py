@@ -14,10 +14,10 @@ import re
 # 🌑 CONFIGURACIÓN DE TEMA OSCURO PREMIUM Y MOBILE
 # ======================================================
 st.set_page_config(
-    page_title="Hogar de Cristo - Gestión",
+    page_title="Baldosa Floja",
     page_icon="🏠",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="collapsed"
 )
 
 CSS = """
@@ -33,15 +33,12 @@ CSS = """
   --radius-lg: 18px;
 }
 
-/* =========================================
-   COMPORTAMIENTO 100% NATIVO MOBILE
-   (Ocultar botones flotantes de Streamlit)
-   ========================================= */
+/* COMPORTAMIENTO NATIVO MOBILE */
 header[data-testid="stHeader"] {display: none !important;}
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-.viewerBadge_container {display: none !important;} /* Oculta "Made with Streamlit" */
-[data-testid="stToolbar"] {display: none !important;} /* Oculta tu avatar y menú flotante inferior */
+.viewerBadge_container {display: none !important;} 
+[data-testid="stToolbar"] {display: none !important;} 
 [data-testid="stAppDeployButton"] {display: none !important;}
 .stDeployButton {display: none !important;}
 
@@ -160,11 +157,12 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     display: flex;
     justify-content: space-around;
     padding: 10px 5px env(safe-area-inset-bottom, 20px) 5px; 
-    z-index: 999999 !important; /* Capa super alta para que nada lo tape */
+    z-index: 999999 !important; 
 }
 .stTabs [data-baseweb="tab"] {
     flex-grow: 1; text-align: center; justify-content: center;
-    font-size: 0.70rem !important; font-weight: 700;
+    font-size: 0.65rem !important; /* Achicado un poquito para que entren 5 pestañas sin problema */
+    font-weight: 700;
     color: var(--text-secondary) !important; padding: 10px 0; 
     border: none !important; background: transparent !important;
 }
@@ -409,7 +407,7 @@ def show_login_screen():
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
         try: st.image("logo_hogar.png", width=200)
-        except: st.title("Hogar de Cristo")
+        except: st.title("Baldosa Floja")
         st.markdown("### Acceso al Sistema")
         
         with st.form("login_form"):
@@ -545,7 +543,8 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     if not presentes: total_presentes = total_presentes
     else: total_presentes = len(presentes)
     
-    with st.expander("➕ ¿Vino alguien nuevo?"):
+    with st.expander("➕ ¿Vino alguien nuevo? (Carga Rápida)"):
+        st.caption("Usa esto solo si vino hoy y querés marcarle el presente rápido. Para cargas completas sin asistencia, usá la pestaña 'Alta'.")
         nueva = st.text_input("Nombre completo")
         dni_new = st.text_input("DNI")
         tel_new = st.text_input("Teléfono")
@@ -591,8 +590,47 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         st.balloons()
         st.toast("✅ Guardado Exitoso"); time.sleep(1.5); st.cache_data.clear(); st.rerun()
 
+# ➕ NUEVA SECCIÓN: ALTA EXCLUSIVA AL PADRÓN (SIN ASISTENCIA)
+def page_alta_persona(df_personas, centro, usuario):
+    st.markdown("<h3 style='margin-bottom:15px;'>➕ Alta de Persona al Padrón</h3>", unsafe_allow_html=True)
+    st.info("💡 Completá este formulario para ingresar al sistema a alguien que ya participa del centro, **sin necesidad de registrarle asistencia de hoy**.")
+    
+    with st.form("alta_directa_form"):
+        st.markdown("#### Datos Principales")
+        col_a1, col_a2 = st.columns(2)
+        with col_a1:
+            new_nom = st.text_input("Nombre Completo *", placeholder="Ej: Juan Pérez")
+            new_dni = st.text_input("DNI")
+            new_nac = st.text_input("Fecha de Nacimiento (DD/MM/AAAA)")
+        with col_a2:
+            new_tel = st.text_input("Teléfono")
+            new_em = st.text_input("Contacto de Emergencia")
+            new_dom = st.text_input("Dirección / Barrio")
+        
+        st.markdown("#### Información Adicional")
+        new_etq = st.text_input("Etiquetas (Separadas por coma)", help="Ej: Diabético, Vianda, Taller costura")
+        new_notas = st.text_area("Notas Permanentes (Salud, contexto familiar, alergias, etc.)")
+        
+        if st.form_submit_button("💾 Guardar en el Padrón", type="primary", use_container_width=True):
+            if not new_nom.strip():
+                st.error("⚠️ El Nombre Completo es obligatorio.")
+            else:
+                # Buscar si ya existe en este centro
+                df_centro = filter_personas_centro(df_personas, centro)
+                existe = df_centro[df_centro['nombre'].str.upper() == new_nom.strip().upper()]
+                
+                if not existe.empty:
+                    st.warning(f"⚠️ {new_nom} ya existe en la base de este centro. Buscalo en la pestaña 'Legajos' para editarlo.")
+                else:
+                    upsert_persona(df_personas, new_nom, centro, usuario, dni=new_dni, telefono=new_tel, fecha_nacimiento=new_nac, domicilio=new_dom, contacto_emergencia=new_em, etiquetas=new_etq, notas=new_notas)
+                    st.success(f"✅ ¡{new_nom} ingresado correctamente al sistema!")
+                    time.sleep(1.5)
+                    st.cache_data.clear()
+                    st.rerun()
+
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
-    st.markdown("<h3 style='margin-bottom:15px;'>👥 Buscador y Legajos</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='margin-bottom:15px;'>👥 Buscador de Legajos</h3>", unsafe_allow_html=True)
+    
     df_centro = filter_personas_centro(df_personas, centro)
     nombres = sorted(df_centro["nombre"].unique()) if not df_centro.empty else []
 
@@ -816,10 +854,10 @@ def page_reportes(df_asistencia, centro):
     </div>
     """, unsafe_allow_html=True)
 
-def page_global(df_asistencia, df_personas, df_ap):
+def page_global(dfs):
     st.markdown("<h3 style='margin-bottom:15px;'>🌍 Consola Central</h3>", unsafe_allow_html=True)
     
-    df_a = latest_asistencia(df_asistencia).copy()
+    df_a = latest_asistencia(dfs[ASISTENCIA_TAB]).copy()
     if not df_a.empty and "presentes" in df_a.columns:
         df_a["presentes_i"] = df_a["presentes"].apply(lambda x: clean_int(x, 0))
     else:
@@ -827,9 +865,10 @@ def page_global(df_asistencia, df_personas, df_ap):
         
     anio = str(get_today_ar().year)
     
+    df_p = dfs[PERSONAS_TAB]
     df_personas_unq = pd.DataFrame()
-    if not df_personas.empty and "nombre" in df_personas.columns:
-        df_personas_unq = df_personas.sort_values("timestamp").groupby("nombre").tail(1)
+    if not df_p.empty and "nombre" in df_p.columns:
+        df_personas_unq = df_p.sort_values("timestamp").groupby("nombre").tail(1)
         df_personas_unq["edad_calc"] = df_personas_unq["fecha_nacimiento"].apply(calculate_age)
         
     total_personas = len(df_personas_unq) if not df_personas_unq.empty else 0
@@ -844,6 +883,7 @@ def page_global(df_asistencia, df_personas, df_ap):
             promedio_global = total_asist_anio / dias_unicos
             
     nuevos_anio = 0
+    df_ap = dfs[ASISTENCIA_PERSONAS_TAB]
     if not df_ap.empty and "es_nuevo" in df_ap.columns:
         nuevos_anio = len(df_ap[(df_ap["es_nuevo"]=="SI") & (df_ap["anio"].astype(str)==anio)])
         
@@ -872,12 +912,23 @@ def page_global(df_asistencia, df_personas, df_ap):
             df_edades['rango_edad'] = pd.cut(df_edades['edad_calc'], bins=bins, labels=labels, right=False)
             st.bar_chart(df_edades['rango_edad'].value_counts().sort_index(), color="#A78BFA")
         else:
-            st.info("Falta cargar fechas de nacimiento.")
+            st.info("Falta cargar fechas de nacimiento válidas.")
+    else:
+        st.info("No hay personas cargadas.")
 
 # =========================
-# MAIN APP
+# MAIN APP (CONTROLADOR)
 # =========================
 def main():
+    hide_st_style = """
+                <style>
+                #MainMenu {visibility: hidden;}
+                footer {visibility: hidden;}
+                header {visibility: hidden;}
+                </style>
+                """
+    st.markdown(hide_st_style, unsafe_allow_html=True)
+
     if not st.session_state.get("logged_in"): 
         show_login_screen()
     
@@ -906,7 +957,8 @@ def main():
     
     df_asistencia, df_personas, df_ap, df_seg = load_all_data()
 
-    list_tabs = ["🏠 Inicio", "👥 Legajos", "📊 Reportes"]
+    # 📱 PANTALLA PRINCIPAL DE INICIO CON NUEVA PESTAÑA "ALTA"
+    list_tabs = ["🏠 Inicio", "👥 Legajos", "➕ Alta", "📊 Reportes"]
     if u.upper() == "NATASHA": list_tabs.append("🌍 Global")
     
     tabs = st.tabs(list_tabs)
@@ -919,12 +971,15 @@ def main():
         
     with tabs[1]: 
         page_personas_full(df_personas, df_ap, df_seg, centro, u)
-        
+
     with tabs[2]: 
+        page_alta_persona(df_personas, centro, u)
+        
+    with tabs[3]: 
         page_reportes(df_asistencia, centro)
         
-    if len(tabs) > 3:
-        with tabs[3]: page_global(df_asistencia, df_personas, df_ap)
+    if len(tabs) > 4:
+        with tabs[4]: page_global(load_all_data())
 
 if __name__ == "__main__":
     main()
