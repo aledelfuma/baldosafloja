@@ -222,11 +222,10 @@ DEFAULT_ESPACIO = "General"
 CATEGORIAS_SEGUIMIENTO = ["Escucha / Acompañamiento", "Salud", "Trámite (DNI/Social)", "Educación", "Familiar", "Crisis / Conflicto", "Otro"]
 
 # ======================================================
-# 🔄 FLUJO DE DATOS (LECTURA TEMPORAL EN BLANCO)
+# 🔄 FLUJO DE DATOS (LECTURA EN BLANCO TEMPORAL)
 # ======================================================
 @st.cache_data(ttl=60, show_spinner="Sincronizando con Supabase...")
 def load_all_data_supabase():
-    # Nota: En los siguientes pasos cambiaremos estas lecturas simuladas por consultas SQL reales a Supabase
     df_a = pd.DataFrame(columns=["timestamp", "fecha", "anio", "centro", "espacio", "presentes", "coordinador", "modo", "notas", "usuario", "accion"])
     df_p = pd.DataFrame(columns=["nombre", "centro", "edad", "domicilio", "notas", "activo", "dni", "fecha_nacimiento", "telefono", "contacto_emergencia", "etiquetas"])
     df_ap = pd.DataFrame(columns=["timestamp", "fecha", "anio", "centro", "espacio", "nombre", "estado", "es_nuevo", "coordinador", "usuario"])
@@ -280,20 +279,20 @@ def show_login_screen():
         st.markdown("### Acceso al Sistema")
         
         with st.form("login_form"):
-            u = st.text_input("Usuarios")
+            u = st.text_input("Usuario")
             p = st.text_input("Contraseña", type="password")
             
             if st.form_submit_button("Ingresar", use_container_width=True):
                 try:
-                    # ⚡ CONSULTA DIRECTA A SUPABASE
-                    query = supabase.table("usuarios").select("*").eq("usuario", u.strip()).execute()
+                    # ⚡ CONSULTA COINCIDIENDO CON TU COLUMNA 'usuarios' EN PLURAL
+                    query = supabase.table("usuarios").select("*").eq("usuarios", u.strip()).execute()
                     
                     if query.data:
                         user_data = query.data[0]
                         if str(user_data["password_text"]) == p.strip():
                             st.session_state.update({
                                 "logged_in": True, 
-                                "usuario": user_data["usuario"], 
+                                "usuario": user_data["usuarios"], 
                                 "centro_asignado": user_data["centro"].strip(), 
                                 "nombre_visible": user_data["nombre_visible"]
                             })
@@ -345,7 +344,7 @@ def kpi_row_full(df_latest, centro):
     col3.markdown(f"<div class='kpi'><h3>Mes actual</h3><div class='v'>0</div></div>", unsafe_allow_html=True)
 
 # ======================================================
-# 📂 VISTAS DE PÁGINAS (PANELES VÍOS DE MOMENTO)
+# 📂 VISTAS DE PÁGINAS (PANELES)
 # ======================================================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>📝 Carga Diaria</h3>", unsafe_allow_html=True)
