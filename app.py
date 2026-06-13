@@ -280,7 +280,7 @@ def show_login_screen():
         st.markdown("### Acceso al Sistema")
         
         with st.form("login_form"):
-            u = st.text_input("Usuario")
+            u = st.text_input("Usuarios")
             p = st.text_input("Contraseña", type="password")
             
             if st.form_submit_button("Ingresar", use_container_width=True):
