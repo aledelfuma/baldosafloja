@@ -292,7 +292,7 @@ def show_login_screen():
                         if str(user_data["password_text"]) == p.strip():
                             st.session_state.update({
                                 "logged_in": True, 
-                                "usuarios": user_data["usuarios"], 
+                                "usuario": user_data["usuario"], 
                                 "centro_asignado": user_data["centro"].strip(), 
                                 "nombre_visible": user_data["nombre_visible"]
                             })
