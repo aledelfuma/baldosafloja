@@ -284,23 +284,35 @@ def show_login_screen():
             
             if st.form_submit_button("Ingresar", use_container_width=True):
                 try:
-                    # ⚡ CONSULTA COINCIDIENDO CON TU COLUMNA 'usuarios' EN PLURAL
-                    query = supabase.table("usuarios").select("*").eq("usuarios", u.strip()).execute()
+                    # 🔍 DIAGNÓSTICO EN MEMORIA: Traemos todo para inspeccionar las columnas
+                    query = supabase.table("usuarios").select("*").execute()
                     
                     if query.data:
-                        user_data = query.data[0]
-                        if str(user_data["password_text"]) == p.strip():
-                            st.session_state.update({
-                                "logged_in": True, 
-                                "usuario": u.strip(), # Modificación quirúrgica para evitar conflictos
-                                "centro_asignado": user_data["centro"].strip(), 
-                                "nombre_visible": user_data["nombre_visible"]
-                            })
-                            st.rerun()
+                        user_data = None
+                        for row in query.data:
+                            # Intenta leer tanto 'usuarios' como 'usuario' por flexibilidad
+                            db_user = row.get("usuarios") or row.get("usuario")
+                            if db_user and str(db_user).strip().lower() == u.strip().lower():
+                                user_data = row
+                                break
+                        
+                        if user_data:
+                            if str(user_data["password_text"]) == p.strip():
+                                st.session_state.update({
+                                    "logged_in": True, 
+                                    "usuario": u.strip(), 
+                                    "centro_asignado": user_data["centro"].strip(), 
+                                    "nombre_visible": user_data["nombre_visible"]
+                                })
+                                st.rerun()
+                            else:
+                                st.error("🔒 Contraseña incorrecta.")
                         else:
-                            st.error("🔒 Contraseña incorrecta.")
+                            # Si rebota, nos muestra qué hay guardado exactamente para corregirlo
+                            nombres_reales = [str(r.get("usuarios") or r.get("usuario")) for r in query.data]
+                            st.error(f"🔍 Encontrados en la DB: {nombres_reales}. Vos escribiste: '{u.strip()}'")
                     else:
-                        st.error("🔍 Usuario no encontrado.")
+                        st.error("🔍 La tabla 'usuarios' está vacía en Supabase.")
                 except Exception as e:
                     st.error(f"❌ Error de conexión con Supabase: {e}")
         
@@ -384,7 +396,6 @@ def main():
         st.stop()
     centro = match_centro
 
-    # Ajustado dinámicamente para chequear con tus usuarios reales de testeo en Supabase
     if centro == C_BELEN and u.lower() != "natasha_test":
         st.error("🔒 ACCESO DENEGADO: El centro Calle Belén es de acceso exclusivo para la administración.")
         if st.button("⬅️ Salir de la cuenta", type="primary"):
