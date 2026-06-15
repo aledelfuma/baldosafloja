@@ -362,7 +362,6 @@ def show_top_alerts(df_latest, df_personas, df_ap, centro):
         else: st.markdown("<div class='alert-box alert-gray'>🎂 Sin cumples</div>", unsafe_allow_html=True)
     with ac3: st.markdown("<div class='alert-box alert-gray'>✔️ Sin Inasistencias</div>", unsafe_allow_html=True)
 
-# 📊 ACTUALIZACIÓN DE KPIS EN TIEMPO REAL CON LA TABLA GENERAL DE SUPABASE
 def kpi_row_full(df_asistencia, centro):
     hoy_date = get_today_ar()
     hoy_str = hoy_date.isoformat()
@@ -372,21 +371,14 @@ def kpi_row_full(df_asistencia, centro):
     c1 = c2 = c3 = 0
     
     if not df_asistencia.empty:
-        # Hacemos una copia limpia para no romper la estructura original
         df_kpi = df_asistencia.copy()
         df_kpi["presentes_i"] = df_kpi["presentes"].apply(lambda x: clean_int(x, 0))
         df_kpi["fecha_str"] = df_kpi["fecha"].astype(str)
         
-        # Filtramos estrictamente los registros correspondientes al centro del usuario
         df_centro = df_kpi[df_kpi["centro"] == centro]
         
-        # 1. Ingresos Hoy
         c1 = int(df_centro[df_centro["fecha_str"] == hoy_str]["presentes_i"].sum())
-        
-        # 2. Últimos 7 días
         c2 = int(df_centro[(df_centro["fecha_str"] >= hace_7_dias_str) & (df_centro["fecha_str"] <= hoy_str)]["presentes_i"].sum())
-        
-        # 3. Mes Actual
         c3 = int(df_centro[(df_centro["fecha_str"] >= inicio_mes_str) & (df_centro["fecha_str"] <= hoy_str)]["presentes_i"].sum())
         
     col1, col2, col3 = st.columns(3)
@@ -395,7 +387,7 @@ def kpi_row_full(df_asistencia, centro):
     col3.markdown(f"<div class='kpi'><h3>Mes actual</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
 
 # ======================================================
-# 📝 PESTAÑA: CARGA DIARIA (CONEXIÓN SUPABASE EN BATCH)
+# 📝 PESTAÑA: CARGA DIARIA (CORREGIDO DE "notes" A "notas")
 # ======================================================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>📝 Carga Diaria</h3>", unsafe_allow_html=True)
@@ -427,10 +419,12 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
             
         with st.spinner("Guardando en Supabase en lote..."):
             try:
+                # ⚡ CLAVE: Corregido el nombre del campo a "notas" para que coincida con la tabla SQL
                 cabecera = {
                     "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro,
                     "espacio": espacio, "presentes": total_presentes, "coordinador": nombre_visible,
-                    "modo": modo, "notes": notas, "usuario": usuario, "accion": "append"
+                    "modo": modo, "notas": notas, 
+                    "usuario": usuario, "accion": "append"
                 }
                 supabase.table("asistencia_diaria").insert(cabecera).execute()
                 
@@ -461,7 +455,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                 st.error(f"Error al guardar la asistencia: {e}")
 
 # ======================================================
-# 👥 PESTAÑA: BUSCADOR DE LEGAJOS (REAL DE SUPABASE)
+# 👥 PESTAÑA: BUSCADOR DE LEGAJOS
 # ======================================================
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>👥 Buscador de Legajos</h3>", unsafe_allow_html=True)
@@ -647,7 +641,7 @@ def main():
     
     with tabs[0]: 
         show_top_alerts(latest_asistencia(df_asistencia), df_personas, df_ap, centro)
-        kpi_row_full(df_asistencia, centro) # Ahora pasa la tabla entera para calcular dinámicamente
+        kpi_row_full(df_asistencia, centro)
         st.markdown("<hr style='opacity:0.2;'>", unsafe_allow_html=True)
         page_registrar_asistencia(df_personas, df_asistencia, centro, nombre, u)
         
