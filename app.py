@@ -557,7 +557,7 @@ def page_alta_persona(df_personas, centro, usuario):
                             fecha_nac_valida = None
                             if new_nac.strip():
                                 try: fecha_nac_valida = pd.to_datetime(new_nac.strip()).date().isoformat()
-                                catch:
+                                except:
                                     st.error("⛔ Formato de fecha incorrecto. Usar AAAA-MM-DD.")
                                     st.stop()
 
