@@ -145,7 +145,7 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     margin-top: 10px; transition: 0.3s; width: 100%;
 }
 
-/* MENÚ FLOTANTE ELEVADO */
+/* MENÚ FLOTANTE ELEVADO PRESTIGE */
 .stTabs [data-baseweb="tab-list"] {
     position: fixed; 
     bottom: 50px !important; 
@@ -176,7 +176,6 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
 }
 .stTabs [aria-selected="true"]::after { display: none; }
 
-/* ESTILO NOTAS SEGUIMIENTO */
 .note-card {
     background-color: var(--surface);
     border-left: 4px solid var(--secondary);
@@ -247,7 +246,6 @@ def load_all_data_supabase():
         res_a = supabase.table("asistencia_diaria").select("*").execute()
         res_p = supabase.table("personas").select("*").execute()
         res_ap = supabase.table("asistencia_personas").select("*").execute()
-        # LECTURA REAL DE LA BITÁCORA COMUNITARIA
         res_seg = supabase.table("bitacora_seguimiento").select("*").execute()
         
         df_a = pd.DataFrame(res_a.data) if res_a.data else pd.DataFrame(columns=["created_at", "fecha", "anio", "centro", "espacio", "presentes", "coordinador", "modo", "notas", "usuario", "accion"])
@@ -444,6 +442,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     supabase.table("asistencia_diaria").delete().eq("fecha", fecha_str).eq("centro", centro).eq("espacio", espacio).execute()
                     supabase.table("asistencia_personas").delete().eq("fecha", fecha_str).eq("centro", centro).eq("espacio", espacio).execute()
                 
+                # ✅ CORREGIDO: "notas" en español compatible con la base de datos
                 cabecera = {
                     "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro,
                     "espacio": espacio, "presentes": total_presentes, "coordinador": nombre_visible,
@@ -489,7 +488,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     st.error(f"❌ Error inesperado: {e}")
 
 # ======================================================
-# 👥 PESTAÑA: BUSCADOR DE LEGAJOS Y BITÁCORA REAL
+# 👥 PESTAÑA: BUSCADOR DE LEGAJOS Y BITÁCORA
 # ======================================================
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>👥 Buscador de Legajos</h3>", unsafe_allow_html=True)
@@ -560,12 +559,11 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
 </div>
 """, unsafe_allow_html=True)
 
-    # 📝 NIVELES DE INTERVENCIÓN: FORMULARIO DE LA BITÁCORA COMUNITARIA
     st.markdown("### 📝 Registrar Intervención / Nota del Día")
     with st.form("form_bitacora_seguimiento", clear_on_submit=True):
         f_nota = st.date_input("Fecha de lo ocurrido", value=get_today_ar())
         cat_nota = st.selectbox("Categoría de Seguimiento", CATEGORIAS_SEGUIMIENTO)
-        obs_nota = st.text_area("¿Qué pasó hoy? (Historia, trámites, escucha...)", placeholder="Ej: Se lo acompañó a sacar el DNI en el registro civil o se charló con la familia...")
+        obs_nota = st.text_area("¿Qué pasó hoy? (Historia, trámites, escucha...)", placeholder="Ej: Se lo acompañó a sacar el DNI...")
         
         if st.form_submit_button("💾 Guardar en Bitácora (Supabase ⚡)", use_container_width=True):
             if not obs_nota.strip():
@@ -575,26 +573,18 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                     try:
                         f_nota_str = f_nota.isoformat()
                         nueva_intervencion = {
-                            "fecha": f_nota_str,
-                            "anio": year_of(f_nota_str),
-                            "centro": centro,
-                            "nombre_persona": seleccion,
-                            "categoria": cat_nota,
-                            "observacion": obs_nota.strip(),
-                            "usuario_registro": usuario
+                            "fecha": f_nota_str, "anio": year_of(f_nota_str), "centro": centro,
+                            "nombre_persona": seleccion, "categoria": cat_nota,
+                            "observacion": obs_nota.strip(), "usuario_registro": usuario
                         }
                         supabase.table("bitacora_seguimiento").insert(nueva_intervencion).execute()
                         st.toast(f"✅ Nota registrada para {seleccion}")
                         time.sleep(1)
                         st.cache_data.clear()
                         st.rerun()
-                    except Exception as e:
-                        st.error(f"Error al registrar nota: {e}")
+                    except Exception as e: st.error(f"Error al registrar nota: {e}")
 
-    # ⏳ LÍNEA DE TIEMPO HISTÓRICA REAL
     st.markdown("<br>### ⏳ Historial de Acompañamiento", unsafe_allow_html=True)
-    
-    # Filtramos las notas que corresponden estrictamente a este chico
     df_chico = df_seg[df_seg["nombre_persona"] == seleccion].copy() if not df_seg.empty else pd.DataFrame()
     
     if df_chico.empty:
@@ -615,7 +605,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
             """, unsafe_allow_html=True)
 
 # ======================================================
-# ➕ PESTAÑA: ALTA DE PERSONA
+# ➕ PESTAÑA: ALTA DE PERSONA (TYPO REPARADO CON ÉXITO)
 # ======================================================
 def page_alta_persona(df_personas, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>➕ Alta de Persona al Padrón</h3>", unsafe_allow_html=True)
@@ -655,11 +645,12 @@ def page_alta_persona(df_personas, centro, usuario):
                                     st.error("⛔ Formato de fecha incorrecto. Usar AAAA-MM-DD.")
                                     st.stop()
 
+                            # ✅ REPARADO: Se cambió "notes" a "notas" para calzar exacto con Supabase
                             fila_nueva = {
                                 "nombre": new_nom.strip(), "dni": new_dni.strip() if new_dni.strip() else None,
                                 "fecha_nacimiento": fecha_nac_valida, "telefono": new_tel.strip() if new_tel.strip() else None,
                                 "domicilio": new_dom.strip() if new_dom.strip() else None, "contacto_emergencia": new_em.strip() if new_em.strip() else None,
-                                "etiquetas": new_etq.strip() if new_etq.strip() else None, "notes": new_notas.strip() if new_notas.strip() else None,
+                                "etiquetas": new_etq.strip() if new_etq.strip() else None, "notas": new_notas.strip() if new_notas.strip() else None,
                                 "activo": "SI", "centro": centro, "usuario_alta": usuario
                             }
                             supabase.table("personas").insert(fila_nueva).execute()
@@ -672,7 +663,6 @@ def page_alta_persona(df_personas, centro, usuario):
 
 def page_reportes(df_asistencia, centro):
     st.markdown("<h3 style='margin-bottom:15px;'>📊 Reportes Analíticos</h3>", unsafe_allow_html=True)
-    
     df_c = df_asistencia[df_asistencia["centro"] == centro].copy() if not df_asistencia.empty else pd.DataFrame()
     
     if df_c.empty:
@@ -703,16 +693,20 @@ def page_reportes(df_asistencia, centro):
         df_espacio = df_c.groupby("espacio")["presentes_i"].mean().reset_index().sort_values("presentes_i", ascending=False)
         st.bar_chart(df_espacio.set_index("espacio")["presentes_i"], color="#A78BFA")
 
+# ======================================================
+# 🌍 CONSOLE GLOBAL ADMIN (MATEMÁTICA CONSOLIDADA REAL)
+# ======================================================
 def page_global(df_asistencia, df_personas, df_ap):
-    st.markdown("<h3 style='margin-bottom:15px;'>🌍 Consola Central</h3>", unsafe_allow_html=True)
-    st.caption("Métricas consolidadas institucionales del Hogar de Cristo.")
+    st.markdown("<h3 style='margin-bottom:15px;'>🌍 Consola Central Institucional</h3>", unsafe_allow_html=True)
+    st.caption("Panel de control unificado y métricas consolidadas del Hogar de Cristo.")
     
+    # ✅ ACTIVADO: Sumas reales de todo el padrón mapeado en Supabase
     t_pers = len(df_personas["nombre"].unique()) if not df_personas.empty else 0
     t_asist = df_asistencia["presentes"].apply(lambda x: clean_int(x, 0)).sum() if not df_asistencia.empty else 0
     
     k1, k2 = st.columns(2)
-    k1.markdown(f"<div class='kpi'><h3>Padrón Total Institucional</h3><div class='v'>{t_pers}</div></div>", unsafe_allow_html=True)
-    k2.markdown(f"<div class='kpi'><h3>Total de Asistencias</h3><div class='v'>{t_asist}</div></div>", unsafe_allow_html=True)
+    k1.markdown(f"<div class='kpi'><h3>Padrón Total Institucional</h3><div class='v'>{t_pers}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>Personas registradas en la federación</span></div>", unsafe_allow_html=True)
+    k2.markdown(f"<div class='kpi'><h3>Total de Asistencias</h3><div class='v'>{t_asist}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>Ingresos registrados acumulados</span></div>", unsafe_allow_html=True)
 
 # ======================================================
 # 🎮 CONTROLADOR PRINCIPAL
