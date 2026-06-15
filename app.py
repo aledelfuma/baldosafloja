@@ -39,7 +39,6 @@ footer {visibility: hidden;}
 [data-testid="stAppDeployButton"] {display: none !important;}
 .stDeployButton {display: none !important;}
 
-/* Forzado extra por CSS de clases conocidas de Streamlit */
 .css-1jc7ptx, .e1ewe7hr3, [class^="viewerBadge"] { display: none !important; }
 
 .stApp {
@@ -52,7 +51,7 @@ footer {visibility: hidden;}
     padding-top: 1rem !important; 
     padding-left: 0.8rem !important;
     padding-right: 0.8rem !important;
-    padding-bottom: 160px !important; /* Más aire abajo para que el contenido no se tape */
+    padding-bottom: 160px !important; 
     max-width: 650px !important; 
     margin: 0 auto;
     overflow-x: hidden;
@@ -146,35 +145,34 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     margin-top: 10px; transition: 0.3s; width: 100%;
 }
 
-/* 🛠️ INGENIERÍA DE DISEÑO: SUBIMOS EL MENÚ EN FORMATO FLOTANTE PREMIUM */
-.stTabs [data-baseweb="tab-list"] {{
+.stTabs [data-baseweb="tab-list"] {
     position: fixed; 
-    bottom: 50px !important; /* DESPEGADO 50px DEL SUELO: Pasa por arriba de la barra intrusa de Streamlit */
+    bottom: 50px !important; 
     left: 15px !important; 
     right: 15px !important;
     background-color: rgba(30, 30, 30, 0.95) !important; 
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(255,255,255,0.08) !important;
-    border-radius: 20px !important; /* Bordes totalmente redondeados flotantes */
+    border-radius: 20px !important; 
     display: flex;
     justify-content: space-around;
     padding: 8px 5px !important; 
     z-index: 999999 !important; 
     box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
-}}
-.stTabs [data-baseweb="tab"] {{
+}
+.stTabs [data-baseweb="tab"] {
     flex-grow: 1; text-align: center; justify-content: center;
     font-size: 0.65rem !important;
     font-weight: 700;
     color: var(--text-secondary) !important; padding: 10px 0; 
     border: none !important; background: transparent !important;
-}}
-.stTabs [aria-selected="true"] {{
+}
+.stTabs [aria-selected="true"] {
     color: var(--primary) !important; 
     background-color: rgba(96, 165, 250, 0.12) !important; 
     border-radius: 14px;
-}}
+}
 .stTabs [aria-selected="true"]::after { display: none; }
 </style>
 """
@@ -603,19 +601,48 @@ def page_alta_persona(df_personas, centro, usuario):
                             st.rerun()
                     except Exception as e: st.error(f"❌ Error al guardar: {e}")
 
+# ======================================================
+# 📊 PESTAÑA: REPORTES VISUALES ACTIVOS (TIEMPO REAL)
+# ======================================================
 def page_reportes(df_asistencia, centro):
-    st.markdown("<h3 style='margin-bottom:15px;'>📊 Reportes</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='margin-bottom:15px;'>📊 Reportes Analíticos</h3>", unsafe_allow_html=True)
+    
     df_c = df_asistencia[df_asistencia["centro"] == centro].copy() if not df_asistencia.empty else pd.DataFrame()
     
     if df_c.empty:
-        st.info("Sin datos históricos de asistencia en este centro aún.")
+        st.markdown("<div class='alert-box alert-gray'>📊 Todavía no hay datos históricos suficientes en este centro para generar estadísticas.</div>", unsafe_allow_html=True)
         return
         
     df_c["presentes_i"] = df_c["presentes"].apply(lambda x: clean_int(x, 0))
-    st.markdown("#### Evolución de Asistencias")
-    st.line_chart(df_c.set_index("fecha")["presentes_i"], color="#60A5FA")
-    st.markdown(f"**Promedio de asistencia registrado:** {df_c['presentes_i'].mean():.1f} personas por día.")
+    df_c["fecha_dt"] = pd.to_datetime(df_c["fecha"])
+    df_c = df_c.sort_values("fecha_dt")
 
+    # 1. Grilla geométrica superior de métricas cruzadas
+    avg_asistencia = df_c["presentes_i"].mean()
+    record_concurrencia = df_c["presentes_i"].max()
+    record_row = df_c[df_c["presentes_i"] == record_concurrencia].iloc[0]
+    record_fecha = record_row["fecha"]
+
+    rc1, rc2 = st.columns(2)
+    rc1.markdown(f"<div class='kpi'><h3>Promedio de Asistencia</h3><div class='v'>{avg_asistencia:.1f}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>participantes / día</span></div>", unsafe_allow_html=True)
+    rc2.markdown(f"<div class='kpi'><h3>Récord Histórico</h3><div class='v'>{record_concurrencia}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>Registrado el {record_fecha}</span></div>", unsafe_allow_html=True)
+    
+    st.markdown("<br><hr style='opacity:0.1;'><br>", unsafe_allow_html=True)
+
+    # 2. Gráfico de Evolución Temporal Sutil
+    st.markdown("#### 📈 Evolución Temporal Concurrencia")
+    df_linea = df_c.groupby("fecha")["presentes_i"].sum().reset_index()
+    st.line_chart(df_linea.set_index("fecha")["presentes_i"], color="#60A5FA")
+
+    # 3. Gráfico de Distribución por Espacio (Únicamente si tiene datos variados como Maranatha)
+    if centro == C_MARANATHA:
+        st.markdown("<br>#### 📊 Concurrencia Promedio por Taller / Espacio", unsafe_allow_html=True)
+        df_espacio = df_c.groupby("espacio")["presentes_i"].mean().reset_index().sort_values("presentes_i", ascending=False)
+        st.bar_chart(df_espacio.set_index("espacio")["presentes_i"], color="#A78BFA")
+
+# ======================================================
+# 🌍 CONSOLE GLOBAL ADMIN
+# ======================================================
 def page_global(df_asistencia, df_personas, df_ap):
     st.markdown("<h3 style='margin-bottom:15px;'>🌍 Consola Central</h3>", unsafe_allow_html=True)
     st.caption("Métricas consolidadas institucionales del Hogar de Cristo.")
