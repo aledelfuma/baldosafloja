@@ -75,17 +75,17 @@ div.user-info { font-size: 1.1rem; font-weight: 700; line-height: 1.2; }
 div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary) !important; margin-top: 2px; }
 
 /* BOTONES PREMIUM */
-.stButton>button {
-    background-color: var(--primary);
+.stButton>button, .stDownloadButton>button {
+    background-color: var(--primary) !important;
     color: #000000 !important;
-    border-radius: var(--radius-sm);
-    border: none;
-    font-weight: 800;
-    padding: 0.7rem 1rem;
-    transition: 0.2s;
-    width: 100%;
+    border-radius: var(--radius-sm) !important;
+    border: none !important;
+    font-weight: 800 !important;
+    padding: 0.7rem 1rem !important;
+    transition: 0.2s !important;
+    width: 100% !important;
 }
-.stButton>button:active { transform: scale(0.98); } 
+.stButton>button:active, .stDownloadButton>button:active { transform: scale(0.98); } 
 
 /* Botón de salida sutil */
 div.logout-wrapper > div > button {
@@ -382,20 +382,38 @@ def show_top_header(nombre, centro):
         st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("<div style='margin-bottom:15px;'></div>", unsafe_allow_html=True)
 
+# ✅ VANGUARDIA: SISTEMA DE ALERTA PREDICTIVA DE PÉRDIDA DE CONTACTO EN TIEMPO REAL
 def show_top_alerts(df_latest, df_personas, df_ap, centro):
     if centro == "Administración":
         return
+        
+    df_c = filter_personas_centro(df_personas, centro)
+    df_c_act = df_c[df_c["activo"].astype(str).str.upper() == "SI"] if not df_c.empty else pd.DataFrame()
+    
     cumples = []
-    if not df_personas.empty:
-        df_c = filter_personas_centro(df_personas, centro)
-        df_c_act = df_c[df_c["activo"].astype(str).str.upper() == "SI"]
-        today = get_today_ar()
+    alertas_inasistencia = []
+    today = get_today_ar()
+    
+    if not df_c_act.empty:
+        # 1. Chequeo de Cumpleaños del día
         for _, row in df_c_act.iterrows():
             try:
                 fn = pd.to_datetime(str(row.get("fecha_nacimiento")), errors="coerce")
                 if not pd.isna(fn) and fn.month == today.month and fn.day == today.day:
                     cumples.append(row["nombre"])
             except: pass
+            
+        # 2. Algoritmo Predictivo: Alerta si falta a los últimos 4 registros de actividad
+        if not df_ap.empty:
+            df_ap_c = df_ap[(df_ap["centro"] == centro) & (df_ap["estado"] == "Ausente")].copy()
+            if not df_ap_c.empty:
+                df_ap_c["fecha_dt"] = pd.to_datetime(df_ap_c["fecha"])
+                ultimas_fechas = sorted(df_ap["fecha"].unique(), reverse=True)[:4]
+                if len(ultimas_fechas) >= 3:
+                    for p_nom in df_c_act["nombre"].unique():
+                        asist_p = df_ap[(df_ap["nombre"] == p_nom) & (df_ap["fecha"].isin(ultimas_fechas))]
+                        if len(asist_p) >= 3 and (asist_p["estado"] == "Ausente").all():
+                            alertas_inasistencia.append(p_nom)
 
     st.markdown("<h4 style='font-size:1rem; margin-bottom:10px;'>Novedades del Centro</h4>", unsafe_allow_html=True)
     today_a = get_today_asistencia_summary(df_latest)
@@ -410,7 +428,11 @@ def show_top_alerts(df_latest, df_personas, df_ap, centro):
             with st.expander(f"Cumpleaños ({len(cumples)})", expanded=True):
                 for c in cumples: st.write(f"- {c}")
         else: st.markdown("<div class='alert-box alert-gray'>Sin cumples</div>", unsafe_allow_html=True)
-    with ac3: st.markdown("<div class='alert-box alert-gray'>Sin Inasistencias</div>", unsafe_allow_html=True)
+    with ac3:
+        if alertas_inasistencia:
+            with st.expander(f"Alerta: Ausencias ({len(alertas_inasistencia)})", expanded=True):
+                for a in alertas_inasistencia: st.write(f"- {a}")
+        else: st.markdown("<div class='alert-box alert-gray'>Sin alertas críticas</div>", unsafe_allow_html=True)
 
 def kpi_row_full(df_asistencia, centro):
     hoy_date = get_today_ar()
@@ -467,12 +489,10 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     
     st.markdown("#### Marcar Asistencia")
     
-    # ✅ INGENIERÍA: Filtro dinámico progresivo. Removemos de las opciones a los que ya están seleccionados
+    # Filtro dinámico progresivo
     if "presentes_actuales" not in st.session_state:
         st.session_state["presentes_actuales"] = []
         
-    opciones_disponibles = [n for n in nombres if n not in st.session_state["presentes_actuales"]]
-    
     presentes = st.multiselect("Buscador de personas", options=nombres, placeholder="Seleccionar asistentes...")
     st.session_state["presentes_actuales"] = presentes
     total_presentes = len(presentes)
@@ -536,7 +556,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     st.error(f"Error inesperado: {e}")
 
 # ======================================================
-# PESTAÑA: BUSCADOR DE LEGAJOS Y BITÁCORA
+# PESTAÑA: BUSCADOR DE LEGAJOS, HITOS Y BITÁCORA
 # ======================================================
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>Buscador de Legajos</h3>", unsafe_allow_html=True)
@@ -547,18 +567,12 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
         centro_seleccionado = centro
 
     df_centro = filter_personas_centro(df_personas, centro_seleccionado)
-    
-    # ✅ INGENIERÍA: Buscador Inteligente hibrido por Nombre o DNI
-    lista_buscador = []
-    if not df_centro.empty:
-        for _, r in df_centro.iterrows():
-            dni_label = f" - DNI: {r['dni']}" if (r['dni'] and str(r['dni']).lower() != 'none') else " - S/D"
-            lista_buscador.append(f"{r['nombre']}{dni_label}")
-    lista_buscador = sorted(lista_buscador)
+    nombres = sorted(df_centro["nombre"].unique().tolist()) if not df_centro.empty else []
 
-    seleccion_raw = st.selectbox("Escribi el nombre o DNI para ver la ficha:", [""] + lista_buscador)
+    # ✅ CORREGIDO: Buscador por orden alfabético estricto sin DNI concatenado
+    seleccion = st.selectbox("Escribi el nombre para ver la ficha:", [""] + nombres)
     
-    if not seleccion_raw:
+    if not seleccion:
         st.markdown("<div class='alert-box alert-gray'>Busca a alguien arriba para ver su carnet.</div>", unsafe_allow_html=True)
         if not df_centro.empty:
             st.markdown("#### Padrón Oficial del Centro")
@@ -568,10 +582,13 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                 df_mostrar_padrón = df_mostrar_padrón[df_mostrar_padrón["activo"].astype(str).str.upper() == "SI"]
                 
             st.dataframe(df_mostrar_padrón[["nombre", "dni", "telefono", "activo"]].sort_values("nombre"), use_container_width=True, hide_index=True)
+            
+            # ✅ INTERACTIVO: EXPORTACIÓN EN UN CLICK PARA LOS COORDINADORES
+            st.markdown("<br>", unsafe_allow_html=True)
+            csv_padron = df_mostrar_padrón[["nombre", "dni", "telefono", "domicilio", "activo"]].sort_values("nombre").to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Exportar Padrón de este Centro a Excel/CSV", data=csv_padron, file_name=f"padron_{centro_seleccionado}.csv", mime="text/csv")
         return
 
-    # Extraemos el nombre limpio quitando la etiqueta del DNI
-    seleccion = seleccion_raw.split(" - DNI:")[0].split(" - S/D")[0].strip()
     datos_persona = df_centro[df_centro["nombre"] == seleccion].iloc[0]
     
     tags_str = str(datos_persona.get("etiquetas", ""))
@@ -626,7 +643,14 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
 </div>
 """, unsafe_allow_html=True)
 
-    st.markdown("### Registrar Intervención / Nota del Día")
+    # ✅ INTERACTIVO FUTURO: SEGUIMIENTO ESTRUCTURADO POR HITOS ALCANZADOS
+    st.markdown("### Hitos de Inclusión Avanzados")
+    st.checkbox("Documento Nacional de Identidad (DNI) Regularizado", value=("DNI" in tags_str or "DNI" in str(datos_persona.get('notas',''))))
+    st.checkbox("Control Clínico de Salud Anual Completo")
+    st.checkbox("Reinserción o Continuidad en Sistema Educativo Oficial")
+    st.checkbox("Acompañamiento en Tratamiento / Consumo Problemático")
+
+    st.markdown("<br>### Registrar Intervención / Nota del Día", unsafe_allow_html=True)
     with st.form("form_bitacora_seguimiento", clear_on_submit=True):
         f_nota = st.date_input("Fecha de lo ocurrido", value=get_today_ar())
         cat_nota = st.selectbox("Categoría de Seguimiento", CATEGORIAS_SEGUIMIENTO)
@@ -784,7 +808,6 @@ def page_global(df_asistencia, df_personas, df_ap):
     
     st.markdown("<br>#### Semáforo de Actividad de Hoy", unsafe_allow_html=True)
     
-    # ✅ INGENIERÍA: Semáforo dinámico automático por CSS para auditar el estado de carga diario
     hoy_str = get_today_ar().isoformat()
     sc1, sc2, sc3 = st.columns(3)
     
@@ -810,6 +833,11 @@ def page_global(df_asistencia, df_personas, df_ap):
             columns={"fecha": "Fecha", "centro": "Centro Barrial", "espacio": "Espacio", "presentes": "Asistentes", "coordinador": "Responsable", "modo": "Estado del Día"}
         )
         st.dataframe(df_audit_clean, use_container_width=True, hide_index=True)
+        
+        # ✅ EXPORTACIÓN INSTITUCIONAL COMPLETA PARA EL SUPER ADMIN
+        st.markdown("<br>", unsafe_allow_html=True)
+        csv_historico = df_audit_clean.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Descargar Base de Datos Histórica Completa (Auditoría)", data=csv_historico, file_name="historico_asistencias_federacion.csv", mime="text/csv")
     else:
         st.markdown("<div class='alert-box alert-gray'>No se registran planillas en la base de datos de asistencia.</div>", unsafe_allow_html=True)
 
