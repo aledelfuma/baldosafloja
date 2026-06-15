@@ -48,11 +48,11 @@ footer {visibility: hidden;}
 }
 
 .block-container {
-    padding-top: 1rem !important; 
+    padding-top: 2rem !important; 
     padding-left: 0.8rem !important;
     padding-right: 0.8rem !important;
     padding-bottom: 160px !important; 
-    max-width: 650px !important; 
+    max-width: 500px !important; /* Ajustado para centrar y dar aire al login */
     margin: 0 auto;
     overflow-x: hidden;
 }
@@ -74,6 +74,7 @@ footer {visibility: hidden;}
 div.user-info { font-size: 1.2rem; font-weight: 700; line-height: 1.2; }
 div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary) !important; margin-top: 2px; }
 
+/* BOTÓN PREMIUM RADIAL */
 .stButton>button {
     background-color: var(--primary);
     color: #000000 !important;
@@ -86,18 +87,20 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
 }
 .stButton>button:active { transform: scale(0.98); } 
 
+/* CONTROLES DE FORMULARIO LIMPIOS */
 .stTextInput>div>div>input, .stSelectbox>div>div>div, .stDateInput>div>div>input, .stTextArea>div>div>textarea, .stMultiSelect>div>div>div {
     border-radius: var(--radius-sm) !important;
-    border: 1px solid rgba(255,255,255,0.1) !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
     background-color: #1A1A1A !important;
     color: var(--text-primary) !important;
     padding: 0.6rem;
 }
 
-.streamlit-expanderHeader {
-    color: var(--text-primary) !important;
-    background-color: var(--surface);
-    border-radius: var(--radius-sm);
+/* QUITAR BORDES EXTRAS DE FORMULARIOS */
+[data-testid="stForm"] {
+    border: none !important;
+    padding: 0 !important;
+    background: transparent !important;
 }
 
 .kpi {
@@ -185,15 +188,6 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     border-top: 1px solid rgba(255,255,255,0.02);
     border-right: 1px solid rgba(255,255,255,0.02);
     border-bottom: 1px solid rgba(255,255,255,0.02);
-}
-
-/* ESTILOS DE AUTOSUGERENCIA NATIVA PARA GUARDADO DE CONTRASEÑA */
-.login-box {
-    background-color: var(--surface);
-    padding: 30px 25px;
-    border-radius: var(--radius-lg);
-    border: 1px solid rgba(255,255,255,0.05);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
 }
 </style>
 """
@@ -306,99 +300,56 @@ def filter_personas_centro(df_personas, centro):
 # 🖥️ VISTAS E INTERFAZ DE USUARIO (UI)
 # ======================================================
 def show_login_screen():
-    col1, col2, col3 = st.columns([1, 4, 1])
-    with col2:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        try: st.image("logo_hogar.png", width=180)
-        except: pass
+    st.markdown("<br>", unsafe_allow_html=True)
+    try: st.image("logo_hogar.png", width=160)
+    except: pass
+    
+    st.markdown("### 👋 Bienvenido")
+    st.markdown("<p style='color:var(--text-secondary); font-size:0.9rem; margin-top:-10px; margin-bottom:25px;'>Ingresá tus credenciales para gestionar el centro.</p>", unsafe_allow_html=True)
+    
+    # 🔒 FORMULARIO CON ESTRUCTURA GEOMÉTRICA PURA (GRGRID)
+    with st.form("login_form_oficial"):
+        u = st.text_input("Usuario", placeholder="Ej: guillermina").strip()
+        p = st.text_input("Contraseña", type="password", placeholder="••••••••").strip()
         
-        st.markdown("### 👋 Bienvenido")
-        st.markdown("<p style='color:var(--text-secondary); font-size:0.9rem; margin-top:-10px; margin-bottom:20px;'>Ingresá tus credenciales para gestionar el centro.</p>", unsafe_allow_html=True)
-        
-        # 🔒 CONTENEDOR CON INGENIERÍA PARA GUARDAR CONTRASEÑAS NATIVAMENTE
-        with st.container():
-            st.markdown("<div class='login-box'>", unsafe_allow_html=True)
-            
-            # Variables de control en session state para el botón de revelar clave
-            if "ver_password" not in st.session_state:
-                st.session_state["ver_password"] = False
-                
-            u = st.text_input("Usuario", key="login_username", placeholder="Ej: guillermina")
-            
-            # Botón de ojo minimalista para ver/ocultar clave
-            tipo_input = "default" if st.session_state["ver_password"] else "password"
-            p = st.text_input("Contraseña", type=tipo_input, key="login_password", placeholder="••••••••")
-            
-            col_check, col_btn = st.columns([1, 1])
-            with col_check:
-                if st.checkbox("👁️ Mostrar clave", value=st.session_state["ver_password"]):
-                    if not st.session_state["ver_password"]:
-                        st.session_state["ver_password"] = True
-                        st.rerun()
-                else:
-                    if st.session_state["ver_password"]:
-                        st.session_state["ver_password"] = False
-                        st.rerun()
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🚀 Ingresar al Sistema", type="primary", use_container_width=True):
-                if not u.strip() or not p.strip():
-                    st.error("⚠️ Completá ambos campos.")
-                else:
-                    with st.spinner("Autenticando..."):
-                        try:
-                            query = supabase.table("usuarios").select("*").execute()
-                            if query.data:
-                                user_data = None
-                                for row in query.data:
-                                    db_user = row.get("usuarios") or row.get("usuario")
-                                    if db_user and str(db_user).strip().lower() == u.strip().lower():
-                                        user_data = row
-                                        break
-                                
-                                if user_data:
-                                    if str(user_data["password_text"]) == p.strip():
-                                        st.session_state.update({
-                                            "logged_in": True, 
-                                            "usuario": u.strip(), 
-                                            "centro_asignado": user_data["centro"].strip(), 
-                                            "nombre_visible": user_data["nombre_visible"]
-                                        })
-                                        st.balloons()
-                                        st.rerun()
-                                    else: st.error("🔒 Contraseña incorrecta.")
-                                else: st.error("🔍 El usuario ingresado no existe.")
-                            else: st.error("🔍 Error crítico: No hay usuarios registrados.")
-                        except Exception as e: st.error(f"❌ Error de conexión: {e}")
-            st.markdown("</div>", unsafe_allow_html=True)
-        
-        # 💉 INYECCIÓN JAVASCRIPT: Le clava los atributos semánticos HTML para que Chrome/Safari guarden las claves
-        st.components.v1.html("""
-        <script>
-            setTimeout(function() {
-                var inputs = window.parent.document.querySelectorAll('input');
-                inputs.forEach(function(input) {
-                    if(input.placeholder.includes('guillermina')) {
-                        input.setAttribute('autocomplete', 'username');
-                        input.setAttribute('name', 'username');
-                    }
-                    if(input.placeholder.includes('••••')) {
-                        input.setAttribute('autocomplete', 'current-password');
-                        input.setAttribute('name', 'password');
-                    }
-                });
-            }, 1000);
-        </script>
-        """, height=0)
-        
-        st.markdown("""
-        <div style='text-align: center; margin-top: 40px; font-size: 0.85rem; color: #555;'>
-            Federación de Hogares de Cristo <br>
-            <a href='mailto:alejandrodelfuma@gmail.com' style='color: #60A5FA; text-decoration: none; font-weight: 600;'>
-                ✉️ Soporte Técnico Técnico
-            </a>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.form_submit_button("🚀 Ingresar al Sistema", use_container_width=True):
+            if not u or not p:
+                st.error("⚠️ Completá ambos campos.")
+            else:
+                with st.spinner("Autenticando..."):
+                    try:
+                        query = supabase.table("usuarios").select("*").execute()
+                        if query.data:
+                            user_data = None
+                            for row in query.data:
+                                db_user = row.get("usuarios") or row.get("usuario")
+                                if db_user and str(db_user).strip().lower() == u.lower():
+                                    user_data = row
+                                    break
+                            
+                            if user_data:
+                                if str(user_data["password_text"]) == p:
+                                    st.session_state.update({
+                                        "logged_in": True, 
+                                        "usuario": u, 
+                                        "centro_asignado": user_data["centro"].strip(), 
+                                        "nombre_visible": user_data["nombre_visible"]
+                                    })
+                                    st.rerun()
+                                else: st.error("🔒 Contraseña incorrecta.")
+                            else: st.error("🔍 El usuario ingresado no existe.")
+                        else: st.error("🔍 Error crítico: No hay usuarios registrados.")
+                    except Exception as e: st.error(f"❌ Error de conexión: {e}")
+                    
+    st.markdown("""
+    <div style='text-align: center; margin-top: 60px; font-size: 0.85rem; color: #444;'>
+        Federación de Hogares de Cristo <br>
+        <a href='mailto:alejandrodelfuma@gmail.com' style='color: #60A5FA; text-decoration: none; font-weight: 600;'>
+            ✉️ Soporte Técnico
+        </a>
+    </div>
+    """, unsafe_allow_html=True)
     st.stop()
 
 def show_top_header(nombre, centro):
@@ -600,7 +551,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
 <img src="{avatar_url}" style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.8);"/>
 <div class="id-name" style="margin-bottom:0;">{seleccion}</div>
 </div>
-<div class="id-data-row">
+<div class="id-card-row">
 <div class="id-data-col"><span class="id-label">Documento</span><span class="id-value">{dni_val}</span></div>
 <div class="id-data-col"><span class="id-label">Nacimiento</span><span class="id-value">{nacimiento_mostrar}</span></div>
 </div>
