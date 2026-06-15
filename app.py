@@ -126,8 +126,8 @@ div.logout-wrapper > div > button {
 
 /* MINI CONTROLADOR DE TALLERES (ESTILO SEMÁFORO GEOMÉTRICO) */
 .workshop-status-container {
-    background: var(--surface);
-    border-radius: var(--radius-lg);
+    background: #1E1E1E;
+    border-radius: 18px;
     padding: 15px;
     border: 1px solid rgba(255,255,255,0.05);
     margin-bottom: 20px;
@@ -337,7 +337,7 @@ def show_top_header(nombre, centro):
             st.rerun()
 
 # ======================================================
-# PANEL CONTROLADOR: TALLERES PENDIENTES DE HOY
+# PANEL CONTROLADOR CORREGIDO (EVITA TEXTO CRUDO HTML)
 # ======================================================
 def show_workshop_monitor(df_asistencia, centro_seleccionado):
     if centro_seleccionado == "Administración":
@@ -348,27 +348,18 @@ def show_workshop_monitor(df_asistencia, centro_seleccionado):
     hoy_str = get_today_ar().isoformat()
     talleres_definidos = MAPEO_ESPACIOS.get(centro_seleccionado, ["General"])
     
-    # Filtrar cargas reales ingresadas hoy para este centro
     df_hoy = df_asistencia[(df_asistencia["centro"] == centro_seleccionado) & (df_asistencia["fecha"] == hoy_str)]
     talleres_cargados = df_hoy["espacio"].unique() if not df_hoy.empty else []
     
+    # ✅ SOLUCIÓN: Concatenación limpia pura para que Streamlit renderice el HTML sin confusiones
     html_monitor = "<div class='workshop-status-container'>"
     for t in talleres_definidos:
         if t in talleres_cargados:
-            html_monitor += f"""
-            <div class='workshop-row'>
-                <span class='workshop-name'>• {t}</span>
-                <span class='workshop-badge badge-done'>Cargado</span>
-            </div>
-            """
+            html_monitor += "<div class='workshop-row'><span class='workshop-name'>• " + str(t) + "</span><span class='workshop-badge badge-done'>Cargado</span></div>"
         else:
-            html_monitor += f"""
-            <div class='workshop-row'>
-                <span class='workshop-name'>• {t}</span>
-                <span class='workshop-badge badge-pending'>Falta Cargar</span>
-            </div>
-            """
+            html_monitor += "<div class='workshop-row'><span class='workshop-name'>• " + str(t) + "</span><span class='workshop-badge badge-pending'>Falta Cargar</span></div>"
     html_monitor += "</div>"
+    
     st.markdown(html_monitor, unsafe_allow_html=True)
 
 # ======================================================
@@ -382,7 +373,6 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     else:
         centro_seleccionado = centro
 
-    # Mostrar semáforo de talleres directo arriba del formulario para guiar a la coordinadora
     show_workshop_monitor(df_asistencia, centro_seleccionado)
 
     fecha = st.date_input("Fecha de trabajo", value=get_today_ar())
@@ -394,7 +384,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     with col_e: espacio = st.selectbox("Taller / Espacio a cargar", talleres_disponibles)
     with col_m: modo = st.selectbox("Estado del Espacio", ["Día habitual", "Actividad especial", "No abrió / Suspendido"])
     
-    notas = st.text_area("Notas / Observaciones del taller hoy", height=70, placeholder="Ej: Se trabajó herrería inicial con buena convocatoria.")
+    notas = st.text_area("Notas generales del día (Opcional)", height=70, placeholder="Ej: Se trabajó herrería inicial con buena convocatoria.")
 
     df_centro = filter_personas_centro(df_personas, centro_seleccionado)
     df_activos = df_centro[df_centro["activo"].astype(str).str.upper() == "SI"] if not df_centro.empty else pd.DataFrame()
@@ -405,14 +395,14 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     total_presentes = len(presentes)
     
     st.markdown("<br>", unsafe_allow_html=True)
-    forzar_reemplazo = st.checkbox("Corregir datos: tildar acá si estás re-subiendo o editando este taller específico.", value=False)
+    forrar_reemplazo = st.checkbox("Corregir datos: tildar acá si estás re-subiendo o editando este taller específico.", value=False)
     
     if st.button("GUARDAR CARGA DEL TALLER", type="primary", use_container_width=True):
         if total_presentes <= 0 and modo == "Día habitual":
             st.error("Debes seleccionar asistentes o marcar el espacio como 'No abrió'.")
             return
             
-        with st.spinner("Guardando en la base de datos..."):
+        with st.spinner("Procesando en Supabase..."):
             try:
                 if forzar_reemplazo:
                     supabase.table("asistencia_diaria").delete().eq("fecha", fecha_str).eq("centro", centro_seleccionado).eq("espacio", espacio).execute()
@@ -556,7 +546,6 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                     st.rerun()
                 except Exception as e: st.error(f"Error: {e}")
 
-    # Historial
     df_chico = df_seg[df_seg["nombre_persona"] == seleccion].copy() if not df_seg.empty else pd.DataFrame()
     if not df_chico.empty:
         st.markdown("#### Historial Clínico / Institucional")
@@ -603,9 +592,6 @@ def page_alta_persona(df_personas, centro, usuario):
                     st.rerun()
                 except Exception as e: st.error(f"Error: {e}")
 
-# ======================================================
-# PESTAÑA: REPORTES POR TALLER
-# ======================================================
 def page_reportes(df_asistencia, centro):
     st.markdown("<h3 style='margin-bottom:15px;'>Estadísticas de Asistencia</h3>", unsafe_allow_html=True)
     
@@ -623,7 +609,7 @@ def page_reportes(df_asistencia, centro):
     st.bar_chart(df_taller.set_index("espacio")["presentes_i"], color="#60A5FA")
 
 # ======================================================
-# CONSOLE GLOBAL ADMIN (AUDITORÍA COMPLETA MULTI-TALLER)
+# CONSOLE GLOBAL ADMIN
 # ======================================================
 def page_global(df_asistencia, df_personas):
     st.markdown("<h3 style='margin-bottom:15px;'>Consola Central Federación</h3>", unsafe_allow_html=True)
