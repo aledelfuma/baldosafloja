@@ -388,7 +388,7 @@ def kpi_row_full(df_asistencia, centro):
     col3.markdown(f"<div class='kpi'><h3>Mes actual</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
 
 # ======================================================
-# 📝 PESTAÑA: CARGA DIARIA (INTERCEPCIÓN DE CLAVES DUPLICADAS)
+# 📝 PESTAÑA: CARGA DIARIA (CON SOBREESCRITURA INTEGRADA)
 # ======================================================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>📝 Carga Diaria</h3>", unsafe_allow_html=True)
@@ -412,14 +412,22 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     presentes = st.multiselect("Buscador de personas", options=nombres, placeholder="Seleccionar asistentes...")
     total_presentes = len(presentes)
     
+    # Checkbox para forzar sobreescritura (solo aparece visualmente si hay conflicto previo)
     st.markdown("<br>", unsafe_allow_html=True)
+    forzar_reemplazo = st.checkbox("⚠️ Corregir datos: tildar acá para reemplazar la planilla anterior de este espacio.", value=False)
+    
     if st.button("💾 GUARDAR ASISTENCIA (SUPABASE ⚡)", type="primary", use_container_width=True):
         if total_presentes <= 0 and modo != "Cerrado":
             st.error("⛔ Debes marcar asistentes o indicar 'Cerrado'.")
             return
             
-        with st.spinner("Guardando en Supabase..."):
+        with st.spinner("Procesando en Supabase..."):
             try:
+                # 🔄 Si el usuario tildó reemplazar, limpiamos primero el duplicado de manera segura
+                if forzar_reemplazo:
+                    supabase.table("asistencia_diaria").delete().eq("fecha", fecha_str).eq("centro", centro).eq("espacio", espacio).execute()
+                    supabase.table("asistencia_personas").delete().eq("fecha", fecha_str).eq("centro", centro).eq("espacio", espacio).execute()
+                
                 cabecera = {
                     "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro,
                     "espacio": espacio, "presentes": total_presentes, "coordinador": nombre_visible,
@@ -447,23 +455,22 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     supabase.table("asistencia_personas").insert(filas_personas).execute()
                 
                 st.balloons()
-                st.toast("✅ Asistencia Guardada Exitosamente")
+                st.toast("✅ Cambios guardados correctamente")
                 time.sleep(1.5)
                 st.cache_data.clear()
                 st.rerun()
                 
             except Exception as e:
-                # 🔍 INTERCEPTAMOS EL ERROR DE DUPLICADOS: Si contiene el código 23505 mostramos una alerta premium
                 err_str = str(e)
                 if "23505" in err_str or "already exists" in err_str.lower():
                     st.markdown(f"""
                     <div class='alert-box alert-warning'>
-                        ⚠️ <b>Planilla ya existente:</b> Ya se guardó una asistencia hoy para el espacio <b>'{espacio}'</b> en este centro.<br>
-                        No es necesario cargarla de nuevo. Si querés modificarla, podés hacerlo directo desde el Table Editor de Supabase.
+                        ⚠️ <b>Planilla existente:</b> Ya se cargó una asistencia para el espacio '{espacio}' en esta fecha.<br><br>
+                        💡 <b>¿Te equivocaste o querés corregirla?</b> Activá la casilla de arriba que dice <i>"Corregir datos"</i> y volvé a presionar el botón de guardar para sobreescribir la lista vieja de forma segura.
                     </div>
                     """, unsafe_allow_html=True)
                 else:
-                    st.error(f"❌ Error inesperado al guardar la asistencia: {e}")
+                    st.error(f"❌ Error inesperado: {e}")
 
 # ======================================================
 # 👥 PESTAÑA: BUSCADOR DE LEGAJOS
