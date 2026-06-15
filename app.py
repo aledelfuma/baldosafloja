@@ -145,6 +145,7 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     margin-top: 10px; transition: 0.3s; width: 100%;
 }
 
+/* MENÚ FLOTANTE ELEVADO */
 .stTabs [data-baseweb="tab-list"] {
     position: fixed; 
     bottom: 50px !important; 
@@ -174,6 +175,18 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     border-radius: 14px;
 }
 .stTabs [aria-selected="true"]::after { display: none; }
+
+/* ESTILO NOTAS SEGUIMIENTO */
+.note-card {
+    background-color: var(--surface);
+    border-left: 4px solid var(--secondary);
+    padding: 12px 15px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    margin-bottom: 12px;
+    border-top: 1px solid rgba(255,255,255,0.02);
+    border-right: 1px solid rgba(255,255,255,0.02);
+    border-bottom: 1px solid rgba(255,255,255,0.02);
+}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -234,12 +247,14 @@ def load_all_data_supabase():
         res_a = supabase.table("asistencia_diaria").select("*").execute()
         res_p = supabase.table("personas").select("*").execute()
         res_ap = supabase.table("asistencia_personas").select("*").execute()
+        # LECTURA REAL DE LA BITÁCORA COMUNITARIA
+        res_seg = supabase.table("bitacora_seguimiento").select("*").execute()
         
         df_a = pd.DataFrame(res_a.data) if res_a.data else pd.DataFrame(columns=["created_at", "fecha", "anio", "centro", "espacio", "presentes", "coordinador", "modo", "notas", "usuario", "accion"])
         df_p = pd.DataFrame(res_p.data) if res_p.data else pd.DataFrame(columns=["nombre", "centro", "domicilio", "notas", "activo", "dni", "fecha_nacimiento", "telefono", "contacto_emergencia", "etiquetas"])
         df_ap = pd.DataFrame(res_ap.data) if res_ap.data else pd.DataFrame(columns=["created_at", "fecha", "anio", "centro", "espacio", "nombre", "estado", "es_nuevo", "coordinador", "usuario"])
+        df_seg = pd.DataFrame(res_seg.data) if res_seg.data else pd.DataFrame(columns=["created_at", "fecha", "anio", "centro", "nombre_persona", "categoria", "observacion", "usuario_registro"])
         
-        df_seg = pd.DataFrame(columns=["created_at", "fecha", "anio", "centro", "nombre", "categoria", "observacion", "usuario"])
         return df_a, df_p, df_ap, df_seg
     except Exception as e:
         st.error(f"Error crítico al leer datos: {e}")
@@ -474,7 +489,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     st.error(f"❌ Error inesperado: {e}")
 
 # ======================================================
-# 👥 PESTAÑA: BUSCADOR DE LEGAJOS
+# 👥 PESTAÑA: BUSCADOR DE LEGAJOS Y BITÁCORA REAL
 # ======================================================
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>👥 Buscador de Legajos</h3>", unsafe_allow_html=True)
@@ -532,7 +547,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     st.markdown(html_carnet, unsafe_allow_html=True)
     
     st.markdown(f"""
-<div style="background:var(--surface); padding:15px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.05);">
+<div style="background:var(--surface); padding:15px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.05); margin-bottom:25px;">
     <div style="margin-bottom:10px;">
         <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">📱 Teléfono</div>
         <div style="font-size:1.1rem;">{telefono if (telefono and telefono.lower()!='none') else 'No registrado'}</div>
@@ -544,6 +559,60 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+    # 📝 NIVELES DE INTERVENCIÓN: FORMULARIO DE LA BITÁCORA COMUNITARIA
+    st.markdown("### 📝 Registrar Intervención / Nota del Día")
+    with st.form("form_bitacora_seguimiento", clear_on_submit=True):
+        f_nota = st.date_input("Fecha de lo ocurrido", value=get_today_ar())
+        cat_nota = st.selectbox("Categoría de Seguimiento", CATEGORIAS_SEGUIMIENTO)
+        obs_nota = st.text_area("¿Qué pasó hoy? (Historia, trámites, escucha...)", placeholder="Ej: Se lo acompañó a sacar el DNI en el registro civil o se charló con la familia...")
+        
+        if st.form_submit_button("💾 Guardar en Bitácora (Supabase ⚡)", use_container_width=True):
+            if not obs_nota.strip():
+                st.error("⚠️ La observación no puede quedar vacía.")
+            else:
+                with st.spinner("Asentando nota en la nube..."):
+                    try:
+                        f_nota_str = f_nota.isoformat()
+                        nueva_intervencion = {
+                            "fecha": f_nota_str,
+                            "anio": year_of(f_nota_str),
+                            "centro": centro,
+                            "nombre_persona": seleccion,
+                            "categoria": cat_nota,
+                            "observacion": obs_nota.strip(),
+                            "usuario_registro": usuario
+                        }
+                        supabase.table("bitacora_seguimiento").insert(nueva_intervencion).execute()
+                        st.toast(f"✅ Nota registrada para {seleccion}")
+                        time.sleep(1)
+                        st.cache_data.clear()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al registrar nota: {e}")
+
+    # ⏳ LÍNEA DE TIEMPO HISTÓRICA REAL
+    st.markdown("<br>### ⏳ Historial de Acompañamiento", unsafe_allow_html=True)
+    
+    # Filtramos las notas que corresponden estrictamente a este chico
+    df_chico = df_seg[df_seg["nombre_persona"] == seleccion].copy() if not df_seg.empty else pd.DataFrame()
+    
+    if df_chico.empty:
+        st.markdown("<div class='alert-box alert-gray'>⚪ Todavía no hay notas asentadas en la bitácora para este participante.</div>", unsafe_allow_html=True)
+    else:
+        df_chico = df_chico.sort_values("fecha", ascending=False)
+        for _, row in df_chico.iterrows():
+            st.markdown(f"""
+            <div class='note-card'>
+                <div style='display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-secondary); margin-bottom:5px;'>
+                    <span>📅 <b>{row['fecha']}</b> — 🏷️ <i>{row['categoria']}</i></span>
+                    <span>✍️ Por: {row['usuario_registro']}</span>
+                </div>
+                <div style='font-size:0.95rem; color:var(--text-primary); line-height:1.4;'>
+                    {row['observacion']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
 # ======================================================
 # ➕ PESTAÑA: ALTA DE PERSONA
@@ -601,9 +670,6 @@ def page_alta_persona(df_personas, centro, usuario):
                             st.rerun()
                     except Exception as e: st.error(f"❌ Error al guardar: {e}")
 
-# ======================================================
-# 📊 PESTAÑA: REPORTES VISUALES ACTIVOS (TIEMPO REAL)
-# ======================================================
 def page_reportes(df_asistencia, centro):
     st.markdown("<h3 style='margin-bottom:15px;'>📊 Reportes Analíticos</h3>", unsafe_allow_html=True)
     
@@ -617,7 +683,6 @@ def page_reportes(df_asistencia, centro):
     df_c["fecha_dt"] = pd.to_datetime(df_c["fecha"])
     df_c = df_c.sort_values("fecha_dt")
 
-    # 1. Grilla geométrica superior de métricas cruzadas
     avg_asistencia = df_c["presentes_i"].mean()
     record_concurrencia = df_c["presentes_i"].max()
     record_row = df_c[df_c["presentes_i"] == record_concurrencia].iloc[0]
@@ -629,20 +694,15 @@ def page_reportes(df_asistencia, centro):
     
     st.markdown("<br><hr style='opacity:0.1;'><br>", unsafe_allow_html=True)
 
-    # 2. Gráfico de Evolución Temporal Sutil
     st.markdown("#### 📈 Evolución Temporal Concurrencia")
     df_linea = df_c.groupby("fecha")["presentes_i"].sum().reset_index()
     st.line_chart(df_linea.set_index("fecha")["presentes_i"], color="#60A5FA")
 
-    # 3. Gráfico de Distribución por Espacio (Únicamente si tiene datos variados como Maranatha)
     if centro == C_MARANATHA:
         st.markdown("<br>#### 📊 Concurrencia Promedio por Taller / Espacio", unsafe_allow_html=True)
         df_espacio = df_c.groupby("espacio")["presentes_i"].mean().reset_index().sort_values("presentes_i", ascending=False)
         st.bar_chart(df_espacio.set_index("espacio")["presentes_i"], color="#A78BFA")
 
-# ======================================================
-# 🌍 CONSOLE GLOBAL ADMIN
-# ======================================================
 def page_global(df_asistencia, df_personas, df_ap):
     st.markdown("<h3 style='margin-bottom:15px;'>🌍 Consola Central</h3>", unsafe_allow_html=True)
     st.caption("Métricas consolidadas institucionales del Hogar de Cristo.")
