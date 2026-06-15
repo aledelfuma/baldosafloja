@@ -362,17 +362,32 @@ def show_top_alerts(df_latest, df_personas, df_ap, centro):
         else: st.markdown("<div class='alert-box alert-gray'>🎂 Sin cumples</div>", unsafe_allow_html=True)
     with ac3: st.markdown("<div class='alert-box alert-gray'>✔️ Sin Inasistencias</div>", unsafe_allow_html=True)
 
-def kpi_row_full(df_latest, centro):
+# 📊 ACTUALIZACIÓN DE KPIS EN TIEMPO REAL CON LA TABLA GENERAL DE SUPABASE
+def kpi_row_full(df_asistencia, centro):
     hoy_date = get_today_ar()
-    hoy = hoy_date.isoformat()
-    week_ago = (hoy_date - timedelta(days=6)).isoformat()
+    hoy_str = hoy_date.isoformat()
+    hace_7_dias_str = (hoy_date - timedelta(days=6)).isoformat()
+    inicio_mes_str = hoy_date.replace(day=1).isoformat()
     
     c1 = c2 = c3 = 0
-    if not df_latest.empty:
-        df_latest["presentes_i"] = df_latest["presentes"].apply(lambda x: clean_int(x, 0))
-        c1 = int(df_latest[(df_latest["centro"] == centro) & (df_latest["fecha"].astype(str) == hoy)]["presentes_i"].sum())
-        c2 = int(df_latest[(df_latest["centro"] == centro) & (df_latest["fecha"].astype(str) >= week_ago) & (df_latest["fecha"].astype(str) <= hoy)]["presentes_i"].sum())
-        c3 = int(df_latest[(df_latest["centro"] == centro) & (df_latest["fecha"].astype(str) >= hoy_date.replace(day=1).isoformat()) & (df_latest["fecha"].astype(str) <= hoy)]["presentes_i"].sum())
+    
+    if not df_asistencia.empty:
+        # Hacemos una copia limpia para no romper la estructura original
+        df_kpi = df_asistencia.copy()
+        df_kpi["presentes_i"] = df_kpi["presentes"].apply(lambda x: clean_int(x, 0))
+        df_kpi["fecha_str"] = df_kpi["fecha"].astype(str)
+        
+        # Filtramos estrictamente los registros correspondientes al centro del usuario
+        df_centro = df_kpi[df_kpi["centro"] == centro]
+        
+        # 1. Ingresos Hoy
+        c1 = int(df_centro[df_centro["fecha_str"] == hoy_str]["presentes_i"].sum())
+        
+        # 2. Últimos 7 días
+        c2 = int(df_centro[(df_centro["fecha_str"] >= hace_7_dias_str) & (df_centro["fecha_str"] <= hoy_str)]["presentes_i"].sum())
+        
+        # 3. Mes Actual
+        c3 = int(df_centro[(df_centro["fecha_str"] >= inicio_mes_str) & (df_centro["fecha_str"] <= hoy_str)]["presentes_i"].sum())
         
     col1, col2, col3 = st.columns(3)
     col1.markdown(f"<div class='kpi'><h3>Ingresos HOY</h3><div class='v'>{c1}</div></div>", unsafe_allow_html=True)
@@ -415,7 +430,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                 cabecera = {
                     "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro,
                     "espacio": espacio, "presentes": total_presentes, "coordinador": nombre_visible,
-                    "modo": modo, "notas": notas, "usuario": usuario, "accion": "append"
+                    "modo": modo, "notes": notas, "usuario": usuario, "accion": "append"
                 }
                 supabase.table("asistencia_diaria").insert(cabecera).execute()
                 
@@ -518,7 +533,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
 """, unsafe_allow_html=True)
 
 # ======================================================
-# ➕ PESTAÑA: ALTA DE PERSONA (CORREGIDO SYNTAXERROR)
+# ➕ PESTAÑA: ALTA DE PERSONA
 # ======================================================
 def page_alta_persona(df_personas, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>➕ Alta de Persona al Padrón</h3>", unsafe_allow_html=True)
@@ -554,7 +569,7 @@ def page_alta_persona(df_personas, centro, usuario):
                             if new_nac.strip():
                                 try: 
                                     fecha_nac_valida = pd.to_datetime(new_nac.strip()).date().isoformat()
-                                except: # <-- CORREGIDO DE CATCH A EXCEPT
+                                except:
                                     st.error("⛔ Formato de fecha incorrecto. Usar AAAA-MM-DD.")
                                     st.stop()
 
@@ -562,7 +577,7 @@ def page_alta_persona(df_personas, centro, usuario):
                                 "nombre": new_nom.strip(), "dni": new_dni.strip() if new_dni.strip() else None,
                                 "fecha_nacimiento": fecha_nac_valida, "telefono": new_tel.strip() if new_tel.strip() else None,
                                 "domicilio": new_dom.strip() if new_dom.strip() else None, "contacto_emergencia": new_em.strip() if new_em.strip() else None,
-                                "etiquetas": new_etq.strip() if new_etq.strip() else None, "notes": new_notas.strip() if new_notas.strip() else None, # Ajustado a tu schema nativo de tabla
+                                "etiquetas": new_etq.strip() if new_etq.strip() else None, "notes": new_notas.strip() if new_notas.strip() else None,
                                 "activo": "SI", "centro": centro, "usuario_alta": usuario
                             }
                             supabase.table("personas").insert(fila_nueva).execute()
@@ -632,7 +647,7 @@ def main():
     
     with tabs[0]: 
         show_top_alerts(latest_asistencia(df_asistencia), df_personas, df_ap, centro)
-        kpi_row_full(latest_asistencia(df_asistencia), centro)
+        kpi_row_full(df_asistencia, centro) # Ahora pasa la tabla entera para calcular dinámicamente
         st.markdown("<hr style='opacity:0.2;'>", unsafe_allow_html=True)
         page_registrar_asistencia(df_personas, df_asistencia, centro, nombre, u)
         
