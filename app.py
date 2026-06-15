@@ -52,7 +52,7 @@ footer {visibility: hidden;}
     padding-left: 0.8rem !important;
     padding-right: 0.8rem !important;
     padding-bottom: 160px !important; 
-    max-width: 500px !important; /* Ajustado para centrar y dar aire al login */
+    max-width: 500px !important;
     margin: 0 auto;
     overflow-x: hidden;
 }
@@ -61,6 +61,7 @@ footer {visibility: hidden;}
     color: var(--text-primary) !important;
 }
 
+/* BARRA SUPERIOR GEOMÉTRICA */
 .top-bar {
     background-color: var(--surface);
     padding: 15px 20px;
@@ -71,10 +72,10 @@ footer {visibility: hidden;}
     justify-content: space-between;
     align-items: center;
 }
-div.user-info { font-size: 1.2rem; font-weight: 700; line-height: 1.2; }
+div.user-info { font-size: 1.1rem; font-weight: 700; line-height: 1.2; }
 div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary) !important; margin-top: 2px; }
 
-/* BOTÓN PREMIUM RADIAL */
+/* BOTÓN PREMIUM RADIAL Y DE CIERRE */
 .stButton>button {
     background-color: var(--primary);
     color: #000000 !important;
@@ -87,7 +88,18 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
 }
 .stButton>button:active { transform: scale(0.98); } 
 
-/* CONTROLES DE FORMULARIO LIMPIOS */
+/* Botón de salida sutil */
+div.logout-wrapper > div > button {
+    background-color: rgba(239, 68, 68, 0.15) !important;
+    color: #FCA5A5 !important;
+    border: 1px solid rgba(239, 68, 68, 0.2) !important;
+    padding: 0.4rem 0.8rem !important;
+    font-size: 0.8rem !important;
+    font-weight: 700 !important;
+    border-radius: 10px !important;
+    width: auto !important;
+}
+
 .stTextInput>div>div>input, .stSelectbox>div>div>div, .stDateInput>div>div>input, .stTextArea>div>div>textarea, .stMultiSelect>div>div>div {
     border-radius: var(--radius-sm) !important;
     border: 1px solid rgba(255,255,255,0.08) !important;
@@ -96,23 +108,22 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     padding: 0.6rem;
 }
 
-/* QUITAR BORDES EXTRAS DE FORMULARIOS */
 [data-testid="stForm"] {
     border: none !important;
     padding: 0 !important;
     background: transparent !important;
 }
 
+/* KPIs CON ESTRUCTURA FIT COMPACTA */
 .kpi {
   border-radius: var(--radius-lg);
-  padding: 15px;
+  padding: 12px;
   background: var(--surface);
   border: 1px solid rgba(255,255,255,0.05);
   text-align: center;
-  height: 100%;
 }
-.kpi h3 { margin: 0; font-size: 0.65rem; color: var(--text-secondary) !important; text-transform: uppercase; letter-spacing: 0.5px; }
-.kpi .v { font-size: 2rem; font-weight: 800; color: var(--primary) !important; line-height: 1; margin-top: 5px; }
+.kpi h3 { margin: 0; font-size: 0.6rem; color: var(--text-secondary) !important; text-transform: uppercase; letter-spacing: 0.5px; }
+.kpi .v { font-size: 1.8rem; font-weight: 800; color: var(--primary) !important; line-height: 1; margin-top: 5px; }
 
 .alert-box { padding: 12px 15px; border-radius: var(--radius-sm); margin-bottom: 10px; font-size: 0.9rem; font-weight: 600; }
 .alert-danger { background-color: rgba(239, 68, 68, 0.15); color: #FCA5A5 !important; border: 1px solid rgba(239, 68, 68, 0.3); }
@@ -188,6 +199,13 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     border-top: 1px solid rgba(255,255,255,0.02);
     border-right: 1px solid rgba(255,255,255,0.02);
     border-bottom: 1px solid rgba(255,255,255,0.02);
+}
+
+.login-box {
+    background-color: var(--surface);
+    padding: 30px 25px;
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255,255,255,0.05);
 }
 </style>
 """
@@ -307,7 +325,6 @@ def show_login_screen():
     st.markdown("### 👋 Bienvenido")
     st.markdown("<p style='color:var(--text-secondary); font-size:0.9rem; margin-top:-10px; margin-bottom:25px;'>Ingresá tus credenciales para gestionar el centro.</p>", unsafe_allow_html=True)
     
-    # 🔒 FORMULARIO CON ESTRUCTURA GEOMÉTRICA PURA (GRGRID)
     with st.form("login_form_oficial"):
         u = st.text_input("Usuario", placeholder="Ej: guillermina").strip()
         p = st.text_input("Contraseña", type="password", placeholder="••••••••").strip()
@@ -352,20 +369,28 @@ def show_login_screen():
     """, unsafe_allow_html=True)
     st.stop()
 
+# ✅ MEJORA: BARRA SUPERIOR CON BOTÓN DE CERRAR SESIÓN INTEGRADO SUTILMENTE
 def show_top_header(nombre, centro):
-    st.markdown(f"""
-<div class='top-bar'>
-    <div style='display:flex; align-items:center; gap:15px;'>
-        <div style='background-color: var(--primary); width: 45px; height: 45px; border-radius: 50%; display:flex; align-items:center; justify-content:center; color:black; font-weight:bold; font-size:1.2rem;'>
-            {nombre[0].upper() if nombre else 'U'}
+    col_inf, col_out = st.columns([3, 1])
+    with col_inf:
+        st.markdown(f"""
+        <div style='display:flex; align-items:center; gap:12px; background-color: var(--surface); padding: 10px 15px; border-radius: var(--radius-lg); border: 1px solid rgba(255,255,255,0.05);'>
+            <div style='background-color: var(--primary); width: 38px; height: 35px; border-radius: 50%; display:flex; align-items:center; justify-content:center; color:black; font-weight:bold; font-size:1rem;'>
+                {nombre[0].upper() if nombre else 'U'}
+            </div>
+            <div>
+                <div class='user-info'>Hola, {nombre}</div>
+                <div class='center-info'>📍 {centro}</div>
+            </div>
         </div>
-        <div>
-            <div class='user-info'>Hola, {nombre}</div>
-            <div class='center-info'>📍 {centro}</div>
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+    with col_out:
+        st.markdown("<div class='logout-wrapper'>", unsafe_allow_html=True)
+        if st.button("🚪 Salir"):
+            st.session_state.clear()
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-bottom:15px;'></div>", unsafe_allow_html=True)
 
 def show_top_alerts(df_latest, df_personas, df_ap, centro):
     cumples = []
@@ -395,6 +420,7 @@ def show_top_alerts(df_latest, df_personas, df_ap, centro):
         else: st.markdown("<div class='alert-box alert-gray'>🎂 Sin cumples</div>", unsafe_allow_html=True)
     with ac3: st.markdown("<div class='alert-box alert-gray'>✔️ Sin Inasistencias</div>", unsafe_allow_html=True)
 
+# ✅ MEJORA ESTÉTICA: Columnas alineadas estrictas por CSS
 def kpi_row_full(df_asistencia, centro):
     hoy_date = get_today_ar()
     hoy_str = hoy_date.isoformat()
@@ -402,22 +428,20 @@ def kpi_row_full(df_asistencia, centro):
     inicio_mes_str = hoy_date.replace(day=1).isoformat()
     
     c1 = c2 = c3 = 0
-    
     if not df_asistencia.empty:
         df_kpi = df_asistencia.copy()
         df_kpi["presentes_i"] = df_kpi["presentes"].apply(lambda x: clean_int(x, 0))
         df_kpi["fecha_str"] = df_kpi["fecha"].astype(str)
-        
         df_centro = df_kpi[df_kpi["centro"] == centro]
         
         c1 = int(df_centro[df_centro["fecha_str"] == hoy_str]["presentes_i"].sum())
         c2 = int(df_centro[(df_centro["fecha_str"] >= hace_7_dias_str) & (df_centro["fecha_str"] <= hoy_str)]["presentes_i"].sum())
         c3 = int(df_centro[(df_centro["fecha_str"] >= inicio_mes_str) & (df_centro["fecha_str"] <= hoy_str)]["presentes_i"].sum())
         
-    col1, col2, col3 = st.columns(3)
-    col1.markdown(f"<div class='kpi'><h3>Ingresos HOY</h3><div class='v'>{c1}</div></div>", unsafe_allow_html=True)
-    col2.markdown(f"<div class='kpi'><h3>Últimos 7 días</h3><div class='v'>{c2}</div></div>", unsafe_allow_html=True)
-    col3.markdown(f"<div class='kpi'><h3>Mes actual</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
+    kc1, kc2, kc3 = st.columns(3)
+    kc1.markdown(f"<div class='kpi'><h3>Ingresos HOY</h3><div class='v'>{c1}</div></div>", unsafe_allow_html=True)
+    kc2.markdown(f"<div class='kpi'><h3>Últimos 7 días</h3><div class='v'>{c2}</div></div>", unsafe_allow_html=True)
+    kc3.markdown(f"<div class='kpi'><h3>Mes actual</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
 
 # ======================================================
 # 📝 PESTAÑA: CARGA DIARIA
@@ -517,7 +541,14 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
         st.markdown("<div class='alert-box alert-gray'>🔍 Buscá a alguien arriba para ver su carnet.</div>", unsafe_allow_html=True)
         if not df_centro.empty:
             st.markdown("#### 📋 Padrón Oficial del Centro")
-            st.dataframe(df_centro[["nombre", "dni", "telefono", "activo"]].sort_values("nombre"), use_container_width=True, hide_index=True)
+            
+            # ✅ MEJORA: Pequeño filtro de estado para limpiar el listado general
+            filtro_activo = st.radio("Filtrar padrón por estado:", ["Solo Activos", "Todos"], horizontal=True)
+            df_mostrar_padrón = df_centro.copy()
+            if filtro_activo == "Solo Activos":
+                df_mostrar_padrón = df_mostrar_padrón[df_mostrar_padrón["activo"].astype(str).str.upper() == "SI"]
+                
+            st.dataframe(df_mostrar_padrón[["nombre", "dni", "telefono", "activo"]].sort_values("nombre"), use_container_width=True, hide_index=True)
         return
 
     datos_persona = df_centro[df_centro["nombre"] == seleccion].iloc[0]
@@ -551,7 +582,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
 <img src="{avatar_url}" style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.8);"/>
 <div class="id-name" style="margin-bottom:0;">{seleccion}</div>
 </div>
-<div class="id-card-row">
+<div class="id-data-row">
 <div class="id-data-col"><span class="id-label">Documento</span><span class="id-value">{dni_val}</span></div>
 <div class="id-data-col"><span class="id-label">Nacimiento</span><span class="id-value">{nacimiento_mostrar}</span></div>
 </div>
@@ -726,7 +757,7 @@ def main():
         show_login_screen()
     
     u = st.session_state["usuario"]
-    centro = st.session_state["centro_asignado"]
+    centro = st.session_state["centro_assigned"] if "centro_assigned" in st.session_state else st.session_state["centro_asignado"]
     nombre = st.session_state["nombre_visible"]
     
     centro_clean = clean_string(centro)
