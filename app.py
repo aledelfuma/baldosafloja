@@ -101,16 +101,17 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     background: transparent !important;
 }
 
-/* KPIs GEOMÉTRICOS */
+/* KPIs GEOMÉTRICOS SIMÉTRICOS CRUCES */
 .kpi {
   border-radius: var(--radius-lg);
-  padding: 12px;
+  padding: 15px;
   background: var(--surface);
   border: 1px solid rgba(255,255,255,0.05);
   text-align: center;
+  height: 100%;
 }
-.kpi h3 { margin: 0; font-size: 0.6rem; color: var(--text-secondary) !important; text-transform: uppercase; letter-spacing: 0.5px; }
-.kpi .v { font-size: 1.8rem; font-weight: 800; color: var(--primary) !important; line-height: 1; margin-top: 5px; }
+.kpi h3 { margin: 0; font-size: 0.65rem; color: var(--text-secondary) !important; text-transform: uppercase; letter-spacing: 0.5px; }
+.kpi .v { font-size: 2rem; font-weight: 800; color: var(--primary) !important; line-height: 1; margin-top: 8px; }
 
 /* MINI CONTROLADOR DE TALLERES (ESTILO SEMÁFORO GEOMÉTRICO) */
 .workshop-status-container {
@@ -210,7 +211,6 @@ C_NUDO = "Nudo a Nudo"
 C_MARANATHA = "Casa Maranatha"
 CENTROS = [C_BELEN, C_NUDO, C_MARANATHA]
 
-# ✅ Solo Casa Maranatha se divide en talleres específicos. Los otros son "General"
 MAPEO_ESPACIOS = {
     C_MARANATHA: ["Taller de costura", "Apoyo escolar (Primaria)", "Apoyo escolar (Secundaria)", "Fines", "Espacio Joven", "La Ronda", "General"],
     C_BELEN: ["General"],
@@ -337,6 +337,93 @@ def show_workshop_monitor(df_asistencia, centro_seleccionado):
     
     st.markdown(html_monitor, unsafe_allow_html=True)
 
+def show_top_alerts(df_latest, df_personas, df_ap, centro):
+    if centro == "Administración":
+        return
+        
+    df_c = filter_personas_centro(df_personas, centro)
+    df_c_act = df_c[df_c["activo"].astype(str).str.upper() == "SI"] if not df_c.empty else pd.DataFrame()
+    
+    cumples = []
+    alertas_inasistencia = []
+    today = get_today_ar()
+    
+    if not df_c_act.empty:
+        for _, row in df_c_act.iterrows():
+            try:
+                fn = pd.to_datetime(str(row.get("fecha_nacimiento")), errors="coerce")
+                if not pd.isna(fn) and fn.month == today.month and fn.day == today.day:
+                    cumples.append(row["nombre"])
+            except: pass
+            
+        if not df_ap.empty:
+            df_ap_c = df_ap[(df_ap["centro"] == centro) & (df_ap["estado"] == "Ausente")].copy()
+            if not df_ap_c.empty:
+                df_ap_c["fecha_dt"] = pd.to_datetime(df_ap_c["fecha"])
+                ultimas_fechas = sorted(df_ap["fecha"].unique(), reverse=True)[:4]
+                if len(ultimas_fechas) >= 3:
+                    for p_nom in df_c_act["nombre"].unique():
+                        asist_p = df_ap[(df_ap["nombre"] == p_nom) & (df_ap["fecha"].isin(ultimas_fechas))]
+                        if len(asist_p) >= 3 and (asist_p["estado"] == "Ausente").all():
+                            alertas_inasistencia.append(p_nom)
+
+    st.markdown("<h4 style='font-size:1rem; margin-bottom:10px;'>Novedades del Centro</h4>", unsafe_allow_html=True)
+    today_a = get_today_asistencia_summary(df_latest)
+    c_a = today_a[today_a["centro"] == centro] if not today_a.empty else pd.DataFrame()
+
+    ac1, ac2, ac3 = st.columns(3)
+    with ac1:
+        if c_a.empty: st.markdown("<div class='alert-box alert-danger'>Faltan Asistencias</div>", unsafe_allow_html=True)
+        else: st.markdown("<div class='alert-box alert-success'>Asistencias al día</div>", unsafe_allow_html=True)
+    with ac2:
+        if cumples:
+            with st.expander(f"Cumpleaños ({len(cumples)})", expanded=True):
+                for c in cumples: st.write(f"- {c}")
+        else: st.markdown("<div class='alert-box alert-gray'>Sin cumples</div>", unsafe_allow_html=True)
+    with ac3:
+        if alertas_inasistencia:
+            with st.expander(f"Alerta: Ausencias ({len(alertas_inasistencia)})", expanded=True):
+                for a in alertas_inasistencia: st.write(f"- {a}")
+        else: st.markdown("<div class='alert-box alert-gray'>Sin alertas críticas</div>", unsafe_allow_html=True)
+
+# ✅ CONFIGURACIÓN MATEMÁTICA REAL Y FIJA (EVITA REPETICIÓN DE VALORES COPIADOS)
+def kpi_row_full(df_asistencia, centro):
+    hoy_date = get_today_ar()
+    hoy_str = hoy_date.isoformat()
+    
+    # Rango de fechas netas de la última semana
+    hace_7_dias_date = hoy_date - timedelta(days=6)
+    inicio_mes_date = hoy_date.replace(day=1)
+    
+    c1 = c2 = c3 = 0
+    if not df_asistencia.empty:
+        df_kpi = df_asistencia.copy()
+        df_kpi["presentes_i"] = df_kpi["presentes"].apply(lambda x: clean_int(x, 0))
+        df_kpi["fecha_dt"] = pd.to_datetime(df_kpi["fecha"]).dt.date
+        
+        if centro == "Administración":
+            df_centro = df_kpi
+        else:
+            df_centro = df_kpi[df_kpi["centro"] == centro]
+            
+        # 1. Concurrencia de hoy estricto (Suma total de talleres/espacios)
+        c1 = int(df_centro[df_centro["fecha_dt"] == hoy_date]["presentes_i"].sum())
+        
+        # 2. Promedio diario neto de los últimos 7 días de actividad
+        df_7d = df_centro[(df_centro["fecha_dt"] >= hace_7_dias_date) & (df_centro["fecha_dt"] <= hoy_date)]
+        if not df_7d.empty:
+            c2 = int(df_7d.groupby("fecha_dt")["presentes_i"].sum().mean())
+            
+        # 3. Suma total de ingresos en lo que va del mes calendario
+        df_mes = df_centro[(df_centro["fecha_dt"] >= inicio_mes_date) & (df_centro["fecha_dt"] <= hoy_date)]
+        if not df_mes.empty:
+            c3 = int(df_mes["presentes_i"].sum())
+        
+    kc1, kc2, kc3 = st.columns(3)
+    kc1.markdown(f"<div class='kpi'><h3>Ingresos Hoy</h3><div class='v'>{c1}</div></div>", unsafe_allow_html=True)
+    kc2.markdown(f"<div class='kpi'><h3>Promedio 7 Días</h3><div class='v'>{c2}</div></div>", unsafe_allow_html=True)
+    kc3.markdown(f"<div class='kpi'><h3>Total Mes</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
+
 # ======================================================
 # PESTAÑA: CARGA DIARIA POR TALLERES
 # ======================================================
@@ -370,7 +457,6 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     total_presentes = len(presentes)
     
     st.markdown("<br>", unsafe_allow_html=True)
-    # ✅ Corregido el nombre de la variable para evitar colisiones en Supabase
     forzar_reemplazo = st.checkbox("Corregir datos: tildar acá si estás re-subiendo o editando este taller específico.", value=False)
     
     if st.button("GUARDAR CARGA DEL TALLER", type="primary", use_container_width=True):
@@ -585,7 +671,7 @@ def page_reportes(df_asistencia, centro):
     st.bar_chart(df_taller.set_index("espacio")["presentes_i"], color="#60A5FA")
 
 # ======================================================
-# CONSOLE GLOBAL ADMIN
+# CONCONSOLE GLOBAL ADMIN
 # ======================================================
 def page_global(df_asistencia, df_personas):
     st.markdown("<h3 style='margin-bottom:15px;'>Consola Central Federación</h3>", unsafe_allow_html=True)
@@ -626,7 +712,12 @@ def main():
     
     tabs = st.tabs(list_tabs)
     
-    with tabs[0]: page_registrar_asistencia(df_personas, df_asistencia, centro, nombre, u)
+    with tabs[0]: 
+        show_top_alerts(latest_asistencia(df_asistencia), df_personas, df_ap, centro)
+        kpi_row_full(df_asistencia, centro)
+        st.markdown("<hr style='opacity:0.2;'>", unsafe_allow_html=True)
+        page_registrar_asistencia(df_personas, df_asistencia, centro, nombre, u)
+        
     with tabs[1]: page_personas_full(df_personas, df_ap, df_seg, centro, u)
     with tabs[2]: page_alta_persona(df_personas, centro, u)
     with tabs[3]: page_reportes(df_asistencia, centro)
