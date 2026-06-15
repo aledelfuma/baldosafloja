@@ -130,32 +130,71 @@ div.logout-wrapper > div > button {
 .alert-warning { background-color: rgba(245, 158, 11, 0.15); color: #FDE047 !important; border: 1px solid rgba(245, 158, 11, 0.3); }
 .alert-gray { background-color: var(--surface); color: var(--text-secondary) !important; border: 1px solid rgba(255,255,255,0.05); }
 
-.id-card {
-    background: linear-gradient(135deg, #004E7B 0%, #63296C 100%);
-    border-radius: 20px;
-    padding: 25px;
-    color: white !important;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-    border: 1px solid rgba(255,255,255,0.1);
+/* 🛠️ NUEVA FICHA DE LEGAJO MINIMALISTA Y GEOMÉTRICA (PURE ABSTRACTION) */
+.profile-card {
+    background-color: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    border: 1px solid rgba(255,255,255,0.06);
     margin-bottom: 20px;
-    position: relative;
-    overflow: hidden;
 }
-.id-card * { color: white !important; }
-.id-title { font-size: 0.70rem; letter-spacing: 1px; text-transform: uppercase; opacity: 0.8; margin-bottom: 5px;}
-.id-name { font-size: 1.6rem; font-weight: 800; margin-bottom: 15px; line-height: 1.1; }
-.id-data-row { display: flex; gap: 20px; margin-bottom: 15px; }
-.id-data-col { display: flex; flex-direction: column; }
-.id-label { font-size: 0.6rem; opacity: 0.7; text-transform: uppercase; }
-.id-value { font-size: 0.95rem; font-weight: 600; }
-.tag-container { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-.tag-badge { background-color: rgba(255,255,255,0.15); padding: 4px 10px; border-radius: 15px; font-size: 0.75rem; font-weight: 600; }
+.profile-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    padding-bottom: 12px;
+    margin-bottom: 15px;
+}
+.profile-institution {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--primary);
+    text-transform: uppercase;
+}
+.profile-status {
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.status-active { color: #86EFAC; }
+.status-inactive { color: #FCA5A5; }
 
-.btn-wa {
-    display: inline-flex; align-items: center; justify-content: center;
-    background-color: #25D366; color: white !important; padding: 10px 15px;
-    border-radius: var(--radius-sm); text-decoration: none; font-weight: bold; font-size: 0.9rem;
-    margin-top: 10px; transition: 0.3s; width: 100%;
+.profile-name {
+    font-size: 1.4rem;
+    font-weight: 800;
+    line-height: 1.1;
+    margin-top: 2px;
+    color: var(--text-primary);
+}
+.profile-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+.profile-meta-item {
+    display: flex;
+    flex-direction: column;
+}
+.profile-meta-label {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+}
+.profile-meta-value {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.profile-footer-data {
+    background-color: rgba(0, 0, 0, 0.15);
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid rgba(255,255,255,0.03);
 }
 
 /* MENÚ FLOTANTE ELEVADO */
@@ -382,7 +421,6 @@ def show_top_header(nombre, centro):
         st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("<div style='margin-bottom:15px;'></div>", unsafe_allow_html=True)
 
-# ✅ VANGUARDIA: SISTEMA DE ALERTA PREDICTIVA DE PÉRDIDA DE CONTACTO EN TIEMPO REAL
 def show_top_alerts(df_latest, df_personas, df_ap, centro):
     if centro == "Administración":
         return
@@ -395,7 +433,6 @@ def show_top_alerts(df_latest, df_personas, df_ap, centro):
     today = get_today_ar()
     
     if not df_c_act.empty:
-        # 1. Chequeo de Cumpleaños del día
         for _, row in df_c_act.iterrows():
             try:
                 fn = pd.to_datetime(str(row.get("fecha_nacimiento")), errors="coerce")
@@ -403,7 +440,6 @@ def show_top_alerts(df_latest, df_personas, df_ap, centro):
                     cumples.append(row["nombre"])
             except: pass
             
-        # 2. Algoritmo Predictivo: Alerta si falta a los últimos 4 registros de actividad
         if not df_ap.empty:
             df_ap_c = df_ap[(df_ap["centro"] == centro) & (df_ap["estado"] == "Ausente")].copy()
             if not df_ap_c.empty:
@@ -488,17 +524,11 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     nombres = sorted(list(set(df_activos["nombre"].astype(str).tolist()))) if not df_activos.empty else []
     
     st.markdown("#### Marcar Asistencia")
-    
-    # Filtro dinámico progresivo
-    if "presentes_actuales" not in st.session_state:
-        st.session_state["presentes_actuales"] = []
-        
     presentes = st.multiselect("Buscador de personas", options=nombres, placeholder="Seleccionar asistentes...")
-    st.session_state["presentes_actuales"] = presentes
     total_presentes = len(presentes)
     
     st.markdown("<br>", unsafe_allow_html=True)
-    forzar_reemplazo = st.checkbox("Corregir datos: tildar aca para reemplazar la planilla anterior.", value=False)
+    forrar_reemplazo = st.checkbox("Corregir datos: tildar aca para reemplazar la planilla anterior.", value=False)
     
     if st.button("GUARDAR ASISTENCIA (SUPABASE)", type="primary", use_container_width=True):
         if total_presentes <= 0 and modo != "Cerrado":
@@ -556,7 +586,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     st.error(f"Error inesperado: {e}")
 
 # ======================================================
-# PESTAÑA: BUSCADOR DE LEGAJOS, HITOS Y BITÁCORA
+# PESTAÑA: BUSCADOR DE LEGAJOS Y BITÁCORA
 # ======================================================
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>Buscador de Legajos</h3>", unsafe_allow_html=True)
@@ -569,7 +599,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     df_centro = filter_personas_centro(df_personas, centro_seleccionado)
     nombres = sorted(df_centro["nombre"].unique().tolist()) if not df_centro.empty else []
 
-    # ✅ CORREGIDO: Buscador por orden alfabético estricto sin DNI concatenado
+    # Buscador de orden alfabético estricto y limpio
     seleccion = st.selectbox("Escribi el nombre para ver la ficha:", [""] + nombres)
     
     if not seleccion:
@@ -583,7 +613,6 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                 
             st.dataframe(df_mostrar_padrón[["nombre", "dni", "telefono", "activo"]].sort_values("nombre"), use_container_width=True, hide_index=True)
             
-            # ✅ INTERACTIVO: EXPORTACIÓN EN UN CLICK PARA LOS COORDINADORES
             st.markdown("<br>", unsafe_allow_html=True)
             csv_padron = df_mostrar_padrón[["nombre", "dni", "telefono", "domicilio", "activo"]].sort_values("nombre").to_csv(index=False).encode('utf-8')
             st.download_button("📥 Exportar Padrón de este Centro a Excel/CSV", data=csv_padron, file_name=f"padron_{centro_seleccionado}.csv", mime="text/csv")
@@ -592,69 +621,69 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     datos_persona = df_centro[df_centro["nombre"] == seleccion].iloc[0]
     
     tags_str = str(datos_persona.get("etiquetas", ""))
-    tags_html = ""
-    if tags_str and tags_str.lower() != "none" and tags_str.lower() != "nan":
-        tags = [t.strip() for t in tags_str.split(",") if t.strip()]
-        for t in tags: tags_html += f"<span class='tag-badge'>{t}</span>"
-
     telefono = str(datos_persona.get("telefono", ""))
-    wa_btn_html = f"<div style='margin-top:5px;'><a href='https://wa.me/{format_wa_number(telefono)}' target='_blank' class='btn-wa'>Enviar WhatsApp</a></div>" if (telefono and telefono.lower() != "none") else ""
-    estado_badge = "ACTIVO" if str(datos_persona.get("activo")).upper() != "NO" else "INACTIVO"
+    wa_btn_html = f"<a href='https://wa.me/{format_wa_number(telefono)}' target='_blank' class='btn-wa'>Enviar WhatsApp</a>" if (telefono and telefono.lower() != "none") else ""
     
-    import urllib.parse
-    avatar_url = f"https://api.dicebear.com/7.x/initials/svg?seed={urllib.parse.quote(seleccion)}&backgroundColor=004e7b&textColor=ffffff"
-
+    is_active = str(datos_persona.get("activo")).upper() != "NO"
+    status_class = "status-active" if is_active else "status-inactive"
+    status_text = "• Activo" if is_active else "• Inactivo"
+    
     dni_val = str(datos_persona.get('dni', '')).strip()
     dni_val = "S/D" if (not dni_val or dni_val.lower() == 'none') else dni_val
     
     nac_val = str(datos_persona.get('fecha_nacimiento', '')).strip()
-    nacimiento_mostrar = "S/D" if (not nac_val or nac_val.lower() == 'none') else f"{nac_val} ({calculate_age(nac_val)} años)"
-
-    html_carnet = f"""
-<div class="id-card">
-<div style="display:flex; justify-content: space-between; align-items:flex-start; margin-bottom: 5px;">
-<div class="id-title">HOGAR DE CRISTO BAHIA BLANCA</div>
-<span style="font-weight:800; background: rgba(255,255,255,0.25); padding: 5px 12px; border-radius: 12px; font-size: 0.70rem; letter-spacing:1px;">{estado_badge}</span>
-</div>
-<div style="display:flex; gap: 15px; align-items: center; margin-bottom: 20px;">
-<img src="{avatar_url}" style="width: 60px; height: 60px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.8);"/>
-<div class="id-name" style="margin-bottom:0;">{seleccion}</div>
-</div>
-<div class="id-data-row">
-<div class="id-data-col"><span class="id-label">Documento</span><span class="id-value">{dni_val}</span></div>
-<div class="id-data-col"><span class="id-label">Nacimiento</span><span class="id-value">{nacimiento_mostrar}</span></div>
-</div>
-<div class="tag-container">{tags_html}</div>
-</div>
-"""
-    st.markdown(html_carnet, unsafe_allow_html=True)
+    nacimiento_mostrar = "S/D" if (not nac_val or nac_val.lower() == 'none') else f"{nac_val} ({calculate_age(nac_val)} anos)"
     
+    direccion_val = str(datos_persona.get('domicilio','')).strip()
+    direccion_mostrar = "No registrada" if (not direccion_val or direccion_val.lower() == 'none') else direccion_val
+
+    # 🛠️ CARNET REDISEÑADO: MÁXIMA SUTILEZA, GEOMETRÍA Y EFICIENCIA OPERATIVA
     st.markdown(f"""
-<div style="background:var(--surface); padding:15px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.05); margin-bottom:25px;">
-    <div style="margin-bottom:10px;">
-        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">Telefono</div>
-        <div style="font-size:1.1rem;">{telefono if (telefono and telefono.lower()!='none') else 'No registrado'}</div>
-        {wa_btn_html}
-    </div>
-    <div>
-        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">Direccion</div>
-        <div style="font-size:1.1rem;">{str(datos_persona.get('domicilio','')) if str(datos_persona.get('domicilio','')).lower()!='none' else 'No registrada'}</div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+    <div class="profile-card">
+        <div class="profile-header">
+            <div>
+                <span class="profile-institution">Hogar de Cristo Bahía Blanca</span>
+                <div class="profile-name">{seleccion}</div>
+            </div>
+            <span class="profile-status {status_class}">{status_text}</span>
+        </div>
+        <div class="profile-grid">
+            <div class="profile-meta-item">
+                <span class="profile-meta-label">Documento</span>
+                <span class="profile-meta-value">{dni_val}</span>
+            </div>
+            <div class="profile-meta-item">
+                <span class="profile-meta-label">Nacimiento / Edad</span>
+                <span class="profile-meta-value">{nacimiento_mostrar}</span>
+            </div>
+            <div class="profile-meta-item" style="grid-column: span 2;">
+                <span class="profile-meta-label">Direccion</span>
+                <span class="profile-meta-value">{direccion_mostrar}</span>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # Si existen datos del referente familiar relevados, los renderiza de forma prolija abajo
+    if tags_str and tags_str.lower() != "none" and tags_str.lower() != "nan":
+        st.markdown(f"""
+        <div class="profile-footer-data">
+            <span class="profile-meta-label" style="font-size:0.55rem; opacity:0.8;">Datos Familiares / Referencia</span>
+            <div style="font-size:0.85rem; font-weight:600; color:var(--text-primary); margin-top:2px;">{tags_str}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Botón de mensajería instantánea directo abajo
+    if wa_btn_html:
+        st.markdown(wa_btn_html, unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
-    # ✅ INTERACTIVO FUTURO: SEGUIMIENTO ESTRUCTURADO POR HITOS ALCANZADOS
-    st.markdown("### Hitos de Inclusión Avanzados")
-    st.checkbox("Documento Nacional de Identidad (DNI) Regularizado", value=("DNI" in tags_str or "DNI" in str(datos_persona.get('notas',''))))
-    st.checkbox("Control Clínico de Salud Anual Completo")
-    st.checkbox("Reinserción o Continuidad en Sistema Educativo Oficial")
-    st.checkbox("Acompañamiento en Tratamiento / Consumo Problemático")
-
-    st.markdown("<br>### Registrar Intervención / Nota del Día", unsafe_allow_html=True)
+    st.markdown("### Registrar Intervención / Nota del Día")
     with st.form("form_bitacora_seguimiento", clear_on_submit=True):
         f_nota = st.date_input("Fecha de lo ocurrido", value=get_today_ar())
         cat_nota = st.selectbox("Categoría de Seguimiento", CATEGORIAS_SEGUIMIENTO)
-        obs_nota = st.text_area("¿Qué pasó hoy?", placeholder="Ej: Se lo acompañó a sacar el DNI...")
+        obs_nota = st.text_area("¿Qué pasó hoy?", placeholder="Ej: Se charló con el referente familiar...")
         
         if st.form_submit_button("Guardar en Bitácora (Supabase)", use_container_width=True):
             if not obs_nota.strip():
@@ -797,7 +826,7 @@ def page_reportes(df_asistencia, centro):
 # ======================================================
 def page_global(df_asistencia, df_personas, df_ap):
     st.markdown("<h3 style='margin-bottom:15px;'>Consola Central Institucional</h3>", unsafe_allow_html=True)
-    st.caption("Panel de control unificado para auditoría de cargas y métricas generales de Hogar de Cristo Bahía Blanca.")
+    st.caption("Panel de control unificado para de cargas generales de Hogar de Cristo Bahía Blanca.")
     
     t_pers = len(df_personas["nombre"].unique()) if not df_personas.empty else 0
     t_asist = df_asistencia["presentes"].apply(lambda x: clean_int(x, 0)).sum() if not df_asistencia.empty else 0
@@ -834,7 +863,6 @@ def page_global(df_asistencia, df_personas, df_ap):
         )
         st.dataframe(df_audit_clean, use_container_width=True, hide_index=True)
         
-        # ✅ EXPORTACIÓN INSTITUCIONAL COMPLETA PARA EL SUPER ADMIN
         st.markdown("<br>", unsafe_allow_html=True)
         csv_historico = df_audit_clean.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Descargar Base de Datos Histórica Completa (Auditoría)", data=csv_historico, file_name="historico_asistencias_federacion.csv", mime="text/csv")
