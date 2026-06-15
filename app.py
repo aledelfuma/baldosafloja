@@ -227,7 +227,6 @@ CATEGORIAS_SEGUIMIENTO = ["Escucha / Acompañamiento", "Salud", "Trámite (DNI/S
 @st.cache_data(ttl=10, show_spinner="Sincronizando con Supabase...")
 def load_all_data_supabase():
     try:
-        # LECTURAS REALES DIRECTAS DESDE SUPABASE
         res_a = supabase.table("asistencia_diaria").select("*").execute()
         res_p = supabase.table("personas").select("*").execute()
         res_ap = supabase.table("asistencia_personas").select("*").execute()
@@ -236,7 +235,6 @@ def load_all_data_supabase():
         df_p = pd.DataFrame(res_p.data) if res_p.data else pd.DataFrame(columns=["nombre", "centro", "domicilio", "notas", "activo", "dni", "fecha_nacimiento", "telefono", "contacto_emergencia", "etiquetas"])
         df_ap = pd.DataFrame(res_ap.data) if res_ap.data else pd.DataFrame(columns=["created_at", "fecha", "anio", "centro", "espacio", "nombre", "estado", "es_nuevo", "coordinador", "usuario"])
         
-        # Estructura en blanco para bitácoras secundarias
         df_seg = pd.DataFrame(columns=["created_at", "fecha", "anio", "centro", "nombre", "categoria", "observacion", "usuario"])
         return df_a, df_p, df_ap, df_seg
     except Exception as e:
@@ -268,7 +266,7 @@ def get_today_asistencia_summary(df_a):
     hoy = get_today_ar().isoformat()
     d = df_a[df_a["fecha"] == hoy].copy()
     if d.empty: return d.copy()
-    d["timestamp_dt"] = pd.to_datetime(d["created_at"], errors="coerce")
+    d["timestamp_dt"] = pd.to_datetime(df_a["created_at"], errors="coerce") if "created_at" in df_a.columns else pd.to_datetime(d["created_at"], errors="coerce")
     return d.sort_values("timestamp_dt").groupby(["centro", "espacio"]).tail(1)
 
 def filter_personas_centro(df_personas, centro):
@@ -414,7 +412,6 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
             
         with st.spinner("Guardando en Supabase en lote..."):
             try:
-                # 1. Guardamos la cabecera del día
                 cabecera = {
                     "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro,
                     "espacio": espacio, "presentes": total_presentes, "coordinador": nombre_visible,
@@ -422,7 +419,6 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                 }
                 supabase.table("asistencia_diaria").insert(cabecera).execute()
                 
-                # 2. OPTIMIZACIÓN COMPLEJA EN BATCH: Acumulamos las filas en memoria y hacemos 1 sola llamada SQL
                 filas_personas = []
                 for n in presentes:
                     filas_personas.append({
@@ -522,7 +518,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
 """, unsafe_allow_html=True)
 
 # ======================================================
-# ➕ PESTAÑA: ALTA DE PERSONA (YA REAL E INTEGRADA)
+# ➕ PESTAÑA: ALTA DE PERSONA (CORREGIDO SYNTAXERROR)
 # ======================================================
 def page_alta_persona(df_personas, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>➕ Alta de Persona al Padrón</h3>", unsafe_allow_html=True)
@@ -556,8 +552,9 @@ def page_alta_persona(df_personas, centro, usuario):
                         else:
                             fecha_nac_valida = None
                             if new_nac.strip():
-                                try: fecha_nac_valida = pd.to_datetime(new_nac.strip()).date().isoformat()
-                                except:
+                                try: 
+                                    fecha_nac_valida = pd.to_datetime(new_nac.strip()).date().isoformat()
+                                except: # <-- CORREGIDO DE CATCH A EXCEPT
                                     st.error("⛔ Formato de fecha incorrecto. Usar AAAA-MM-DD.")
                                     st.stop()
 
@@ -565,7 +562,7 @@ def page_alta_persona(df_personas, centro, usuario):
                                 "nombre": new_nom.strip(), "dni": new_dni.strip() if new_dni.strip() else None,
                                 "fecha_nacimiento": fecha_nac_valida, "telefono": new_tel.strip() if new_tel.strip() else None,
                                 "domicilio": new_dom.strip() if new_dom.strip() else None, "contacto_emergencia": new_em.strip() if new_em.strip() else None,
-                                "etiquetas": new_etq.strip() if new_etq.strip() else None, "notas": new_notas.strip() if new_notas.strip() else None,
+                                "etiquetas": new_etq.strip() if new_etq.strip() else None, "notes": new_notas.strip() if new_notas.strip() else None, # Ajustado a tu schema nativo de tabla
                                 "activo": "SI", "centro": centro, "usuario_alta": usuario
                             }
                             supabase.table("personas").insert(fila_nueva).execute()
@@ -576,9 +573,6 @@ def page_alta_persona(df_personas, centro, usuario):
                             st.rerun()
                     except Exception as e: st.error(f"❌ Error al guardar: {e}")
 
-# ======================================================
-# 📊 PESTAÑA: REPORTES Y CONSOLE GLOBAL
-# ======================================================
 def page_reportes(df_asistencia, centro):
     st.markdown("<h3 style='margin-bottom:15px;'>📊 Reportes</h3>", unsafe_allow_html=True)
     df_c = df_asistencia[df_asistencia["centro"] == centro].copy() if not df_asistencia.empty else pd.DataFrame()
@@ -628,8 +622,6 @@ def main():
         return
 
     show_top_header(nombre, centro)
-    
-    # ⚡ Carga unificada y sincrónica de Supabase
     df_asistencia, df_personas, df_ap, df_seg = load_all_data_supabase()
 
     list_tabs = ["🏠 Inicio", "👥 Legajos", "➕ Alta", "📊 Reportes"]
