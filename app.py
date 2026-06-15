@@ -284,13 +284,12 @@ def show_login_screen():
             
             if st.form_submit_button("Ingresar", use_container_width=True):
                 try:
-                    # 🔍 DIAGNÓSTICO EN MEMORIA: Traemos todo para inspeccionar las columnas
+                    # 🔍 DIAGNÓSTICO EN MEMORIA: Traemos todo para inspeccionar las columnas y reparar cachés rotas
                     query = supabase.table("usuarios").select("*").execute()
                     
                     if query.data:
                         user_data = None
                         for row in query.data:
-                            # Intenta leer tanto 'usuarios' como 'usuario' por flexibilidad
                             db_user = row.get("usuarios") or row.get("usuario")
                             if db_user and str(db_user).strip().lower() == u.strip().lower():
                                 user_data = row
@@ -308,7 +307,6 @@ def show_login_screen():
                             else:
                                 st.error("🔒 Contraseña incorrecta.")
                         else:
-                            # Si rebota, nos muestra qué hay guardado exactamente para corregirlo
                             nombres_reales = [str(r.get("usuarios") or r.get("usuario")) for r in query.data]
                             st.error(f"🔍 Encontrados en la DB: {nombres_reales}. Vos escribiste: '{u.strip()}'")
                     else:
@@ -362,9 +360,74 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     st.markdown("<h3 style='margin-bottom:15px;'>📝 Carga Diaria</h3>", unsafe_allow_html=True)
     st.info("Próximo paso: Conectar el buscador de asistencia a la tabla de personas de Supabase.")
 
+# ➕ PESTAÑA COMPLETA Y ACTIVA CON INSERCIÓN SQL DIRECTA
 def page_alta_persona(df_personas, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>➕ Alta de Persona al Padrón</h3>", unsafe_allow_html=True)
-    st.info("Próximo paso: Desarrollar la inserción SQL para agregar legajos al padrón oficial.")
+    st.info("💡 Completá este formulario para ingresar al sistema a alguien que ya participa del centro.")
+    
+    with st.form("alta_directa_form"):
+        st.markdown("#### Datos Principales")
+        col_a1, col_a2 = st.columns(2)
+        with col_a1:
+            new_nom = st.text_input("Nombre Completo *", placeholder="Ej: Juan Pérez")
+            new_dni = st.text_input("DNI")
+            new_nac = st.text_input("Fecha de Nacimiento (AAAA-MM-DD)", help="Respetar el formato Año-Mes-Día. Ej: 1998-11-08")
+        with col_a2:
+            new_tel = st.text_input("Teléfono")
+            new_em = st.text_input("Contacto de Emergencia")
+            new_dom = st.text_input("Dirección / Barrio")
+        
+        st.markdown("#### Información Adicional")
+        new_etq = st.text_input("Etiquetas (Separadas por coma)", help="Ej: Diabético, Vianda, Taller costura")
+        new_notas = st.text_area("Notas Permanentes (Salud, contexto familiar, alergias, etc.)")
+        
+        if st.form_submit_button("💾 Guardar en el Padrón (Supabase ⚡)", type="primary", use_container_width=True):
+            if not new_nom.strip():
+                st.error("⚠️ El Nombre Completo es obligatorio.")
+            else:
+                with st.spinner("Guardando legajo en la nube..."):
+                    try:
+                        # 🔍 1. Validamos primero en Supabase que no exista alguien con el mismo nombre en este centro
+                        check = supabase.table("personas").select("*").eq("centro", centro).ilike("nombre", new_nom.strip()).execute()
+                        
+                        if check.data:
+                            st.warning(f"⚠️ '{new_nom}' ya existe en la base de este centro. Buscalo en la pestaña 'Legajos' para editarlo.")
+                        else:
+                            # 📅 Procesamos la fecha de nacimiento por si viene vacía o mal escrita
+                            fecha_nac_valida = None
+                            if new_nac.strip():
+                                try:
+                                    fecha_nac_valida = pd.to_datetime(new_nac.strip()).date().isoformat()
+                                except:
+                                    st.error("⛔ Formato de fecha incorrecto. Usar AAAA-MM-DD (Ej: 1998-11-08).")
+                                    st.stop()
+
+                            # ⚡ 2. Armamos la fila con los nombres exactos de tus columnas SQL
+                            fila_nueva = {
+                                "nombre": new_nom.strip(),
+                                "dni": new_dni.strip() if new_dni.strip() else None,
+                                "fecha_nacimiento": fecha_nac_valida,
+                                "telefono": new_tel.strip() if new_tel.strip() else None,
+                                "domicilio": new_dom.strip() if new_dom.strip() else None,
+                                "contacto_emergencia": new_em.strip() if new_em.strip() else None,
+                                "etiquetas": new_etq.strip() if new_etq.strip() else None,
+                                "notas": new_notas.strip() if new_notas.strip() else None,
+                                "activo": "SI",
+                                "centro": centro,
+                                "usuario_alta": usuario
+                            }
+                            
+                            # 🚀 3. Impactamos el registro en la tabla 'personas' de Supabase
+                            supabase.table("personas").insert(fila_nueva).execute()
+                            
+                            st.balloons()
+                            st.success(f"✅ ¡{new_nom} ingresado correctamente al sistema!")
+                            time.sleep(1.5)
+                            st.cache_data.clear()
+                            st.rerun()
+                            
+                    except Exception as e:
+                        st.error(f"❌ Error al guardar en Supabase: {e}")
 
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>👥 Buscador de Legajos</h3>", unsafe_allow_html=True)
@@ -386,7 +449,7 @@ def main():
         show_login_screen()
     
     u = st.session_state["usuario"]
-    centro = st.session_state["centro_asignado"]
+    centro = st.session_state["centro_assigned"] if "centro_assigned" in st.session_state else st.session_state["centro_asignado"]
     nombre = st.session_state["nombre_visible"]
     
     centro_clean = clean_string(centro)
