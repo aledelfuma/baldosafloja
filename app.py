@@ -39,11 +39,8 @@ footer {visibility: hidden;}
 [data-testid="stAppDeployButton"] {display: none !important;}
 .stDeployButton {display: none !important;}
 
-/* 🛠️ BLINDAJE EXTRA CONTRA EL BADGE INTRUSO DE STREAMLIT (FOTO Y CORONA) */
-.viewerBadge_container {display: none !important;}
-[data-testid="stViewerBadge"] {display: none !important;}
-iframe[title="st.iframe"] {display: none !important;}
-div[class^="viewerBadge"] {display: none !important;}
+/* Forzado extra por CSS de clases conocidas de Streamlit */
+.css-1jc7ptx, .e1ewe7hr3, [class^="viewerBadge"] { display: none !important; }
 
 .stApp {
     background-color: var(--background) !important;
@@ -55,7 +52,7 @@ div[class^="viewerBadge"] {display: none !important;}
     padding-top: 1rem !important; 
     padding-left: 0.8rem !important;
     padding-right: 0.8rem !important;
-    padding-bottom: 120px !important; 
+    padding-bottom: 160px !important; /* Más aire abajo para que el contenido no se tape */
     max-width: 650px !important; 
     margin: 0 auto;
     overflow-x: hidden;
@@ -149,32 +146,35 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     margin-top: 10px; transition: 0.3s; width: 100%;
 }
 
-.stTabs [data-baseweb="tab-list"] {
+/* 🛠️ INGENIERÍA DE DISEÑO: SUBIMOS EL MENÚ EN FORMATO FLOTANTE PREMIUM */
+.stTabs [data-baseweb="tab-list"] {{
     position: fixed; 
-    bottom: 0; 
-    left: 0; 
-    right: 0;
-    background-color: rgba(18, 18, 18, 0.95); 
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-top: 1px solid rgba(255,255,255,0.1);
+    bottom: 50px !important; /* DESPEGADO 50px DEL SUELO: Pasa por arriba de la barra intrusa de Streamlit */
+    left: 15px !important; 
+    right: 15px !important;
+    background-color: rgba(30, 30, 30, 0.95) !important; 
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    border-radius: 20px !important; /* Bordes totalmente redondeados flotantes */
     display: flex;
     justify-content: space-around;
-    padding: 10px 5px env(safe-area-inset-bottom, 20px) 5px; 
+    padding: 8px 5px !important; 
     z-index: 999999 !important; 
-}
-.stTabs [data-baseweb="tab"] {
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+}}
+.stTabs [data-baseweb="tab"] {{
     flex-grow: 1; text-align: center; justify-content: center;
     font-size: 0.65rem !important;
     font-weight: 700;
     color: var(--text-secondary) !important; padding: 10px 0; 
     border: none !important; background: transparent !important;
-}
-.stTabs [aria-selected="true"] {
+}}
+.stTabs [aria-selected="true"] {{
     color: var(--primary) !important; 
-    background-color: rgba(96, 165, 250, 0.1) !important; 
-    border-radius: 12px;
-}
+    background-color: rgba(96, 165, 250, 0.12) !important; 
+    border-radius: 14px;
+}}
 .stTabs [aria-selected="true"]::after { display: none; }
 </style>
 """
@@ -407,7 +407,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     with col_e: espacio = st.selectbox("Espacio", ESPACIOS_MARANATHA) if centro == C_MARANATHA else DEFAULT_ESPACIO
     with col_m: modo = st.selectbox("Modo / Actividad", ["Día habitual", "Actividad especial", "Cerrado"])
     
-    notas = st.text_area("Notes generales del día (Opcional)", height=70)
+    notas = st.text_area("Notas generales del día (Opcional)", height=70)
 
     df_centro = filter_personas_centro(df_personas, centro)
     df_activos = df_centro[df_centro["activo"].astype(str).str.upper() == "SI"] if not df_centro.empty else pd.DataFrame()
