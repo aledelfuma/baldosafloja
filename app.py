@@ -31,14 +31,19 @@ CSS = """
   --radius-lg: 18px;
 }
 
-/* COMPORTAMIENTO NATIVO MOBILE */
+/* COMPORTAMIENTO NATIVO MOBILE Y OCULTAMIENTO DE INTERFAZ DE SISTEMA */
 header[data-testid="stHeader"] {display: none !important;}
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
-.viewerBadge_container {display: none !important;} 
 [data-testid="stToolbar"] {display: none !important;} 
 [data-testid="stAppDeployButton"] {display: none !important;}
 .stDeployButton {display: none !important;}
+
+/* 🛠️ BLINDAJE EXTRA CONTRA EL BADGE INTRUSO DE STREAMLIT (FOTO Y CORONA) */
+.viewerBadge_container {display: none !important;}
+[data-testid="stViewerBadge"] {display: none !important;}
+iframe[title="st.iframe"] {display: none !important;}
+div[class^="viewerBadge"] {display: none !important;}
 
 .stApp {
     background-color: var(--background) !important;
@@ -388,7 +393,7 @@ def kpi_row_full(df_asistencia, centro):
     col3.markdown(f"<div class='kpi'><h3>Mes actual</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
 
 # ======================================================
-# 📝 PESTAÑA: CARGA DIARIA (CON SOBREESCRITURA INTEGRADA)
+# 📝 PESTAÑA: CARGA DIARIA
 # ======================================================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>📝 Carga Diaria</h3>", unsafe_allow_html=True)
@@ -402,7 +407,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     with col_e: espacio = st.selectbox("Espacio", ESPACIOS_MARANATHA) if centro == C_MARANATHA else DEFAULT_ESPACIO
     with col_m: modo = st.selectbox("Modo / Actividad", ["Día habitual", "Actividad especial", "Cerrado"])
     
-    notas = st.text_area("Notas generales del día (Opcional)", height=70)
+    notas = st.text_area("Notes generales del día (Opcional)", height=70)
 
     df_centro = filter_personas_centro(df_personas, centro)
     df_activos = df_centro[df_centro["activo"].astype(str).str.upper() == "SI"] if not df_centro.empty else pd.DataFrame()
@@ -412,7 +417,6 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     presentes = st.multiselect("Buscador de personas", options=nombres, placeholder="Seleccionar asistentes...")
     total_presentes = len(presentes)
     
-    # Checkbox para forzar sobreescritura (solo aparece visualmente si hay conflicto previo)
     st.markdown("<br>", unsafe_allow_html=True)
     forzar_reemplazo = st.checkbox("⚠️ Corregir datos: tildar acá para reemplazar la planilla anterior de este espacio.", value=False)
     
@@ -423,7 +427,6 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
             
         with st.spinner("Procesando en Supabase..."):
             try:
-                # 🔄 Si el usuario tildó reemplazar, limpiamos primero el duplicado de manera segura
                 if forzar_reemplazo:
                     supabase.table("asistencia_diaria").delete().eq("fecha", fecha_str).eq("centro", centro).eq("espacio", espacio).execute()
                     supabase.table("asistencia_personas").delete().eq("fecha", fecha_str).eq("centro", centro).eq("espacio", espacio).execute()
