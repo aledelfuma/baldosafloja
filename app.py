@@ -113,6 +113,7 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
 .alert-box { padding: 12px 15px; border-radius: var(--radius-sm); margin-bottom: 10px; font-size: 0.9rem; font-weight: 600; }
 .alert-danger { background-color: rgba(239, 68, 68, 0.15); color: #FCA5A5 !important; border: 1px solid rgba(239, 68, 68, 0.3); }
 .alert-success { background-color: rgba(34, 197, 94, 0.15); color: #86EFAC !important; border: 1px solid rgba(34, 197, 94, 0.3); }
+.alert-warning { background-color: rgba(245, 158, 11, 0.15); color: #FDE047 !important; border: 1px solid rgba(245, 158, 11, 0.3); }
 .alert-gray { background-color: var(--surface); color: var(--text-secondary) !important; border: 1px solid rgba(255,255,255,0.05); }
 
 .id-card {
@@ -387,7 +388,7 @@ def kpi_row_full(df_asistencia, centro):
     col3.markdown(f"<div class='kpi'><h3>Mes actual</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
 
 # ======================================================
-# 📝 PESTAÑA: CARGA DIARIA (CORREGIDO DE "notes" A "notas")
+# 📝 PESTAÑA: CARGA DIARIA (INTERCEPCIÓN DE CLAVES DUPLICADAS)
 # ======================================================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>📝 Carga Diaria</h3>", unsafe_allow_html=True)
@@ -417,9 +418,8 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
             st.error("⛔ Debes marcar asistentes o indicar 'Cerrado'.")
             return
             
-        with st.spinner("Guardando en Supabase en lote..."):
+        with st.spinner("Guardando en Supabase..."):
             try:
-                # ⚡ CLAVE: Corregido el nombre del campo a "notas" para que coincida con la tabla SQL
                 cabecera = {
                     "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro,
                     "espacio": espacio, "presentes": total_presentes, "coordinador": nombre_visible,
@@ -447,12 +447,23 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     supabase.table("asistencia_personas").insert(filas_personas).execute()
                 
                 st.balloons()
-                st.toast("✅ Asistencia Guardada de un Solo Viaje")
+                st.toast("✅ Asistencia Guardada Exitosamente")
                 time.sleep(1.5)
                 st.cache_data.clear()
                 st.rerun()
+                
             except Exception as e:
-                st.error(f"Error al guardar la asistencia: {e}")
+                # 🔍 INTERCEPTAMOS EL ERROR DE DUPLICADOS: Si contiene el código 23505 mostramos una alerta premium
+                err_str = str(e)
+                if "23505" in err_str or "already exists" in err_str.lower():
+                    st.markdown(f"""
+                    <div class='alert-box alert-warning'>
+                        ⚠️ <b>Planilla ya existente:</b> Ya se guardó una asistencia hoy para el espacio <b>'{espacio}'</b> en este centro.<br>
+                        No es necesario cargarla de nuevo. Si querés modificarla, podés hacerlo directo desde el Table Editor de Supabase.
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.error(f"❌ Error inesperado al guardar la asistencia: {e}")
 
 # ======================================================
 # 👥 PESTAÑA: BUSCADOR DE LEGAJOS
