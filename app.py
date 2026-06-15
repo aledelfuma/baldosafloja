@@ -12,8 +12,7 @@ from supabase import create_client, Client
 # CONFIGURACIÓN DE TEMA OSCURO PREMIUM Y MOBILE
 # ======================================================
 st.set_page_config(
-    page_title="Baldosa Floja",
-    page_icon="🏠",
+    page_title="Hogar de Cristo Bahía Blanca",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -261,7 +260,7 @@ CATEGORIAS_SEGUIMIENTO = ["Escucha / Acompañamiento", "Salud", "Trámite (DNI/S
 # ======================================================
 # FLUJO DE DATOS CONEXIÓN REAL A SUPABASE
 # ======================================================
-@st.cache_data(ttl=10, show_spinner="Sincronizando con Supabase...")
+@st.cache_data(ttl=10, show_spinner="Sincronizando...")
 def load_all_data_supabase():
     try:
         res_a = supabase.table("asistencia_diaria").select("*").execute()
@@ -314,7 +313,7 @@ def show_login_screen():
     try: st.image("logo_hogar.png", width=160)
     except: pass
     
-    st.markdown("### Bienvenido")
+    st.markdown("### HOGAR DE CRISTO BAHIA BLANCA")
     st.markdown("<p style='color:var(--text-secondary); font-size:0.9rem; margin-top:-10px; margin-bottom:25px;'>Ingresá tus credenciales para gestionar el centro.</p>", unsafe_allow_html=True)
     
     with st.form("login_form_oficial"):
@@ -353,7 +352,7 @@ def show_login_screen():
                     
     st.markdown("""
     <div style='text-align: center; margin-top: 60px; font-size: 0.85rem; color: #444;'>
-        Federación de Hogares de Cristo <br>
+        Hogar de Cristo Bahía Blanca <br>
         <a href='mailto:alejandrodelfuma@gmail.com' style='color: #60A5FA; text-decoration: none; font-weight: 600;'>
             Soporte Técnico
         </a>
@@ -370,7 +369,7 @@ def show_top_header(nombre, centro):
                 {nombre[0].upper() if nombre else 'U'}
             </div>
             <div>
-                <div class='user-info'>Hola, {nombre}</div>
+                <div class='user-info'>{nombre}</div>
                 <div class='center-info'>Centro: {centro}</div>
             </div>
         </div>
@@ -445,7 +444,6 @@ def kpi_row_full(df_asistencia, centro):
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>Carga Diaria</h3>", unsafe_allow_html=True)
     
-    # El administrador puede simular la carga de cualquier centro barrial
     if centro == "Administración":
         centro_seleccionado = st.selectbox("Seleccionar Centro a gestionar:", CENTROS)
     else:
@@ -468,7 +466,15 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     nombres = sorted(list(set(df_activos["nombre"].astype(str).tolist()))) if not df_activos.empty else []
     
     st.markdown("#### Marcar Asistencia")
+    
+    # ✅ INGENIERÍA: Filtro dinámico progresivo. Removemos de las opciones a los que ya están seleccionados
+    if "presentes_actuales" not in st.session_state:
+        st.session_state["presentes_actuales"] = []
+        
+    opciones_disponibles = [n for n in nombres if n not in st.session_state["presentes_actuales"]]
+    
     presentes = st.multiselect("Buscador de personas", options=nombres, placeholder="Seleccionar asistentes...")
+    st.session_state["presentes_actuales"] = presentes
     total_presentes = len(presentes)
     
     st.markdown("<br>", unsafe_allow_html=True)
@@ -541,11 +547,18 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
         centro_seleccionado = centro
 
     df_centro = filter_personas_centro(df_personas, centro_seleccionado)
-    nombres = sorted(df_centro["nombre"].unique()) if not df_centro.empty else []
-
-    seleccion = st.selectbox("Escribi el nombre para ver su ficha:", [""] + nombres)
     
-    if not seleccion:
+    # ✅ INGENIERÍA: Buscador Inteligente hibrido por Nombre o DNI
+    lista_buscador = []
+    if not df_centro.empty:
+        for _, r in df_centro.iterrows():
+            dni_label = f" - DNI: {r['dni']}" if (r['dni'] and str(r['dni']).lower() != 'none') else " - S/D"
+            lista_buscador.append(f"{r['nombre']}{dni_label}")
+    lista_buscador = sorted(lista_buscador)
+
+    seleccion_raw = st.selectbox("Escribi el nombre o DNI para ver la ficha:", [""] + lista_buscador)
+    
+    if not seleccion_raw:
         st.markdown("<div class='alert-box alert-gray'>Busca a alguien arriba para ver su carnet.</div>", unsafe_allow_html=True)
         if not df_centro.empty:
             st.markdown("#### Padrón Oficial del Centro")
@@ -557,6 +570,8 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
             st.dataframe(df_mostrar_padrón[["nombre", "dni", "telefono", "activo"]].sort_values("nombre"), use_container_width=True, hide_index=True)
         return
 
+    # Extraemos el nombre limpio quitando la etiqueta del DNI
+    seleccion = seleccion_raw.split(" - DNI:")[0].split(" - S/D")[0].strip()
     datos_persona = df_centro[df_centro["nombre"] == seleccion].iloc[0]
     
     tags_str = str(datos_persona.get("etiquetas", ""))
@@ -581,7 +596,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     html_carnet = f"""
 <div class="id-card">
 <div style="display:flex; justify-content: space-between; align-items:flex-start; margin-bottom: 5px;">
-<div class="id-title">HOGAR DE CRISTO</div>
+<div class="id-title">HOGAR DE CRISTO BAHIA BLANCA</div>
 <span style="font-weight:800; background: rgba(255,255,255,0.25); padding: 5px 12px; border-radius: 12px; font-size: 0.70rem; letter-spacing:1px;">{estado_badge}</span>
 </div>
 <div style="display:flex; gap: 15px; align-items: center; margin-bottom: 20px;">
@@ -758,7 +773,7 @@ def page_reportes(df_asistencia, centro):
 # ======================================================
 def page_global(df_asistencia, df_personas, df_ap):
     st.markdown("<h3 style='margin-bottom:15px;'>Consola Central Institucional</h3>", unsafe_allow_html=True)
-    st.caption("Panel de control unificado de la federación para auditoría de cargas y métricas generales.")
+    st.caption("Panel de control unificado para auditoría de cargas y métricas generales de Hogar de Cristo Bahía Blanca.")
     
     t_pers = len(df_personas["nombre"].unique()) if not df_personas.empty else 0
     t_asist = df_asistencia["presentes"].apply(lambda x: clean_int(x, 0)).sum() if not df_asistencia.empty else 0
@@ -767,9 +782,28 @@ def page_global(df_asistencia, df_personas, df_ap):
     k1.markdown(f"<div class='kpi'><h3>Padrón Total Institucional</h3><div class='v'>{t_pers}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>Personas en la federación</span></div>", unsafe_allow_html=True)
     k2.markdown(f"<div class='kpi'><h3>Total de Asistencias</h3><div class='v'>{t_asist}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>Ingresos totales acumulados</span></div>", unsafe_allow_html=True)
     
-    st.markdown("<br>#### Auditoría y Estado de Cargas en los Centros", unsafe_allow_html=True)
+    st.markdown("<br>#### Semáforo de Actividad de Hoy", unsafe_allow_html=True)
     
-    # Tabla de auditoría en tiempo real para verificar qué sube cada coordinador
+    # ✅ INGENIERÍA: Semáforo dinámico automático por CSS para auditar el estado de carga diario
+    hoy_str = get_today_ar().isoformat()
+    sc1, sc2, sc3 = st.columns(3)
+    
+    with sc1:
+        c_bel = df_asistencia[(df_asistencia["centro"] == C_BELEN) & (df_asistencia["fecha"] == hoy_str)]
+        if c_bel.empty: st.markdown("<div class='alert-box alert-danger'>Calle Belén: Falta Cargar</div>", unsafe_allow_html=True)
+        else: st.markdown("<div class='alert-box alert-success'>Calle Belén: Al Día</div>", unsafe_allow_html=True)
+        
+    with sc2:
+        c_mar = df_asistencia[(df_asistencia["centro"] == C_MARANATHA) & (df_asistencia["fecha"] == hoy_str)]
+        if c_mar.empty: st.markdown("<div class='alert-box alert-danger'>Casa Maranatha: Falta Cargar</div>", unsafe_allow_html=True)
+        else: st.markdown("<div class='alert-box alert-success'>Casa Maranatha: Al Día</div>", unsafe_allow_html=True)
+        
+    with sc3:
+        c_nud = df_asistencia[(df_asistencia["centro"] == C_NUDO) & (df_asistencia["fecha"] == hoy_str)]
+        if c_nud.empty: st.markdown("<div class='alert-box alert-danger'>Nudo a Nudo: Falta Cargar</div>", unsafe_allow_html=True)
+        else: st.markdown("<div class='alert-box alert-success'>Nudo a Nudo: Al Día</div>", unsafe_allow_html=True)
+
+    st.markdown("<br>#### Auditoría y Registro de Planillas", unsafe_allow_html=True)
     if not df_asistencia.empty:
         df_audit = df_asistencia.copy().sort_values("created_at", ascending=False)
         df_audit_clean = df_audit[["fecha", "centro", "espacio", "presentes", "coordinador", "modo"]].rename(
