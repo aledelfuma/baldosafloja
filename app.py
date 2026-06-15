@@ -186,6 +186,15 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
     border-right: 1px solid rgba(255,255,255,0.02);
     border-bottom: 1px solid rgba(255,255,255,0.02);
 }
+
+/* ESTILOS DE AUTOSUGERENCIA NATIVA PARA GUARDADO DE CONTRASEÑA */
+.login-box {
+    background-color: var(--surface);
+    padding: 30px 25px;
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255,255,255,0.05);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -297,44 +306,100 @@ def filter_personas_centro(df_personas, centro):
 # 🖥️ VISTAS E INTERFAZ DE USUARIO (UI)
 # ======================================================
 def show_login_screen():
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2, col3 = st.columns([1, 4, 1])
     with col2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        try: st.image("logo_hogar.png", width=200)
-        except: st.title("Baldosa Floja")
-        st.markdown("### Acceso al Sistema")
+        try: st.image("logo_hogar.png", width=180)
+        except: pass
         
-        with st.form("login_form"):
-            u = st.text_input("Usuario")
-            p = st.text_input("Contraseña", type="password")
+        st.markdown("### 👋 Bienvenido")
+        st.markdown("<p style='color:var(--text-secondary); font-size:0.9rem; margin-top:-10px; margin-bottom:20px;'>Ingresá tus credenciales para gestionar el centro.</p>", unsafe_allow_html=True)
+        
+        # 🔒 CONTENEDOR CON INGENIERÍA PARA GUARDAR CONTRASEÑAS NATIVAMENTE
+        with st.container():
+            st.markdown("<div class='login-box'>", unsafe_allow_html=True)
             
-            if st.form_submit_button("Ingresar", use_container_width=True):
-                try:
-                    query = supabase.table("usuarios").select("*").execute()
-                    if query.data:
-                        user_data = None
-                        for row in query.data:
-                            db_user = row.get("usuarios") or row.get("usuario")
-                            if db_user and str(db_user).strip().lower() == u.strip().lower():
-                                user_data = row
-                                break
-                        
-                        if user_data:
-                            if str(user_data["password_text"]) == p.strip():
-                                st.session_state.update({
-                                    "logged_in": True, 
-                                    "usuario": u.strip(), 
-                                    "centro_asignado": user_data["centro"].strip(), 
-                                    "nombre_visible": user_data["nombre_visible"]
-                                })
-                                st.rerun()
-                            else: st.error("🔒 Contraseña incorrecta.")
-                        else:
-                            nombres_reales = [str(r.get("usuarios") or r.get("usuario")) for r in query.data]
-                            st.error(f"🔍 Encontrados en la DB: {nombres_reales}. Vos escribiste: '{u.strip()}'")
-                    else: st.error("🔍 La tabla 'usuarios' está vacía en Supabase.")
-                except Exception as e: st.error(f"❌ Error de conexión con Supabase: {e}")
-        st.stop()
+            # Variables de control en session state para el botón de revelar clave
+            if "ver_password" not in st.session_state:
+                st.session_state["ver_password"] = False
+                
+            u = st.text_input("Usuario", key="login_username", placeholder="Ej: guillermina")
+            
+            # Botón de ojo minimalista para ver/ocultar clave
+            tipo_input = "default" if st.session_state["ver_password"] else "password"
+            p = st.text_input("Contraseña", type=tipo_input, key="login_password", placeholder="••••••••")
+            
+            col_check, col_btn = st.columns([1, 1])
+            with col_check:
+                if st.checkbox("👁️ Mostrar clave", value=st.session_state["ver_password"]):
+                    if not st.session_state["ver_password"]:
+                        st.session_state["ver_password"] = True
+                        st.rerun()
+                else:
+                    if st.session_state["ver_password"]:
+                        st.session_state["ver_password"] = False
+                        st.rerun()
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("🚀 Ingresar al Sistema", type="primary", use_container_width=True):
+                if not u.strip() or not p.strip():
+                    st.error("⚠️ Completá ambos campos.")
+                else:
+                    with st.spinner("Autenticando..."):
+                        try:
+                            query = supabase.table("usuarios").select("*").execute()
+                            if query.data:
+                                user_data = None
+                                for row in query.data:
+                                    db_user = row.get("usuarios") or row.get("usuario")
+                                    if db_user and str(db_user).strip().lower() == u.strip().lower():
+                                        user_data = row
+                                        break
+                                
+                                if user_data:
+                                    if str(user_data["password_text"]) == p.strip():
+                                        st.session_state.update({
+                                            "logged_in": True, 
+                                            "usuario": u.strip(), 
+                                            "centro_asignado": user_data["centro"].strip(), 
+                                            "nombre_visible": user_data["nombre_visible"]
+                                        })
+                                        st.balloons()
+                                        st.rerun()
+                                    else: st.error("🔒 Contraseña incorrecta.")
+                                else: st.error("🔍 El usuario ingresado no existe.")
+                            else: st.error("🔍 Error crítico: No hay usuarios registrados.")
+                        except Exception as e: st.error(f"❌ Error de conexión: {e}")
+            st.markdown("</div>", unsafe_allow_html=True)
+        
+        # 💉 INYECCIÓN JAVASCRIPT: Le clava los atributos semánticos HTML para que Chrome/Safari guarden las claves
+        st.components.v1.html("""
+        <script>
+            setTimeout(function() {
+                var inputs = window.parent.document.querySelectorAll('input');
+                inputs.forEach(function(input) {
+                    if(input.placeholder.includes('guillermina')) {
+                        input.setAttribute('autocomplete', 'username');
+                        input.setAttribute('name', 'username');
+                    }
+                    if(input.placeholder.includes('••••')) {
+                        input.setAttribute('autocomplete', 'current-password');
+                        input.setAttribute('name', 'password');
+                    }
+                });
+            }, 1000);
+        </script>
+        """, height=0)
+        
+        st.markdown("""
+        <div style='text-align: center; margin-top: 40px; font-size: 0.85rem; color: #555;'>
+            Federación de Hogares de Cristo <br>
+            <a href='mailto:alejandrodelfuma@gmail.com' style='color: #60A5FA; text-decoration: none; font-weight: 600;'>
+                ✉️ Soporte Técnico Técnico
+            </a>
+        </div>
+        """, unsafe_allow_html=True)
+    st.stop()
 
 def show_top_header(nombre, centro):
     st.markdown(f"""
@@ -442,7 +507,6 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     supabase.table("asistencia_diaria").delete().eq("fecha", fecha_str).eq("centro", centro).eq("espacio", espacio).execute()
                     supabase.table("asistencia_personas").delete().eq("fecha", fecha_str).eq("centro", centro).eq("espacio", espacio).execute()
                 
-                # ✅ CORREGIDO DEFINITIVO: "notas" en español calza exacto con Supabase
                 cabecera = {
                     "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro,
                     "espacio": espacio, "presentes": total_presentes, "coordinador": nombre_visible,
@@ -692,14 +756,10 @@ def page_reportes(df_asistencia, centro):
         df_espacio = df_c.groupby("espacio")["presentes_i"].mean().reset_index().sort_values("presentes_i", ascending=False)
         st.bar_chart(df_espacio.set_index("espacio")["presentes_i"], color="#A78BFA")
 
-# ======================================================
-# 🌍 CONSOLE GLOBAL ADMIN (MATEMÁTICA CONSOLIDADA ACTIVADA)
-# ======================================================
 def page_global(df_asistencia, df_personas, df_ap):
     st.markdown("<h3 style='margin-bottom:15px;'>🌍 Consola Central Institucional</h3>", unsafe_allow_html=True)
     st.caption("Panel de control unificado y métricas consolidadas de la federación.")
     
-    # ✅ ACTIVADO: Sumas matemáticas consolidadas en base a los datos mapeados
     t_pers = len(df_personas["nombre"].unique()) if not df_personas.empty else 0
     t_asist = df_asistencia["presentes"].apply(lambda x: clean_int(x, 0)).sum() if not df_asistencia.empty else 0
     
