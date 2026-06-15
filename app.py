@@ -442,7 +442,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     supabase.table("asistencia_diaria").delete().eq("fecha", fecha_str).eq("centro", centro).eq("espacio", espacio).execute()
                     supabase.table("asistencia_personas").delete().eq("fecha", fecha_str).eq("centro", centro).eq("espacio", espacio).execute()
                 
-                # ✅ CORREGIDO: "notas" en español compatible con la base de datos
+                # ✅ CORREGIDO DEFINITIVO: "notas" en español calza exacto con Supabase
                 cabecera = {
                     "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro,
                     "espacio": espacio, "presentes": total_presentes, "coordinador": nombre_visible,
@@ -605,7 +605,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
             """, unsafe_allow_html=True)
 
 # ======================================================
-# ➕ PESTAÑA: ALTA DE PERSONA (TYPO REPARADO CON ÉXITO)
+# ➕ PESTAÑA: ALTA DE PERSONA
 # ======================================================
 def page_alta_persona(df_personas, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>➕ Alta de Persona al Padrón</h3>", unsafe_allow_html=True)
@@ -645,7 +645,6 @@ def page_alta_persona(df_personas, centro, usuario):
                                     st.error("⛔ Formato de fecha incorrecto. Usar AAAA-MM-DD.")
                                     st.stop()
 
-                            # ✅ REPARADO: Se cambió "notes" a "notas" para calzar exacto con Supabase
                             fila_nueva = {
                                 "nombre": new_nom.strip(), "dni": new_dni.strip() if new_dni.strip() else None,
                                 "fecha_nacimiento": fecha_nac_valida, "telefono": new_tel.strip() if new_tel.strip() else None,
@@ -694,13 +693,13 @@ def page_reportes(df_asistencia, centro):
         st.bar_chart(df_espacio.set_index("espacio")["presentes_i"], color="#A78BFA")
 
 # ======================================================
-# 🌍 CONSOLE GLOBAL ADMIN (MATEMÁTICA CONSOLIDADA REAL)
+# 🌍 CONSOLE GLOBAL ADMIN (MATEMÁTICA CONSOLIDADA ACTIVADA)
 # ======================================================
 def page_global(df_asistencia, df_personas, df_ap):
     st.markdown("<h3 style='margin-bottom:15px;'>🌍 Consola Central Institucional</h3>", unsafe_allow_html=True)
-    st.caption("Panel de control unificado y métricas consolidadas del Hogar de Cristo.")
+    st.caption("Panel de control unificado y métricas consolidadas de la federación.")
     
-    # ✅ ACTIVADO: Sumas reales de todo el padrón mapeado en Supabase
+    # ✅ ACTIVADO: Sumas matemáticas consolidadas en base a los datos mapeados
     t_pers = len(df_personas["nombre"].unique()) if not df_personas.empty else 0
     t_asist = df_asistencia["presentes"].apply(lambda x: clean_int(x, 0)).sum() if not df_asistencia.empty else 0
     
