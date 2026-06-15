@@ -9,7 +9,7 @@ import re
 from supabase import create_client, Client
 
 # ======================================================
-# 🌑 CONFIGURACIÓN DE TEMA OSCURO PREMIUM Y MOBILE
+# CONFIGURACIÓN DE TEMA OSCURO PREMIUM Y MOBILE
 # ======================================================
 st.set_page_config(
     page_title="Baldosa Floja",
@@ -75,7 +75,7 @@ footer {visibility: hidden;}
 div.user-info { font-size: 1.1rem; font-weight: 700; line-height: 1.2; }
 div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary) !important; margin-top: 2px; }
 
-/* BOTÓN PREMIUM RADIAL Y DE CIERRE */
+/* BOTONES PREMIUM */
 .stButton>button {
     background-color: var(--primary);
     color: #000000 !important;
@@ -114,7 +114,7 @@ div.logout-wrapper > div > button {
     background: transparent !important;
 }
 
-/* KPIs CON ESTRUCTURA FIT COMPACTA */
+/* KPIs GEOMÉTRICOS */
 .kpi {
   border-radius: var(--radius-lg);
   padding: 12px;
@@ -159,7 +159,7 @@ div.logout-wrapper > div > button {
     margin-top: 10px; transition: 0.3s; width: 100%;
 }
 
-/* MENÚ FLOTANTE ELEVADO PRESTIGE */
+/* MENÚ FLOTANTE ELEVADO */
 .stTabs [data-baseweb="tab-list"] {
     position: fixed; 
     bottom: 50px !important; 
@@ -212,7 +212,7 @@ div.logout-wrapper > div > button {
 st.markdown(CSS, unsafe_allow_html=True)
 
 # ======================================================
-# ⚡ CONEXIÓN SEGURA A SUPABASE
+# CONEXIÓN SEGURA A SUPABASE
 # ======================================================
 @st.cache_resource
 def get_supabase_client() -> Client:
@@ -223,7 +223,7 @@ def get_supabase_client() -> Client:
 supabase = get_supabase_client()
 
 # ======================================================
-# 🌑 ZONA HORARIA, CONFIGURACIONES Y HELPERS
+# ZONA HORARIA, CONFIGURACIONES Y HELPERS
 # ======================================================
 TZ_AR = pytz.timezone('America/Argentina/Buenos_Aires')
 
@@ -259,7 +259,7 @@ DEFAULT_ESPACIO = "General"
 CATEGORIAS_SEGUIMIENTO = ["Escucha / Acompañamiento", "Salud", "Trámite (DNI/Social)", "Educación", "Familiar", "Crisis / Conflicto", "Otro"]
 
 # ======================================================
-# 🔄 FLUJO DE DATOS CONEXIÓN REAL A SUPABASE
+# FLUJO DE DATOS CONEXIÓN REAL A SUPABASE
 # ======================================================
 @st.cache_data(ttl=10, show_spinner="Sincronizando con Supabase...")
 def load_all_data_supabase():
@@ -290,15 +290,6 @@ def latest_asistencia(df):
     df2["k"] = (df2["anio"].astype(str)+"|"+df2["fecha"].astype(str)+"|"+df2["centro"].astype(str)+"|"+df2["espacio"].astype(str))
     return df2.sort_values("timestamp_dt").groupby("k", as_index=False).tail(1)
 
-def last_load_info(df_latest, centro):
-    if df_latest.empty: return None, None
-    d = df_latest[df_latest["centro"] == centro].copy()
-    if d.empty: return None, None
-    last = pd.to_datetime(d["fecha"], errors="coerce").max()
-    if pd.isna(last): return None, None
-    days = (pd.Timestamp(get_today_ar()).date() - last.date()).days
-    return last.date().isoformat(), int(days)
-
 def get_today_asistencia_summary(df_a):
     if df_a.empty: return df_a.copy()
     hoy = get_today_ar().isoformat()
@@ -309,20 +300,21 @@ def get_today_asistencia_summary(df_a):
 
 def filter_personas_centro(df_personas, centro):
     if df_personas.empty: return df_personas
+    if centro == "Administración": return df_personas.copy()
     centro_clean = clean_string(centro)
     df_temp = df_personas.copy()
     df_temp['centro_norm'] = df_temp['centro'].apply(clean_string)
     return df_temp[df_temp['centro_norm'] == centro_clean].copy()
 
 # ======================================================
-# 🖥️ VISTAS E INTERFAZ DE USUARIO (UI)
+# VISTAS E INTERFAZ DE USUARIO (UI)
 # ======================================================
 def show_login_screen():
     st.markdown("<br>", unsafe_allow_html=True)
     try: st.image("logo_hogar.png", width=160)
     except: pass
     
-    st.markdown("### 👋 Bienvenido")
+    st.markdown("### Bienvenido")
     st.markdown("<p style='color:var(--text-secondary); font-size:0.9rem; margin-top:-10px; margin-bottom:25px;'>Ingresá tus credenciales para gestionar el centro.</p>", unsafe_allow_html=True)
     
     with st.form("login_form_oficial"):
@@ -330,9 +322,9 @@ def show_login_screen():
         p = st.text_input("Contraseña", type="password", placeholder="••••••••").strip()
         
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.form_submit_button("🚀 Ingresar al Sistema", use_container_width=True):
+        if st.form_submit_button("Ingresar al Sistema", use_container_width=True):
             if not u or not p:
-                st.error("⚠️ Completá ambos campos.")
+                st.error("Completá ambos campos.")
             else:
                 with st.spinner("Autenticando..."):
                     try:
@@ -354,22 +346,21 @@ def show_login_screen():
                                         "nombre_visible": user_data["nombre_visible"]
                                     })
                                     st.rerun()
-                                else: st.error("🔒 Contraseña incorrecta.")
-                            else: st.error("🔍 El usuario ingresado no existe.")
-                        else: st.error("🔍 Error crítico: No hay usuarios registrados.")
-                    except Exception as e: st.error(f"❌ Error de conexión: {e}")
+                                else: st.error("Contraseña incorrecta.")
+                            else: st.error("El usuario ingresado no existe.")
+                        else: st.error("Error crítico: No hay usuarios registrados.")
+                    except Exception as e: st.error(f"Error de conexión: {e}")
                     
     st.markdown("""
     <div style='text-align: center; margin-top: 60px; font-size: 0.85rem; color: #444;'>
         Federación de Hogares de Cristo <br>
         <a href='mailto:alejandrodelfuma@gmail.com' style='color: #60A5FA; text-decoration: none; font-weight: 600;'>
-            ✉️ Soporte Técnico
+            Soporte Técnico
         </a>
     </div>
     """, unsafe_allow_html=True)
     st.stop()
 
-# ✅ MEJORA: BARRA SUPERIOR CON BOTÓN DE CERRAR SESIÓN INTEGRADO SUTILMENTE
 def show_top_header(nombre, centro):
     col_inf, col_out = st.columns([3, 1])
     with col_inf:
@@ -380,19 +371,21 @@ def show_top_header(nombre, centro):
             </div>
             <div>
                 <div class='user-info'>Hola, {nombre}</div>
-                <div class='center-info'>📍 {centro}</div>
+                <div class='center-info'>Centro: {centro}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
     with col_out:
         st.markdown("<div class='logout-wrapper'>", unsafe_allow_html=True)
-        if st.button("🚪 Salir"):
+        if st.button("Salir"):
             st.session_state.clear()
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("<div style='margin-bottom:15px;'></div>", unsafe_allow_html=True)
 
 def show_top_alerts(df_latest, df_personas, df_ap, centro):
+    if centro == "Administración":
+        return
     cumples = []
     if not df_personas.empty:
         df_c = filter_personas_centro(df_personas, centro)
@@ -405,22 +398,21 @@ def show_top_alerts(df_latest, df_personas, df_ap, centro):
                     cumples.append(row["nombre"])
             except: pass
 
-    st.markdown("<h4 style='font-size:1rem; margin-bottom:10px;'>📊 Novedades del Centro</h4>", unsafe_allow_html=True)
+    st.markdown("<h4 style='font-size:1rem; margin-bottom:10px;'>Novedades del Centro</h4>", unsafe_allow_html=True)
     today_a = get_today_asistencia_summary(df_latest)
     c_a = today_a[today_a["centro"] == centro] if not today_a.empty else pd.DataFrame()
 
     ac1, ac2, ac3 = st.columns(3)
     with ac1:
-        if c_a.empty: st.markdown("<div class='alert-box alert-danger'>⚠️ Faltan Asistencias</div>", unsafe_allow_html=True)
-        else: st.markdown("<div class='alert-box alert-success'>✅ Asistencias al día</div>", unsafe_allow_html=True)
+        if c_a.empty: st.markdown("<div class='alert-box alert-danger'>Faltan Asistencias</div>", unsafe_allow_html=True)
+        else: st.markdown("<div class='alert-box alert-success'>Asistencias al día</div>", unsafe_allow_html=True)
     with ac2:
         if cumples:
-            with st.expander(f"🎉 Cumpleaños ({len(cumples)})", expanded=True):
+            with st.expander(f"Cumpleaños ({len(cumples)})", expanded=True):
                 for c in cumples: st.write(f"- {c}")
-        else: st.markdown("<div class='alert-box alert-gray'>🎂 Sin cumples</div>", unsafe_allow_html=True)
-    with ac3: st.markdown("<div class='alert-box alert-gray'>✔️ Sin Inasistencias</div>", unsafe_allow_html=True)
+        else: st.markdown("<div class='alert-box alert-gray'>Sin cumples</div>", unsafe_allow_html=True)
+    with ac3: st.markdown("<div class='alert-box alert-gray'>Sin Inasistencias</div>", unsafe_allow_html=True)
 
-# ✅ MEJORA ESTÉTICA: Columnas alineadas estrictas por CSS
 def kpi_row_full(df_asistencia, centro):
     hoy_date = get_today_ar()
     hoy_str = hoy_date.isoformat()
@@ -432,7 +424,11 @@ def kpi_row_full(df_asistencia, centro):
         df_kpi = df_asistencia.copy()
         df_kpi["presentes_i"] = df_kpi["presentes"].apply(lambda x: clean_int(x, 0))
         df_kpi["fecha_str"] = df_kpi["fecha"].astype(str)
-        df_centro = df_kpi[df_kpi["centro"] == centro]
+        
+        if centro == "Administración":
+            df_centro = df_kpi
+        else:
+            df_centro = df_kpi[df_kpi["centro"] == centro]
         
         c1 = int(df_centro[df_centro["fecha_str"] == hoy_str]["presentes_i"].sum())
         c2 = int(df_centro[(df_centro["fecha_str"] >= hace_7_dias_str) & (df_centro["fecha_str"] <= hoy_str)]["presentes_i"].sum())
@@ -440,50 +436,57 @@ def kpi_row_full(df_asistencia, centro):
         
     kc1, kc2, kc3 = st.columns(3)
     kc1.markdown(f"<div class='kpi'><h3>Ingresos HOY</h3><div class='v'>{c1}</div></div>", unsafe_allow_html=True)
-    kc2.markdown(f"<div class='kpi'><h3>Últimos 7 días</h3><div class='v'>{c2}</div></div>", unsafe_allow_html=True)
+    kc2.markdown(f"<div class='kpi'><h3>Ultimos 7 dias</h3><div class='v'>{c2}</div></div>", unsafe_allow_html=True)
     kc3.markdown(f"<div class='kpi'><h3>Mes actual</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
 
 # ======================================================
-# 📝 PESTAÑA: CARGA DIARIA
+# PESTAÑA: CARGA DIARIA
 # ======================================================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
-    st.markdown("<h3 style='margin-bottom:15px;'>📝 Carga Diaria</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='margin-bottom:15px;'>Carga Diaria</h3>", unsafe_allow_html=True)
+    
+    # El administrador puede simular la carga de cualquier centro barrial
+    if centro == "Administración":
+        centro_seleccionado = st.selectbox("Seleccionar Centro a gestionar:", CENTROS)
+    else:
+        centro_seleccionado = centro
+
     fecha = st.date_input("Fecha de carga", value=get_today_ar())
     if fecha > get_today_ar():
-        st.error("⛔ No se puede cargar asistencia de días futuros.")
+        st.error("No se puede cargar asistencia de días futuros.")
         return
     fecha_str = fecha.isoformat()
     
     col_e, col_m = st.columns(2)
-    with col_e: espacio = st.selectbox("Espacio", ESPACIOS_MARANATHA) if centro == C_MARANATHA else DEFAULT_ESPACIO
+    with col_e: espacio = st.selectbox("Espacio", ESPACIOS_MARANATHA) if centro_seleccionado == C_MARANATHA else DEFAULT_ESPACIO
     with col_m: modo = st.selectbox("Modo / Actividad", ["Día habitual", "Actividad especial", "Cerrado"])
     
     notas = st.text_area("Notas generales del día (Opcional)", height=70)
 
-    df_centro = filter_personas_centro(df_personas, centro)
+    df_centro = filter_personas_centro(df_personas, centro_seleccionado)
     df_activos = df_centro[df_centro["activo"].astype(str).str.upper() == "SI"] if not df_centro.empty else pd.DataFrame()
     nombres = sorted(list(set(df_activos["nombre"].astype(str).tolist()))) if not df_activos.empty else []
     
-    st.markdown("#### 👥 Marcar Asistencia")
+    st.markdown("#### Marcar Asistencia")
     presentes = st.multiselect("Buscador de personas", options=nombres, placeholder="Seleccionar asistentes...")
     total_presentes = len(presentes)
     
     st.markdown("<br>", unsafe_allow_html=True)
-    forzar_reemplazo = st.checkbox("⚠️ Corregir datos: tildar acá para reemplazar la planilla anterior de este espacio.", value=False)
+    forzar_reemplazo = st.checkbox("Corregir datos: tildar aca para reemplazar la planilla anterior.", value=False)
     
-    if st.button("💾 GUARDAR ASISTENCIA (SUPABASE ⚡)", type="primary", use_container_width=True):
+    if st.button("GUARDAR ASISTENCIA (SUPABASE)", type="primary", use_container_width=True):
         if total_presentes <= 0 and modo != "Cerrado":
-            st.error("⛔ Debes marcar asistentes o indicar 'Cerrado'.")
+            st.error("Debes marcar asistentes o indicar 'Cerrado'.")
             return
             
         with st.spinner("Procesando en Supabase..."):
             try:
                 if forzar_reemplazo:
-                    supabase.table("asistencia_diaria").delete().eq("fecha", fecha_str).eq("centro", centro).eq("espacio", espacio).execute()
-                    supabase.table("asistencia_personas").delete().eq("fecha", fecha_str).eq("centro", centro).eq("espacio", espacio).execute()
+                    supabase.table("asistencia_diaria").delete().eq("fecha", fecha_str).eq("centro", centro_seleccionado).eq("espacio", espacio).execute()
+                    supabase.table("asistencia_personas").delete().eq("fecha", fecha_str).eq("centro", centro_seleccionado).eq("espacio", espacio).execute()
                 
                 cabecera = {
-                    "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro,
+                    "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro_seleccionado,
                     "espacio": espacio, "presentes": total_presentes, "coordinador": nombre_visible,
                     "modo": modo, "notas": notas, 
                     "usuario": usuario, "accion": "append"
@@ -493,14 +496,14 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                 filas_personas = []
                 for n in presentes:
                     filas_personas.append({
-                        "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro,
+                        "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro_seleccionado,
                         "espacio": espacio, "nombre": n, "estado": "Presente", "es_nuevo": "NO",
                         "coordinador": nombre_visible, "usuario": usuario
                     })
                 ausentes = [n for n in nombres if n not in presentes]
                 for n in ausentes:
                     filas_personas.append({
-                        "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro,
+                        "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro_seleccionado,
                         "espacio": espacio, "nombre": n, "estado": "Ausente", "es_nuevo": "NO",
                         "coordinador": nombre_visible, "usuario": usuario
                     })
@@ -509,7 +512,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     supabase.table("asistencia_personas").insert(filas_personas).execute()
                 
                 st.balloons()
-                st.toast("✅ Cambios guardados correctamente")
+                st.toast("Cambios guardados correctamente")
                 time.sleep(1.5)
                 st.cache_data.clear()
                 st.rerun()
@@ -519,30 +522,33 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                 if "23505" in err_str or "already exists" in err_str.lower():
                     st.markdown(f"""
                     <div class='alert-box alert-warning'>
-                        ⚠️ <b>Planilla existente:</b> Ya se cargó una asistencia para el espacio '{espacio}' en esta fecha.<br><br>
-                        💡 <b>¿Te equivocaste o querés corregirla?</b> Activá la casilla de arriba que dice <i>"Corregir datos"</i> y volvé a presionar el botón de guardar para sobreescribir la lista vieja de forma segura.
+                        <b>Planilla existente:</b> Ya se cargo una asistencia para el espacio '{espacio}' en esta fecha.<br><br>
+                        <b>¿Te equivocaste o queres corregirla?</b> Activa la casilla de arriba que dice "Corregir datos" y volve a presionar el botón de guardar.
                     </div>
                     """, unsafe_allow_html=True)
                 else:
-                    st.error(f"❌ Error inesperado: {e}")
+                    st.error(f"Error inesperado: {e}")
 
 # ======================================================
-# 👥 PESTAÑA: BUSCADOR DE LEGAJOS Y BITÁCORA
+# PESTAÑA: BUSCADOR DE LEGAJOS Y BITÁCORA
 # ======================================================
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
-    st.markdown("<h3 style='margin-bottom:15px;'>👥 Buscador de Legajos</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='margin-bottom:15px;'>Buscador de Legajos</h3>", unsafe_allow_html=True)
     
-    df_centro = filter_personas_centro(df_personas, centro)
+    if centro == "Administración":
+        centro_seleccionado = st.selectbox("Filtrar padrón por centro barrial:", CENTROS, key="padrón_admin_select")
+    else:
+        centro_seleccionado = centro
+
+    df_centro = filter_personas_centro(df_personas, centro_seleccionado)
     nombres = sorted(df_centro["nombre"].unique()) if not df_centro.empty else []
 
-    seleccion = st.selectbox("Escribí el nombre para ver su ficha:", [""] + nombres)
+    seleccion = st.selectbox("Escribi el nombre para ver su ficha:", [""] + nombres)
     
     if not seleccion:
-        st.markdown("<div class='alert-box alert-gray'>🔍 Buscá a alguien arriba para ver su carnet.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='alert-box alert-gray'>Busca a alguien arriba para ver su carnet.</div>", unsafe_allow_html=True)
         if not df_centro.empty:
-            st.markdown("#### 📋 Padrón Oficial del Centro")
-            
-            # ✅ MEJORA: Pequeño filtro de estado para limpiar el listado general
+            st.markdown("#### Padrón Oficial del Centro")
             filtro_activo = st.radio("Filtrar padrón por estado:", ["Solo Activos", "Todos"], horizontal=True)
             df_mostrar_padrón = df_centro.copy()
             if filtro_activo == "Solo Activos":
@@ -560,8 +566,8 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
         for t in tags: tags_html += f"<span class='tag-badge'>{t}</span>"
 
     telefono = str(datos_persona.get("telefono", ""))
-    wa_btn_html = f"<div style='margin-top:5px;'><a href='https://wa.me/{format_wa_number(telefono)}' target='_blank' class='btn-wa'>💬 Enviar WhatsApp</a></div>" if (telefono and telefono.lower() != "none") else ""
-    estado_badge = "🟢 ACTIVO" if str(datos_persona.get("activo")).upper() != "NO" else "🔴 INACTIVO"
+    wa_btn_html = f"<div style='margin-top:5px;'><a href='https://wa.me/{format_wa_number(telefono)}' target='_blank' class='btn-wa'>Enviar WhatsApp</a></div>" if (telefono and telefono.lower() != "none") else ""
+    estado_badge = "ACTIVO" if str(datos_persona.get("activo")).upper() != "NO" else "INACTIVO"
     
     import urllib.parse
     avatar_url = f"https://api.dicebear.com/7.x/initials/svg?seed={urllib.parse.quote(seleccion)}&backgroundColor=004e7b&textColor=ffffff"
@@ -594,55 +600,55 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     st.markdown(f"""
 <div style="background:var(--surface); padding:15px; border-radius:var(--radius-sm); border:1px solid rgba(255,255,255,0.05); margin-bottom:25px;">
     <div style="margin-bottom:10px;">
-        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">📱 Teléfono</div>
+        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">Telefono</div>
         <div style="font-size:1.1rem;">{telefono if (telefono and telefono.lower()!='none') else 'No registrado'}</div>
         {wa_btn_html}
     </div>
     <div>
-        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">🏠 Dirección</div>
+        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase;">Direccion</div>
         <div style="font-size:1.1rem;">{str(datos_persona.get('domicilio','')) if str(datos_persona.get('domicilio','')).lower()!='none' else 'No registrada'}</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-    st.markdown("### 📝 Registrar Intervención / Nota del Día")
+    st.markdown("### Registrar Intervención / Nota del Día")
     with st.form("form_bitacora_seguimiento", clear_on_submit=True):
         f_nota = st.date_input("Fecha de lo ocurrido", value=get_today_ar())
         cat_nota = st.selectbox("Categoría de Seguimiento", CATEGORIAS_SEGUIMIENTO)
-        obs_nota = st.text_area("¿Qué pasó hoy? (Historia, trámites, escucha...)", placeholder="Ej: Se lo acompañó a sacar el DNI...")
+        obs_nota = st.text_area("¿Qué pasó hoy?", placeholder="Ej: Se lo acompañó a sacar el DNI...")
         
-        if st.form_submit_button("💾 Guardar en Bitácora (Supabase ⚡)", use_container_width=True):
+        if st.form_submit_button("Guardar en Bitácora (Supabase)", use_container_width=True):
             if not obs_nota.strip():
-                st.error("⚠️ La observación no puede quedar vacía.")
+                st.error("La observación no puede quedar vacía.")
             else:
                 with st.spinner("Asentando nota en la nube..."):
                     try:
                         f_nota_str = f_nota.isoformat()
                         nueva_intervencion = {
-                            "fecha": f_nota_str, "anio": year_of(f_nota_str), "centro": centro,
+                            "fecha": f_nota_str, "anio": year_of(f_nota_str), "centro": centro_seleccionado,
                             "nombre_persona": seleccion, "categoria": cat_nota,
                             "observacion": obs_nota.strip(), "usuario_registro": usuario
                         }
                         supabase.table("bitacora_seguimiento").insert(nueva_intervencion).execute()
-                        st.toast(f"✅ Nota registrada para {seleccion}")
+                        st.toast(f"Nota registrada para {seleccion}")
                         time.sleep(1)
                         st.cache_data.clear()
                         st.rerun()
                     except Exception as e: st.error(f"Error al registrar nota: {e}")
 
-    st.markdown("<br>### ⏳ Historial de Acompañamiento", unsafe_allow_html=True)
+    st.markdown("<br>### Historial de Acompañamiento", unsafe_allow_html=True)
     df_chico = df_seg[df_seg["nombre_persona"] == seleccion].copy() if not df_seg.empty else pd.DataFrame()
     
     if df_chico.empty:
-        st.markdown("<div class='alert-box alert-gray'>⚪ Todavía no hay notas asentadas en la bitácora para este participante.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='alert-box alert-gray'>Todavía no hay notas asentadas en la bitácora para este participante.</div>", unsafe_allow_html=True)
     else:
         df_chico = df_chico.sort_values("fecha", ascending=False)
         for _, row in df_chico.iterrows():
             st.markdown(f"""
             <div class='note-card'>
                 <div style='display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-secondary); margin-bottom:5px;'>
-                    <span>📅 <b>{row['fecha']}</b> — 🏷️ <i>{row['categoria']}</i></span>
-                    <span>✍️ Por: {row['usuario_registro']}</span>
+                    <span>Fecha: <b>{row['fecha']}</b> — Categoria: <i>{row['categoria']}</i></span>
+                    <span>Por: {row['usuario_registro']}</span>
                 </div>
                 <div style='font-size:0.95rem; color:var(--text-primary); line-height:1.4;'>
                     {row['observacion']}
@@ -651,12 +657,17 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
             """, unsafe_allow_html=True)
 
 # ======================================================
-# ➕ PESTAÑA: ALTA DE PERSONA
+# PESTAÑA: ALTA DE PERSONA
 # ======================================================
 def page_alta_persona(df_personas, centro, usuario):
-    st.markdown("<h3 style='margin-bottom:15px;'>➕ Alta de Persona al Padrón</h3>", unsafe_allow_html=True)
-    st.info("💡 Completá este formulario para ingresar al sistema a alguien que ya participa del centro.")
+    st.markdown("<h3 style='margin-bottom:15px;'>Alta de Persona al Padrón</h3>", unsafe_allow_html=True)
+    st.info("Completá este formulario para ingresar al sistema a alguien que ya participa del centro.")
     
+    if centro == "Administración":
+        centro_destino = st.selectbox("Asignar legajo al centro:", CENTROS, key="alta_admin_select")
+    else:
+        centro_destino = centro
+
     with st.form("alta_directa_form"):
         st.markdown("#### Datos Principales")
         col_a1, col_a2 = st.columns(2)
@@ -673,22 +684,22 @@ def page_alta_persona(df_personas, centro, usuario):
         new_etq = st.text_input("Etiquetas (Separadas por coma)")
         new_notas = st.text_area("Notas Permanentes")
         
-        if st.form_submit_button("💾 Guardar en el Padrón (Supabase ⚡)", type="primary", use_container_width=True):
+        if st.form_submit_button("Guardar en el Padrón (Supabase)", type="primary", use_container_width=True):
             if not new_nom.strip():
-                st.error("⚠️ El Nombre Completo es obligatorio.")
+                st.error("El Nombre Completo es obligatorio.")
             else:
                 with st.spinner("Guardando legajo en la nube..."):
                     try:
-                        check = supabase.table("personas").select("*").eq("centro", centro).ilike("nombre", new_nom.strip()).execute()
+                        check = supabase.table("personas").select("*").eq("centro", centro_destino).ilike("nombre", new_nom.strip()).execute()
                         if check.data:
-                            st.warning(f"⚠️ '{new_nom}' ya existe en este centro.")
+                            st.warning(f"'{new_nom}' ya existe en este centro.")
                         else:
                             fecha_nac_valida = None
                             if new_nac.strip():
                                 try: 
                                     fecha_nac_valida = pd.to_datetime(new_nac.strip()).date().isoformat()
                                 except:
-                                    st.error("⛔ Formato de fecha incorrecto. Usar AAAA-MM-DD.")
+                                    st.error("Formato de fecha incorrecto. Usar AAAA-MM-DD.")
                                     st.stop()
 
                             fila_nueva = {
@@ -696,22 +707,28 @@ def page_alta_persona(df_personas, centro, usuario):
                                 "fecha_nacimiento": fecha_nac_valida, "telefono": new_tel.strip() if new_tel.strip() else None,
                                 "domicilio": new_dom.strip() if new_dom.strip() else None, "contacto_emergencia": new_em.strip() if new_em.strip() else None,
                                 "etiquetas": new_etq.strip() if new_etq.strip() else None, "notas": new_notas.strip() if new_notas.strip() else None,
-                                "activo": "SI", "centro": centro, "usuario_alta": usuario
+                                "activo": "SI", "centro": centro_destino, "usuario_alta": usuario
                             }
                             supabase.table("personas").insert(fila_nueva).execute()
                             st.balloons()
-                            st.success(f"✅ ¡{new_nom} ingresado correctamente!")
+                            st.success(f"¡{new_nom} ingresado correctamente!")
                             time.sleep(1.5)
                             st.cache_data.clear()
                             st.rerun()
-                    except Exception as e: st.error(f"❌ Error al guardar: {e}")
+                    except Exception as e: st.error(f"Error al guardar: {e}")
 
 def page_reportes(df_asistencia, centro):
-    st.markdown("<h3 style='margin-bottom:15px;'>📊 Reportes Analíticos</h3>", unsafe_allow_html=True)
-    df_c = df_asistencia[df_asistencia["centro"] == centro].copy() if not df_asistencia.empty else pd.DataFrame()
+    st.markdown("<h3 style='margin-bottom:15px;'>Reportes Analíticos</h3>", unsafe_allow_html=True)
+    
+    if centro == "Administración":
+        centro_seleccionado = st.selectbox("Filtrar reporte por centro barrial:", CENTROS, key="reportes_admin_select")
+        df_c = df_asistencia[df_asistencia["centro"] == centro_seleccionado].copy() if not df_asistencia.empty else pd.DataFrame()
+    else:
+        df_c = df_asistencia[df_asistencia["centro"] == centro].copy() if not df_asistencia.empty else pd.DataFrame()
+        centro_seleccionado = centro
     
     if df_c.empty:
-        st.markdown("<div class='alert-box alert-gray'>📊 Todavía no hay datos históricos suficientes en este centro para generar estadísticas.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='alert-box alert-gray'>Todavía no hay datos históricos suficientes en este centro para generar estadísticas.</div>", unsafe_allow_html=True)
         return
         
     df_c["presentes_i"] = df_c["presentes"].apply(lambda x: clean_int(x, 0))
@@ -720,65 +737,73 @@ def page_reportes(df_asistencia, centro):
 
     avg_asistencia = df_c["presentes_i"].mean()
     record_concurrencia = df_c["presentes_i"].max()
-    record_row = df_c[df_c["presentes_i"] == record_concurrencia].iloc[0]
-    record_fecha = record_row["fecha"]
 
     rc1, rc2 = st.columns(2)
-    rc1.markdown(f"<div class='kpi'><h3>Promedio de Asistencia</h3><div class='v'>{avg_asistencia:.1f}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>participantes / día</span></div>", unsafe_allow_html=True)
-    rc2.markdown(f"<div class='kpi'><h3>Récord Histórico</h3><div class='v'>{record_concurrencia}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>Registrado el {record_fecha}</span></div>", unsafe_allow_html=True)
+    rc1.markdown(f"<div class='kpi'><h3>Promedio de Asistencia</h3><div class='v'>{avg_asistencia:.1f}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>participantes / dia</span></div>", unsafe_allow_html=True)
+    rc2.markdown(f"<div class='kpi'><h3>Récord Histórico</h3><div class='v'>{record_concurrencia}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>Maxima concurrencia individual</span></div>", unsafe_allow_html=True)
     
     st.markdown("<br><hr style='opacity:0.1;'><br>", unsafe_allow_html=True)
 
-    st.markdown("#### 📈 Evolución Temporal Concurrencia")
+    st.markdown("#### Evolución Temporal Concurrencia")
     df_linea = df_c.groupby("fecha")["presentes_i"].sum().reset_index()
     st.line_chart(df_linea.set_index("fecha")["presentes_i"], color="#60A5FA")
 
-    if centro == C_MARANATHA:
-        st.markdown("<br>#### 📊 Concurrencia Promedio por Taller / Espacio", unsafe_allow_html=True)
+    if centro_seleccionado == C_MARANATHA:
+        st.markdown("<br>#### Concurrencia Promedio por Taller / Espacio", unsafe_allow_html=True)
         df_espacio = df_c.groupby("espacio")["presentes_i"].mean().reset_index().sort_values("presentes_i", ascending=False)
         st.bar_chart(df_espacio.set_index("espacio")["presentes_i"], color="#A78BFA")
 
+# ======================================================
+# CONSOLE GLOBAL ADMIN (SUPERVISIÓN TOTAL DE ALEJANDRO)
+# ======================================================
 def page_global(df_asistencia, df_personas, df_ap):
-    st.markdown("<h3 style='margin-bottom:15px;'>🌍 Consola Central Institucional</h3>", unsafe_allow_html=True)
-    st.caption("Panel de control unificado y métricas consolidadas de la federación.")
+    st.markdown("<h3 style='margin-bottom:15px;'>Consola Central Institucional</h3>", unsafe_allow_html=True)
+    st.caption("Panel de control unificado de la federación para auditoría de cargas y métricas generales.")
     
     t_pers = len(df_personas["nombre"].unique()) if not df_personas.empty else 0
     t_asist = df_asistencia["presentes"].apply(lambda x: clean_int(x, 0)).sum() if not df_asistencia.empty else 0
     
     k1, k2 = st.columns(2)
-    k1.markdown(f"<div class='kpi'><h3>Padrón Total Institucional</h3><div class='v'>{t_pers}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>Personas registradas en la federación</span></div>", unsafe_allow_html=True)
-    k2.markdown(f"<div class='kpi'><h3>Total de Asistencias</h3><div class='v'>{t_asist}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>Ingresos registrados acumulados</span></div>", unsafe_allow_html=True)
+    k1.markdown(f"<div class='kpi'><h3>Padrón Total Institucional</h3><div class='v'>{t_pers}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>Personas en la federación</span></div>", unsafe_allow_html=True)
+    k2.markdown(f"<div class='kpi'><h3>Total de Asistencias</h3><div class='v'>{t_asist}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>Ingresos totales acumulados</span></div>", unsafe_allow_html=True)
+    
+    st.markdown("<br>#### Auditoría y Estado de Cargas en los Centros", unsafe_allow_html=True)
+    
+    # Tabla de auditoría en tiempo real para verificar qué sube cada coordinador
+    if not df_asistencia.empty:
+        df_audit = df_asistencia.copy().sort_values("created_at", ascending=False)
+        df_audit_clean = df_audit[["fecha", "centro", "espacio", "presentes", "coordinador", "modo"]].rename(
+            columns={"fecha": "Fecha", "centro": "Centro Barrial", "espacio": "Espacio", "presentes": "Asistentes", "coordinador": "Responsable", "modo": "Estado del Día"}
+        )
+        st.dataframe(df_audit_clean, use_container_width=True, hide_index=True)
+    else:
+        st.markdown("<div class='alert-box alert-gray'>No se registran planillas en la base de datos de asistencia.</div>", unsafe_allow_html=True)
 
 # ======================================================
-# 🎮 CONTROLADOR PRINCIPAL
+# CONTROLADOR PRINCIPAL
 # ======================================================
 def main():
     if not st.session_state.get("logged_in"): 
         show_login_screen()
     
     u = st.session_state["usuario"]
-    centro = st.session_state["centro_assigned"] if "centro_assigned" in st.session_state else st.session_state["centro_asignado"]
+    centro = st.session_state["centro_asignado"]
     nombre = st.session_state["nombre_visible"]
     
-    centro_clean = clean_string(centro)
-    match_centro = next((c for c in CENTROS if clean_string(c) == centro_clean), None)
-    if not match_centro:
-        st.error(f"Error: El centro '{centro}' no está mapeado.")
-        st.stop()
-    centro = match_centro
-
-    if centro == C_BELEN and u.lower() != "natasha_test":
-        st.error("🔒 ACCESO DENEGADO: El centro Calle Belén es de acceso exclusivo para la administración.")
-        if st.button("⬅️ Salir de la cuenta", type="primary"):
-            st.session_state.clear(); st.rerun()
-        return
+    if centro != "Administración":
+        centro_clean = clean_string(centro)
+        match_centro = next((c for c in CENTROS if clean_string(c) == centro_clean), None)
+        if not match_centro:
+            st.error(f"Error: El centro '{centro}' no está mapeado.")
+            st.stop()
+        centro = match_centro
 
     show_top_header(nombre, centro)
     df_asistencia, df_personas, df_ap, df_seg = load_all_data_supabase()
 
-    list_tabs = ["🏠 Inicio", "👥 Legajos", "➕ Alta", "📊 Reportes"]
-    if u.lower() == "natasha_test": 
-        list_tabs.append("🌍 Global")
+    list_tabs = ["Inicio", "Legajos", "Alta", "Reportes"]
+    if centro == "Administración" or u.lower() == "admin": 
+        list_tabs.append("Global")
     
     tabs = st.tabs(list_tabs)
     
@@ -797,7 +822,7 @@ def main():
     with tabs[3]: 
         page_reportes(df_asistencia, centro)
         
-    if len(tabs) > 4:
+    if "Global" in list_tabs and len(tabs) > 4:
         with tabs[4]: 
             page_global(df_asistencia, df_personas, df_ap)
 
