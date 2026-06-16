@@ -788,41 +788,88 @@ def page_alta_persona(df_personas, centro, usuario):
                             st.rerun()
                     except Exception as e: st.error(f"Error al guardar: {e}")
 
-def page_reportes(df_asistencia, centro):
-    st.markdown("<h3 style='margin-bottom:15px;'>Reportes Analíticos</h3>", unsafe_allow_html=True)
+def page_reportes_avanzado(df_asistencia, centro):
+    st.markdown("<h3 style='margin-bottom:15px;'>Métricas y Tendencias Temporales</h3>", unsafe_allow_html=True)
     
-    if centro == "Administración":
-        centro_seleccionado = st.selectbox("Filtrar reporte por centro barrial:", CENTROS, key="reportes_admin_select")
-        df_c = df_asistencia[df_asistencia["centro"] == centro_seleccionado].copy() if not df_asistencia.empty else pd.DataFrame()
-    else:
-        df_c = df_asistencia[df_asistencia["centro"] == centro].copy() if not df_asistencia.empty else pd.DataFrame()
-        centro_seleccionado = centro
+    centro_sel = st.selectbox("Filtrar reporte por centro:", CENTROS) if centro == "Administración" else centro
+    
+    df_c = df_asistencia[df_asistencia["centro"] == centro_sel].copy() if not df_asistencia.empty else pd.DataFrame()
     
     if df_c.empty:
-        st.markdown("<div class='alert-box alert-gray'>Todavía no hay datos históricos suficientes en este centro para generar estadísticas.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='alert-box alert-gray'>Sin registros históricos en Supabase para calcular tendencias.</div>", unsafe_allow_html=True)
         return
         
+    # 1. Preparación de datos temporales con Pandas
     df_c["presentes_i"] = df_c["presentes"].apply(lambda x: clean_int(x, 0))
-    df_c["fecha_dt"] = pd.to_datetime(df_c["fecha"])
+    df_c["fecha_dt"] = pd.to_datetime(df_c["fecha"]).dt.date
     df_c = df_c.sort_values("fecha_dt")
-
-    avg_asistencia = df_c["presentes_i"].mean()
-    record_concurrencia = df_c["presentes_i"].max()
-
-    rc1, rc2 = st.columns(2)
-    rc1.markdown(f"<div class='kpi'><h3>Promedio de Asistencia</h3><div class='v'>{avg_asistencia:.1f}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>participantes / dia</span></div>", unsafe_allow_html=True)
-    rc2.markdown(f"<div class='kpi'><h3>Récord Histórico</h3><div class='v'>{record_concurrencia}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>Maxima concurrencia individual</span></div>", unsafe_allow_html=True)
     
-    st.markdown("<br><hr style='opacity:0.1;'><br>", unsafe_allow_html=True)
+    hoy = get_today_ar()
+    
+    # 2. CÁLCULO DE VENTANAS TEMPORALES (WoW y MoM)
+    inicio_semana_actual = hoy - timedelta(days=6)
+    inicio_semana_anterior = hoy - timedelta(days=13)
+    
+    inicio_mes_actual = hoy.replace(day=1)
+    # Cálculo sutil para el mes anterior
+    inicio_mes_anterior = (inicio_mes_actual - timedelta(days=1)).replace(day=1)
+    
+    # Asistencias por períodos
+    asist_sem_actual = df_c[(df_c["fecha_dt"] >= inicio_semana_actual) & (df_c["fecha_dt"] <= hoy)][ "presentes_i"].sum()
+    asist_sem_anterior = df_c[(df_c["fecha_dt"] >= inicio_semana_anterior) & (df_c["fecha_dt"] < inicio_semana_actual)]["presentes_i"].sum()
+    
+    asist_mes_actual = df_c[(df_c["fecha_dt"] >= inicio_mes_actual) & (df_c["fecha_dt"] <= hoy)]["presentes_i"].sum()
+    asist_mes_anterior = df_c[(df_c["fecha_dt"] >= inicio_mes_anterior) & (df_c["fecha_dt"] < inicio_mes_actual)]["presentes_i"].sum()
+    
+    # 3. CÁLCULO DE PORCENTAJES DE VARIACIÓN
+    def calcular_variacion(actual, anterior):
+        if anterior == 0:
+            return 0.0
+        return ((actual - anterior) / anterior) * 100
+    
+    var_wow = calcular_variacion(asist_sem_actual, asist_sem_anterior)
+    var_mom = calcular_variacion(asist_mes_actual, asist_mes_anterior)
+    
+    # 4. RENDERIZADO DE CONTENEDORES GEOMÉTRICOS (DISEÑO PREMIUM)
+    st.markdown("#### Evolución de Tendencias")
+    m1, m2 = st.columns(2)
+    
+    with m1:
+        color_wow = "#86EFAC" if var_wow >= 0 else "#FCA5A5"
+        signo_wow = "+" if var_wow >= 0 else ""
+        st.markdown(f"""
+        <div class='kpi'>
+            <h3>Semana vs Semana Anterior (WoW)</h3>
+            <div class='v'>{asist_sem_actual} <span style='font-size:1rem; color:{color_wow}; font-weight:600;'>({signo_wow}{var_wow:.1f}%)</span></div>
+            <span style='font-size:0.7rem; color:var(--text-secondary);'>Últimos 7 días vs 7 días previos</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with m2:
+        color_mom = "#86EFAC" if var_mom >= 0 else "#FCA5A5"
+        signo_mom = "+" if var_mom >= 0 else ""
+        st.markdown(f"""
+        <div class='kpi'>
+            <h3>Mes Actual vs Mes Anterior (MoM)</h3>
+            <div class='v'>{asist_mes_actual} <span style='font-size:1rem; color:{color_mom}; font-weight:600;'>({signo_mom}{var_mom:.1f}%)</span></div>
+            <span style='font-size:0.7rem; color:var(--text-secondary);'>Acumulado del mes vs mes anterior completo</span>
+        </div>
+        """, unsafe_allow_html=True)
 
-    st.markdown("#### Evolución Temporal Concurrencia")
-    df_linea = df_c.groupby("fecha")["presentes_i"].sum().reset_index()
-    st.line_chart(df_linea.set_index("fecha")["presentes_i"], color="#60A5FA")
-
-    if centro_seleccionado == C_MARANATHA:
-        st.markdown("<br>#### Concurrencia Promedio por Taller / Espacio", unsafe_allow_html=True)
-        df_espacio = df_c.groupby("espacio")["presentes_i"].mean().reset_index().sort_values("presentes_i", ascending=False)
-        st.bar_chart(df_espacio.set_index("espacio")["presentes_i"], color="#A78BFA")
+    st.markdown("<br><hr style='opacity:0.05;'><br>", unsafe_allow_html=True)
+    
+    # 5. OTRAS MÉTRICAS: ANÁLISIS POR DÍA DE LA SEMANA (COMPORTAMIENTO)
+    st.markdown("#### ¿Qué días hay más movimiento en el Centro?")
+    df_c["dia_semana"] = pd.to_datetime(df_c["fecha"]).dt.day_name()
+    
+    # Mapeo sutil a español para mantener el orden y la grilla perfecta
+    dias_map = {'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles', 'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'}
+    df_c["dia_semana"] = df_c["dia_semana"].map(dias_map)
+    
+    # Agrupamos por promedio para ver el comportamiento real sin importar faltas
+    df_dias = df_c.groupby("dia_semana")["presentes_i"].mean().reindex(['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']).fillna(0)
+    
+    st.bar_chart(df_dias, color="#60A5FA")
 
 # ======================================================
 # CONSOLE GLOBAL ADMIN (SUPERVISIÓN TOTAL DE ALEJANDRO)
