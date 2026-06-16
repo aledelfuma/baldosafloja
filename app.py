@@ -131,7 +131,7 @@ div.logout-wrapper > div > button {
 .alert-warning { background-color: rgba(245, 158, 11, 0.15); color: #FDE047 !important; border: 1px solid rgba(245, 158, 11, 0.3); }
 .alert-gray { background-color: var(--surface); color: var(--text-secondary) !important; border: 1px solid rgba(255,255,255,0.05); }
 
-/* FHA DE LEGAJO MINIMALISTA Y GEOMÉTRICA */
+/* FICHA DE LEGAJO MINIMALISTA Y GEOMÉTRICA */
 .profile-card {
     background-color: var(--surface);
     border-radius: var(--radius-lg);
@@ -336,7 +336,7 @@ def get_today_asistencia_summary(df_a):
 
 def filter_personas_centro(df_personas, centro):
     if df_personas.empty: return df_personas
-    if centro == "Administración": return df_personas.copy()
+    if centro in ["Administración", "coordinacion"]: return df_personas.copy()
     centro_clean = clean_string(centro)
     df_temp = df_personas.copy()
     df_temp['centro_norm'] = df_temp['centro'].apply(clean_string)
@@ -420,7 +420,7 @@ def show_top_header(nombre, centro):
     st.markdown("<div style='margin-bottom:15px;'></div>", unsafe_allow_html=True)
 
 def show_top_alerts(df_latest, df_personas, df_ap, centro):
-    if centro == "Administración":
+    if centro in ["Administración", "coordinacion"]:
         return
         
     df_c = filter_personas_centro(df_personas, centro)
@@ -480,7 +480,7 @@ def kpi_row_full(df_asistencia, centro):
         df_kpi["presentes_i"] = df_kpi["presentes"].apply(lambda x: clean_int(x, 0))
         df_kpi["fecha_str"] = df_kpi["fecha"].astype(str)
         
-        if centro == "Administración":
+        if centro in ["Administración", "coordinacion"]:
             df_centro = df_kpi
         else:
             df_centro = df_kpi[df_kpi["centro"] == centro]
@@ -495,12 +495,12 @@ def kpi_row_full(df_asistencia, centro):
     kc3.markdown(f"<div class='kpi'><h3>Mes actual</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
 
 # ======================================================
-# PESTAÑA: CARGA DIARIA (TODOS COMO GENERAL)
+# PESTAÑA: CARGA DIARIA
 # ======================================================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>Carga Diaria</h3>", unsafe_allow_html=True)
     
-    if centro == "Administración":
+    if centro in ["Administración", "coordinacion"]:
         centro_seleccionado = st.selectbox("Seleccionar Centro a gestionar:", CENTROS)
     else:
         centro_seleccionado = centro
@@ -513,7 +513,6 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     
     col_e, col_m = st.columns(2)
     with col_e: 
-        # ✅ MODIFICACIÓN ACEPTADA: Todos los centros cargan como "General" sin desglose de talleres
         espacio = DEFAULT_ESPACIO 
         st.info(f"Espacio asignado institucional: {espacio}")
     with col_m: 
@@ -549,7 +548,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     "modo": modo, "notas": notas, 
                     "usuario": usuario, "accion": "append"
                 }
-                supabase.table("asistencia_diaria").insert(cabecheader := cabecera).execute()
+                supabase.table("asistencia_diaria").insert(cabecera).execute()
                 
                 filas_personas = []
                 for n in presentes:
@@ -581,7 +580,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     st.markdown(f"""
                     <div class='alert-box alert-warning'>
                         <b>Planilla existente:</b> Ya se cargo una asistencia para el espacio '{espacio}' en esta fecha.<br><br>
-                        <b>¿Te equivocaste o queres corregirla?</b> Activa la casilla de arriba que dice "Corregir datos" y volve a presionar el botón de guardar.
+                        <b>¿Te equivocaste o queres corregirla?</b> Activa la casilla de arriba que dice "Corregir datos" and volve a presionar el botón de guardar.
                     </div>
                     """, unsafe_allow_html=True)
                 else:
@@ -593,7 +592,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
 def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>Buscador de Legajos</h3>", unsafe_allow_html=True)
     
-    if centro == "Administración":
+    if centro in ["Administración", "coordinacion"]:
         centro_seleccionado = st.selectbox("Filtrar padrón por centro barrial:", CENTROS, key="padrón_admin_select")
     else:
         centro_seleccionado = centro
@@ -601,7 +600,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     df_centro = filter_personas_centro(df_personas, centro_seleccionado)
     nombres = sorted(df_centro["nombre"].unique().tolist()) if not df_centro.empty else []
 
-    seleccion = st.selectbox("Escribi el nombre para ver the ficha:", [""] + nombres)
+    seleccion = st.selectbox("Escribi el nombre para ver la ficha:", [""] + nombres)
     
     if not seleccion:
         st.markdown("<div class='alert-box alert-gray'>Busca a alguien arriba para ver su carnet.</div>", unsafe_allow_html=True)
@@ -729,7 +728,7 @@ def page_alta_persona(df_personas, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>Alta de Persona al Padrón</h3>", unsafe_allow_html=True)
     st.info("Completá este formulario para ingresar al sistema a alguien que ya participa del centro.")
     
-    if centro == "Administración":
+    if centro in ["Administración", "coordinacion"]:
         centro_destino = st.selectbox("Asignar legajo al centro:", CENTROS, key="alta_admin_select")
     else:
         centro_destino = centro
@@ -784,32 +783,29 @@ def page_alta_persona(df_personas, centro, usuario):
                     except Exception as e: st.error(f"Error al guardar: {e}")
 
 # ======================================================
-# ✅ PESTAÑA NUEVA: METRICAS AVANZADAS COMPARATIVAS (WOW / MOM / COMPORTAMIENTO)
+# PESTAÑA: REPORTES ANALÍTICOS AVANZADOS
 # ======================================================
 def page_reportes(df_asistencia, centro):
     st.markdown("<h3 style='margin-bottom:15px;'>Métricas y Tendencias Temporales</h3>", unsafe_allow_html=True)
     
-    centro_seleccionado = st.selectbox("Filtrar reporte por centro barrial:", CENTROS, key="reportes_admin_select") if centro == "Administración" else centro
+    centro_seleccionado = st.selectbox("Filtrar reporte por centro barrial:", CENTROS, key="reportes_admin_select") if centro in ["Administración", "coordinacion"] else centro
     df_c = df_asistencia[df_asistencia["centro"] == centro_seleccionado].copy() if not df_asistencia.empty else pd.DataFrame()
     
     if df_c.empty:
         st.markdown("<div class='alert-box alert-gray'>Todavía no hay datos históricos suficientes en este centro para generar estadísticas avanzadas.</div>", unsafe_allow_html=True)
         return
         
-    # Preparación matemática nativa en Backend
     df_c["presentes_i"] = df_c["presentes"].apply(lambda x: clean_int(x, 0))
     df_c["fecha_dt"] = pd.to_datetime(df_c["fecha"]).dt.date
     df_c = df_c.sort_values("fecha_dt")
 
     hoy = get_today_ar()
     
-    # Líneas de tiempo sutiles para cortes WoW y MoM
     inicio_sem_actual = hoy - timedelta(days=6)
     inicio_sem_anterior = hoy - timedelta(days=13)
     inicio_mes_actual = hoy.replace(day=1)
     inicio_mes_anterior = (inicio_mes_actual - timedelta(days=1)).replace(day=1)
     
-    # Procesamiento de conjuntos analíticos
     sum_sem_actual = df_c[(df_c["fecha_dt"] >= inicio_sem_actual) & (df_c["fecha_dt"] <= hoy)]["presentes_i"].sum()
     sum_sem_anterior = df_c[(df_c["fecha_dt"] >= inicio_sem_anterior) & (df_c["fecha_dt"] < inicio_sem_actual)]["presentes_i"].sum()
     sum_mes_actual = df_c[(df_c["fecha_dt"] >= inicio_mes_actual) & (df_c["fecha_dt"] <= hoy)]["presentes_i"].sum()
@@ -822,7 +818,6 @@ def page_reportes(df_asistencia, centro):
     wow_pct = delta_pct(sum_sem_actual, sum_sem_anterior)
     mom_pct = delta_pct(sum_mes_actual, sum_mes_anterior)
     
-    # Renderizado Geométrico de Control Compartido
     m1, m2 = st.columns(2)
     with m1:
         c_wow = "#86EFAC" if wow_pct >= 0 else "#FCA5A5"
@@ -847,7 +842,6 @@ def page_reportes(df_asistencia, centro):
     df_linea = df_c.groupby("fecha")["presentes_i"].sum().reset_index()
     st.line_chart(df_linea.set_index("fecha")["presentes_i"], color="#60A5FA")
 
-    # Análisis de comportamiento por días de la semana
     st.markdown("<br>#### Análisis del Flujo por Día de la Semana", unsafe_allow_html=True)
     df_c["dia_nombre"] = pd.to_datetime(df_c["fecha"]).dt.day_name()
     map_dias = {'Monday':'Lunes','Tuesday':'Martes','Wednesday':'Miércoles','Thursday':'Jueves','Friday':'Viernes','Saturday':'Sábado','Sunday':'Domingo'}
@@ -857,7 +851,7 @@ def page_reportes(df_asistencia, centro):
     st.bar_chart(df_dias_agg, color="#A78BFA")
 
 # ======================================================
-# CONSOLE GLOBAL ADMIN (SUPERVISIÓN TOTAL DE ALEJANDRO)
+# CONSOLE GLOBAL ADMIN (SUPERVISIÓN TOTAL DE COORDINADORES)
 # ======================================================
 def page_global(df_asistencia, df_personas, df_ap):
     st.markdown("<h3 style='margin-bottom:15px;'>Consola Central Institucional</h3>", unsafe_allow_html=True)
@@ -900,7 +894,7 @@ def page_global(df_asistencia, df_personas, df_ap):
         
         st.markdown("<br>", unsafe_allow_html=True)
         csv_historico = df_audit_clean.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Descargar Base de Datos Histórica Completa (Auditoría)", data=csv_historico, file_name="historico_asistencias_federacion.csv", mime="text/csv")
+        st.download_button("📥 Descargar Base de Datos Histórica Completa", data=csv_historico, file_name="historico_asistencias_federacion.csv", mime="text/csv")
     else:
         st.markdown("<div class='alert-box alert-gray'>No se registran planillas en la base de datos de asistencia.</div>", unsafe_allow_html=True)
 
@@ -915,7 +909,7 @@ def main():
     centro = st.session_state["centro_asignado"]
     nombre = st.session_state["nombre_visible"]
     
-    if centro != "Administración":
+    if centro not in ["Administración", "coordinacion"]:
         centro_clean = clean_string(centro)
         match_centro = next((c for c in CENTROS if clean_string(c) == centro_clean), None)
         if not match_centro:
@@ -927,7 +921,8 @@ def main():
     df_asistencia, df_personas, df_ap, df_seg = load_all_data_supabase()
 
     list_tabs = ["Inicio", "Legajos", "Alta", "Reportes"]
-    if centro == "Administración" or u.lower() == "admin": 
+    # ✅ SECCIÓN CONFIGURADA: Acceso completo concedido tanto a Administración como a Coordinación
+    if centro in ["Administración", "coordinacion"] or u.lower() == "admin": 
         list_tabs.append("Global")
     
     tabs = st.tabs(list_tabs)
