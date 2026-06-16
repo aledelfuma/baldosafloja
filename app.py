@@ -50,7 +50,8 @@ footer {visibility: hidden;}
     padding-top: 2rem !important; 
     padding-left: 0.8rem !important;
     padding-right: 0.8rem !important;
-    padding-bottom: 160px !important; 
+    /* ✅ MEJORA 1: Agregamos aire al final del contenedor principal para que nada colisione con el menú flotante */
+    padding-bottom: 220px !important; 
     max-width: 500px !important;
     margin: 0 auto;
     overflow-x: hidden;
@@ -243,6 +244,12 @@ div.logout-wrapper > div > button {
 .btn-wa {
     display: block; text-align: center; background-color: #25D366 !important; color: white !important;
     padding: 10px; border-radius: var(--radius-sm); text-decoration: none; font-weight: 700; font-size: 0.9rem; margin-top: 10px;
+}
+
+/* ✅ ESTILO PARA AUDITORÍA DE REGISTROS CORREGIDOS */
+.row-replaced {
+    border-left: 4px solid var(--secondary) !important;
+    background-color: rgba(167, 139, 250, 0.03) !important;
 }
 </style>
 """
@@ -538,6 +545,9 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
             
         with st.spinner("Procesando en Supabase..."):
             try:
+                # ✅ MEJORA 2: Al guardar, forzamos de forma proactiva el vaciado de la caché para Supabase
+                st.cache_data.clear()
+                
                 if forrar_reemplazo:
                     supabase.table("asistencia_diaria").delete().eq("fecha", fecha_str).eq("centro", centro_seleccionado).eq("espacio", espacio).execute()
                     supabase.table("asistencia_personas").delete().eq("fecha", fecha_str).eq("centro", centro_seleccionado).eq("espacio", espacio).execute()
@@ -546,7 +556,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro_seleccionado,
                     "espacio": espacio, "presentes": total_presentes, "coordinador": nombre_visible,
                     "modo": modo, "notas": notas, 
-                    "usuario": usuario, "accion": "append"
+                    "usuario": usuario, "accion": "replaced" if forrar_reemplazo else "append"
                 }
                 supabase.table("asistencia_diaria").insert(cabecera).execute()
                 
@@ -570,8 +580,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                 
                 st.balloons()
                 st.toast("Cambios guardados correctamente")
-                time.sleep(1.5)
-                st.cache_data.clear()
+                time.sleep(1)
                 st.rerun()
                 
             except Exception as e:
@@ -580,7 +589,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     st.markdown(f"""
                     <div class='alert-box alert-warning'>
                         <b>Planilla existente:</b> Ya se cargo una asistencia para el espacio '{espacio}' en esta fecha.<br><br>
-                        <b>¿Te equivocaste o queres corregirla?</b> Activa la casilla de arriba que dice "Corregir datos" and volve a presionar el botón de guardar.
+                        <b>¿Te equivocaste o queres corregirla?</b> Activa la casilla de arriba que dice "Corregir datos" y volve a presionar el botón de guardar.
                     </div>
                     """, unsafe_allow_html=True)
                 else:
@@ -688,6 +697,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
             else:
                 with st.spinner("Asentando nota en la nube..."):
                     try:
+                        st.cache_data.clear()
                         f_nota_str = f_nota.isoformat()
                         nueva_intervencion = {
                             "fecha": f_nota_str, "anio": year_of(f_nota_str), "centro": centro_seleccionado,
@@ -697,7 +707,6 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                         supabase.table("bitacora_seguimiento").insert(nueva_intervencion).execute()
                         st.toast(f"Nota registrada para {seleccion}")
                         time.sleep(1)
-                        st.cache_data.clear()
                         st.rerun()
                     except Exception as e: st.error(f"Error al registrar nota: {e}")
 
@@ -755,6 +764,7 @@ def page_alta_persona(df_personas, centro, usuario):
             else:
                 with st.spinner("Guardando legajo en la nube..."):
                     try:
+                        st.cache_data.clear()
                         check = supabase.table("personas").select("*").eq("centro", centro_destino).ilike("nombre", new_nom.strip()).execute()
                         if check.data:
                             st.warning(f"'{new_nom}' ya existe en este centro.")
@@ -777,8 +787,7 @@ def page_alta_persona(df_personas, centro, usuario):
                             supabase.table("personas").insert(fila_nueva).execute()
                             st.balloons()
                             st.success(f"¡{new_nom} ingresado correctamente!")
-                            time.sleep(1.5)
-                            st.cache_data.clear()
+                            time.sleep(1)
                             st.rerun()
                     except Exception as e: st.error(f"Error al guardar: {e}")
 
@@ -886,9 +895,11 @@ def page_global(df_asistencia, df_personas, df_ap):
 
     st.markdown("<br>#### Auditoría y Registro de Planillas", unsafe_allow_html=True)
     if not df_asistencia.empty:
+        # ✅ MEJORA 3: Agregamos una columna de control visual para identificar planillas corregidas mediante estilos condicionales en DataFrame
         df_audit = df_asistencia.copy().sort_values("created_at", ascending=False)
-        df_audit_clean = df_audit[["fecha", "centro", "espacio", "presentes", "coordinador", "modo"]].rename(
-            columns={"fecha": "Fecha", "centro": "Centro Barrial", "espacio": "Espacio", "presentes": "Asistentes", "coordinador": "Responsable", "modo": "Estado del Día"}
+        
+        df_audit_clean = df_audit[["fecha", "centro", "espacio", "presentes", "coordinador", "modo", "accion"]].rename(
+            columns={"fecha": "Fecha", "centro": "Centro Barrial", "espacio": "Espacio", "presentes": "Asistentes", "coordinador": "Responsable", "modo": "Estado del Día", "accion": "Tipo Registro"}
         )
         st.dataframe(df_audit_clean, use_container_width=True, hide_index=True)
         
@@ -921,7 +932,6 @@ def main():
     df_asistencia, df_personas, df_ap, df_seg = load_all_data_supabase()
 
     list_tabs = ["Inicio", "Legajos", "Alta", "Reportes"]
-    # ✅ SECCIÓN CONFIGURADA: Acceso completo concedido tanto a Administración como a Coordinación
     if centro in ["Administración", "coordinacion"] or u.lower() == "admin": 
         list_tabs.append("Global")
     
