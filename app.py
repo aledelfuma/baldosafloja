@@ -120,6 +120,7 @@ div.logout-wrapper > div > button {
   background: var(--surface);
   border: 1px solid rgba(255,255,255,0.05);
   text-align: center;
+  height: 100%;
 }
 .kpi h3 { margin: 0; font-size: 0.6rem; color: var(--text-secondary) !important; text-transform: uppercase; letter-spacing: 0.5px; }
 .kpi .v { font-size: 1.8rem; font-weight: 800; color: var(--primary) !important; line-height: 1; margin-top: 5px; }
@@ -130,7 +131,7 @@ div.logout-wrapper > div > button {
 .alert-warning { background-color: rgba(245, 158, 11, 0.15); color: #FDE047 !important; border: 1px solid rgba(245, 158, 11, 0.3); }
 .alert-gray { background-color: var(--surface); color: var(--text-secondary) !important; border: 1px solid rgba(255,255,255,0.05); }
 
-/* FHA DE LEGAJO MINIMALISTA Y GEOMÉTRICA (PURE ABSTRACTION) */
+/* FHA DE LEGAJO MINIMALISTA Y GEOMÉTRICA */
 .profile-card {
     background-color: var(--surface);
     border-radius: var(--radius-lg);
@@ -239,11 +240,9 @@ div.logout-wrapper > div > button {
     border-bottom: 1px solid rgba(255,255,255,0.02);
 }
 
-.login-box {
-    background-color: var(--surface);
-    padding: 30px 25px;
-    border-radius: var(--radius-lg);
-    border: 1px solid rgba(255,255,255,0.05);
+.btn-wa {
+    display: block; text-align: center; background-color: #25D366 !important; color: white !important;
+    padding: 10px; border-radius: var(--radius-sm); text-decoration: none; font-weight: 700; font-size: 0.9rem; margin-top: 10px;
 }
 </style>
 """
@@ -496,7 +495,7 @@ def kpi_row_full(df_asistencia, centro):
     kc3.markdown(f"<div class='kpi'><h3>Mes actual</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
 
 # ======================================================
-# PESTAÑA: CARGA DIARIA
+# PESTAÑA: CARGA DIARIA (TODOS COMO GENERAL)
 # ======================================================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>Carga Diaria</h3>", unsafe_allow_html=True)
@@ -514,9 +513,9 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
     
     col_e, col_m = st.columns(2)
     with col_e: 
-        # ✅ MODIFICACIÓN SOLICITADA: Todos los centros cargan ahora directamente como "General"
+        # ✅ MODIFICACIÓN ACEPTADA: Todos los centros cargan como "General" sin desglose de talleres
         espacio = DEFAULT_ESPACIO 
-        st.info(f"Espacio de carga asignado: {espacio}")
+        st.info(f"Espacio asignado institucional: {espacio}")
     with col_m: 
         modo = st.selectbox("Modo / Actividad", ["Día habitual", "Actividad especial", "Cerrado"])
     
@@ -550,7 +549,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                     "modo": modo, "notas": notas, 
                     "usuario": usuario, "accion": "append"
                 }
-                supabase.table("asistencia_diaria").insert(cabecera).execute()
+                supabase.table("asistencia_diaria").insert(cabecheader := cabecera).execute()
                 
                 filas_personas = []
                 for n in presentes:
@@ -602,8 +601,7 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     df_centro = filter_personas_centro(df_personas, centro_seleccionado)
     nombres = sorted(df_centro["nombre"].unique().tolist()) if not df_centro.empty else []
 
-    # Buscador de orden alfabético estricto y limpio
-    seleccion = st.selectbox("Escribi el nombre para ver la ficha:", [""] + nombres)
+    seleccion = st.selectbox("Escribi el nombre para ver the ficha:", [""] + nombres)
     
     if not seleccion:
         st.markdown("<div class='alert-box alert-gray'>Busca a alguien arriba para ver su carnet.</div>", unsafe_allow_html=True)
@@ -640,7 +638,6 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     direccion_val = str(datos_persona.get('domicilio','')).strip()
     direccion_mostrar = "No registrada" if (not direccion_val or direccion_val.lower() == 'none') else direccion_val
 
-    # 🛠️ CARNET REDISEÑADO: MÁXIMA SUTILEZA, GEOMETRÍA Y EFICIENCIA OPERATIVA
     st.markdown(f"""
     <div class="profile-card">
         <div class="profile-header">
@@ -666,7 +663,6 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
         </div>
     """, unsafe_allow_html=True)
     
-    # Si existen datos del referente familiar relevados, los renderiza de forma prolija abajo
     if tags_str and tags_str.lower() != "none" and tags_str.lower() != "nan":
         st.markdown(f"""
         <div class="profile-footer-data">
@@ -677,7 +673,6 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
     
     st.markdown("</div>", unsafe_allow_html=True)
     
-    # Botón de mensajería instantánea directo abajo
     if wa_btn_html:
         st.markdown(wa_btn_html, unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
@@ -788,88 +783,78 @@ def page_alta_persona(df_personas, centro, usuario):
                             st.rerun()
                     except Exception as e: st.error(f"Error al guardar: {e}")
 
-def page_reportes_avanzado(df_asistencia, centro):
+# ======================================================
+# ✅ PESTAÑA NUEVA: METRICAS AVANZADAS COMPARATIVAS (WOW / MOM / COMPORTAMIENTO)
+# ======================================================
+def page_reportes(df_asistencia, centro):
     st.markdown("<h3 style='margin-bottom:15px;'>Métricas y Tendencias Temporales</h3>", unsafe_allow_html=True)
     
-    centro_sel = st.selectbox("Filtrar reporte por centro:", CENTROS) if centro == "Administración" else centro
-    
-    df_c = df_asistencia[df_asistencia["centro"] == centro_sel].copy() if not df_asistencia.empty else pd.DataFrame()
+    centro_seleccionado = st.selectbox("Filtrar reporte por centro barrial:", CENTROS, key="reportes_admin_select") if centro == "Administración" else centro
+    df_c = df_asistencia[df_asistencia["centro"] == centro_seleccionado].copy() if not df_asistencia.empty else pd.DataFrame()
     
     if df_c.empty:
-        st.markdown("<div class='alert-box alert-gray'>Sin registros históricos en Supabase para calcular tendencias.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='alert-box alert-gray'>Todavía no hay datos históricos suficientes en este centro para generar estadísticas avanzadas.</div>", unsafe_allow_html=True)
         return
         
-    # 1. Preparación de datos temporales con Pandas
+    # Preparación matemática nativa en Backend
     df_c["presentes_i"] = df_c["presentes"].apply(lambda x: clean_int(x, 0))
     df_c["fecha_dt"] = pd.to_datetime(df_c["fecha"]).dt.date
     df_c = df_c.sort_values("fecha_dt")
-    
+
     hoy = get_today_ar()
     
-    # 2. CÁLCULO DE VENTANAS TEMPORALES (WoW y MoM)
-    inicio_semana_actual = hoy - timedelta(days=6)
-    inicio_semana_anterior = hoy - timedelta(days=13)
-    
+    # Líneas de tiempo sutiles para cortes WoW y MoM
+    inicio_sem_actual = hoy - timedelta(days=6)
+    inicio_sem_anterior = hoy - timedelta(days=13)
     inicio_mes_actual = hoy.replace(day=1)
-    # Cálculo sutil para el mes anterior
     inicio_mes_anterior = (inicio_mes_actual - timedelta(days=1)).replace(day=1)
     
-    # Asistencias por períodos
-    asist_sem_actual = df_c[(df_c["fecha_dt"] >= inicio_semana_actual) & (df_c["fecha_dt"] <= hoy)][ "presentes_i"].sum()
-    asist_sem_anterior = df_c[(df_c["fecha_dt"] >= inicio_semana_anterior) & (df_c["fecha_dt"] < inicio_semana_actual)]["presentes_i"].sum()
+    # Procesamiento de conjuntos analíticos
+    sum_sem_actual = df_c[(df_c["fecha_dt"] >= inicio_sem_actual) & (df_c["fecha_dt"] <= hoy)]["presentes_i"].sum()
+    sum_sem_anterior = df_c[(df_c["fecha_dt"] >= inicio_sem_anterior) & (df_c["fecha_dt"] < inicio_sem_actual)]["presentes_i"].sum()
+    sum_mes_actual = df_c[(df_c["fecha_dt"] >= inicio_mes_actual) & (df_c["fecha_dt"] <= hoy)]["presentes_i"].sum()
+    sum_mes_anterior = df_c[(df_c["fecha_dt"] >= inicio_mes_anterior) & (df_c["fecha_dt"] < inicio_mes_actual)]["presentes_i"].sum()
     
-    asist_mes_actual = df_c[(df_c["fecha_dt"] >= inicio_mes_actual) & (df_c["fecha_dt"] <= hoy)]["presentes_i"].sum()
-    asist_mes_anterior = df_c[(df_c["fecha_dt"] >= inicio_mes_anterior) & (df_c["fecha_dt"] < inicio_mes_actual)]["presentes_i"].sum()
+    def delta_pct(act, ant):
+        if ant == 0: return 0.0
+        return ((act - ant) / ant) * 100
+
+    wow_pct = delta_pct(sum_sem_actual, sum_sem_anterior)
+    mom_pct = delta_pct(sum_mes_actual, sum_mes_anterior)
     
-    # 3. CÁLCULO DE PORCENTAJES DE VARIACIÓN
-    def calcular_variacion(actual, anterior):
-        if anterior == 0:
-            return 0.0
-        return ((actual - anterior) / anterior) * 100
-    
-    var_wow = calcular_variacion(asist_sem_actual, asist_sem_anterior)
-    var_mom = calcular_variacion(asist_mes_actual, asist_mes_anterior)
-    
-    # 4. RENDERIZADO DE CONTENEDORES GEOMÉTRICOS (DISEÑO PREMIUM)
-    st.markdown("#### Evolución de Tendencias")
+    # Renderizado Geométrico de Control Compartido
     m1, m2 = st.columns(2)
-    
     with m1:
-        color_wow = "#86EFAC" if var_wow >= 0 else "#FCA5A5"
-        signo_wow = "+" if var_wow >= 0 else ""
+        c_wow = "#86EFAC" if wow_pct >= 0 else "#FCA5A5"
         st.markdown(f"""
         <div class='kpi'>
             <h3>Semana vs Semana Anterior (WoW)</h3>
-            <div class='v'>{asist_sem_actual} <span style='font-size:1rem; color:{color_wow}; font-weight:600;'>({signo_wow}{var_wow:.1f}%)</span></div>
-            <span style='font-size:0.7rem; color:var(--text-secondary);'>Últimos 7 días vs 7 días previos</span>
+            <div class='v'>{sum_sem_actual} <span style='font-size:1rem; color:{c_wow}; font-weight:700;'>({"+" if wow_pct>=0 else ""}{wow_pct:.1f}%)</span></div>
+            <span style='font-size:0.7rem; color:var(--text-secondary);'>Últimos 7 días corridos vs período previo</span>
         </div>
         """, unsafe_allow_html=True)
-        
     with m2:
-        color_mom = "#86EFAC" if var_mom >= 0 else "#FCA5A5"
-        signo_mom = "+" if var_mom >= 0 else ""
+        c_mom = "#86EFAC" if mom_pct >= 0 else "#FCA5A5"
         st.markdown(f"""
         <div class='kpi'>
             <h3>Mes Actual vs Mes Anterior (MoM)</h3>
-            <div class='v'>{asist_mes_actual} <span style='font-size:1rem; color:{color_mom}; font-weight:600;'>({signo_mom}{var_mom:.1f}%)</span></div>
-            <span style='font-size:0.7rem; color:var(--text-secondary);'>Acumulado del mes vs mes anterior completo</span>
+            <div class='v'>{sum_mes_actual} <span style='font-size:1rem; color:{c_mom}; font-weight:700;'>({"+" if mom_pct>=0 else ""}{mom_pct:.1f}%)</span></div>
+            <span style='font-size:0.7rem; color:var(--text-secondary);'>Acumulado mensual vs mes cerrado anterior</span>
         </div>
         """, unsafe_allow_html=True)
 
-    st.markdown("<br><hr style='opacity:0.05;'><br>", unsafe_allow_html=True)
+    st.markdown("<br>#### Evolución Lineal de Concurrencia", unsafe_allow_html=True)
+    df_linea = df_c.groupby("fecha")["presentes_i"].sum().reset_index()
+    st.line_chart(df_linea.set_index("fecha")["presentes_i"], color="#60A5FA")
+
+    # Análisis de comportamiento por días de la semana
+    st.markdown("<br>#### Análisis del Flujo por Día de la Semana", unsafe_allow_html=True)
+    df_c["dia_nombre"] = pd.to_datetime(df_c["fecha"]).dt.day_name()
+    map_dias = {'Monday':'Lunes','Tuesday':'Martes','Wednesday':'Miércoles','Thursday':'Jueves','Friday':'Viernes','Saturday':'Sábado','Sunday':'Domingo'}
+    df_c["dia_nombre"] = df_c["dia_nombre"].map(map_dias)
     
-    # 5. OTRAS MÉTRICAS: ANÁLISIS POR DÍA DE LA SEMANA (COMPORTAMIENTO)
-    st.markdown("#### ¿Qué días hay más movimiento en el Centro?")
-    df_c["dia_semana"] = pd.to_datetime(df_c["fecha"]).dt.day_name()
-    
-    # Mapeo sutil a español para mantener el orden y la grilla perfecta
-    dias_map = {'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles', 'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'}
-    df_c["dia_semana"] = df_c["dia_semana"].map(dias_map)
-    
-    # Agrupamos por promedio para ver el comportamiento real sin importar faltas
-    df_dias = df_c.groupby("dia_semana")["presentes_i"].mean().reindex(['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']).fillna(0)
-    
-    st.bar_chart(df_dias, color="#60A5FA")
+    df_dias_agg = df_c.groupby("dia_nombre")["presentes_i"].mean().reindex(['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo']).fillna(0)
+    st.bar_chart(df_dias_agg, color="#A78BFA")
 
 # ======================================================
 # CONSOLE GLOBAL ADMIN (SUPERVISIÓN TOTAL DE ALEJANDRO)
