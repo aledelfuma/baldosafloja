@@ -50,7 +50,6 @@ footer {visibility: hidden;}
     padding-top: 2rem !important; 
     padding-left: 0.8rem !important;
     padding-right: 0.8rem !important;
-    /* ✅ MEJORA 1: Agregamos aire al final del contenedor principal para que nada colisione con el menú flotante */
     padding-bottom: 220px !important; 
     max-width: 500px !important;
     margin: 0 auto;
@@ -132,6 +131,27 @@ div.logout-wrapper > div > button {
 .alert-warning { background-color: rgba(245, 158, 11, 0.15); color: #FDE047 !important; border: 1px solid rgba(245, 158, 11, 0.3); }
 .alert-gray { background-color: var(--surface); color: var(--text-secondary) !important; border: 1px solid rgba(255,255,255,0.05); }
 
+/* CONTROLADOR DE ACTIVIDADES (ESTILO SEMÁFORO GEOMÉTRICO) */
+.workshop-status-container {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    padding: 15px;
+    border: 1px solid rgba(255,255,255,0.05);
+    margin-bottom: 20px;
+}
+.workshop-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.workshop-row:last-child { border-bottom: none; }
+.workshop-name { font-size: 0.85rem; font-weight: 600; color: #FFFFFF; }
+.workshop-badge { font-size: 0.7rem; font-weight: 700; padding: 3px 8px; border-radius: 6px; text-transform: uppercase; }
+.badge-done { background: rgba(34, 197, 94, 0.15); color: #86EFAC; border: 1px solid rgba(34, 197, 94, 0.2); }
+.badge-pending { background: rgba(239, 68, 68, 0.15); color: #FCA5A5; border: 1px solid rgba(239, 68, 68, 0.2); }
+
 /* FICHA DE LEGAJO MINIMALISTA Y GEOMÉTRICA */
 .profile-card {
     background-color: var(--surface);
@@ -155,49 +175,15 @@ div.logout-wrapper > div > button {
     color: var(--primary);
     text-transform: uppercase;
 }
-.profile-status {
-    font-size: 0.75rem;
-    font-weight: 600;
-}
+.profile-status { font-size: 0.75rem; font-weight: 600; }
 .status-active { color: #86EFAC; }
 .status-inactive { color: #FCA5A5; }
-
-.profile-name {
-    font-size: 1.4rem;
-    font-weight: 800;
-    line-height: 1.1;
-    margin-top: 2px;
-    color: var(--text-primary);
-}
-.profile-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 15px;
-    margin-bottom: 15px;
-}
-.profile-meta-item {
-    display: flex;
-    flex-direction: column;
-}
-.profile-meta-label {
-    font-size: 0.65rem;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 2px;
-}
-.profile-meta-value {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.profile-footer-data {
-    background-color: rgba(0, 0, 0, 0.15);
-    padding: 12px;
-    border-radius: var(--radius-sm);
-    border: 1px solid rgba(255,255,255,0.03);
-}
+.profile-name { font-size: 1.4rem; font-weight: 800; line-height: 1.1; margin-top: 2px; color: var(--text-primary); }
+.profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+.profile-meta-item { display: flex; flex-direction: column; }
+.profile-meta-label { font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+.profile-meta-value { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); }
+.profile-footer-data { background-color: rgba(0, 0, 0, 0.15); padding: 12px; border-radius: var(--radius-sm); border: 1px solid rgba(255,255,255,0.03); }
 
 /* MENÚ FLOTANTE ELEVADO */
 .stTabs [data-baseweb="tab-list"] {
@@ -245,12 +231,6 @@ div.logout-wrapper > div > button {
     display: block; text-align: center; background-color: #25D366 !important; color: white !important;
     padding: 10px; border-radius: var(--radius-sm); text-decoration: none; font-weight: 700; font-size: 0.9rem; margin-top: 10px;
 }
-
-/* ✅ ESTILO PARA AUDITORÍA DE REGISTROS CORREGIDOS */
-.row-replaced {
-    border-left: 4px solid var(--secondary) !important;
-    background-color: rgba(167, 139, 250, 0.03) !important;
-}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
@@ -297,6 +277,17 @@ C_BELEN = "Calle Belén"
 C_NUDO = "Nudo a Nudo"
 C_MARANATHA = "Casa Maranatha"
 CENTROS = [C_BELEN, C_NUDO, C_MARANATHA]
+
+# ✅ CONFIGURACIÓN DEL CALENDARIO SEMANAL DE RELEVAMIENTO (IMAGE_816E1F)
+CALENDARIO_MARANATHA = {
+    0: ["Taller Costura CFP", "Apoyo sec.", "Plan FinEs", "General"], # Lunes
+    1: ["Taller de Arte", "La Ronda", "Plan FinEs", "General"],      # Martes
+    2: ["Taller Costura CFP", "Apoyo sec.", "General"],              # Miércoles
+    3: ["Apoyo Esc. Primario", "Almuerzo", "Fútbol Calle Belén", "Espacio Joven", "General"], # Jueves
+    4: ["Pre-Juvenil", "Plan FinEs", "General"],                    # Viernes
+    5: ["General"],                                                 # Sábado
+    6: ["General"]                                                  # Domingo
+}
 
 DEFAULT_ESPACIO = "General"
 CATEGORIAS_SEGUIMIENTO = ["Escucha / Acompañamiento", "Salud", "Trámite (DNI/Social)", "Educación", "Familiar", "Crisis / Conflicto", "Otro"]
@@ -426,6 +417,30 @@ def show_top_header(nombre, centro):
         st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("<div style='margin-bottom:15px;'></div>", unsafe_allow_html=True)
 
+# ✅ SEMÁFORO DINÁMICO GEOMÉTRICO (SIN TEXTO CRUDO HTML) BASADO EN CALENDARIO DIARIO
+def show_workshop_monitor(df_asistencia, centro_seleccionado, fecha_seleccionada):
+    if centro_seleccionado not in [C_MARANATHA]:
+        return
+        
+    st.markdown("<h4 style='font-size:0.9rem; margin-bottom:10px; color:var(--text-secondary); text-transform:uppercase;'>Control de Actividades para este Día</h4>", unsafe_allow_html=True)
+    
+    fecha_iso = fecha_seleccionada.isoformat()
+    dia_semana_num = fecha_seleccionada.weekday() # 0=Lunes, 6=Domingo
+    
+    actividades_del_dia = CALENDARIO_MARANATHA.get(dia_semana_num, ["General"])
+    
+    df_hoy = df_asistencia[(df_asistencia["centro"] == centro_seleccionado) & (df_asistencia["fecha"] == fecha_iso)]
+    actividades_cargadas = df_hoy["espacio"].unique() if not df_hoy.empty else []
+    
+    html_monitor = "<div class='workshop-status-container'>"
+    for act in actividades_del_dia:
+        if act in actividades_cargadas:
+            html_monitor += "<div class='workshop-row'><span class='workshop-name'>• " + str(act) + "</span><span class='workshop-badge badge-done'>Cargado</span></div>"
+        else:
+            html_monitor += "<div class='workshop-row'><span class='workshop-name'>• " + str(act) + "</span><span class='workshop-badge badge-pending'>Falta Cargar</span></div>"
+    html_monitor += "</div>"
+    st.markdown(html_monitor, unsafe_allow_html=True)
+
 def show_top_alerts(df_latest, df_personas, df_ap, centro):
     if centro in ["Administración", "coordinacion"]:
         return
@@ -502,7 +517,7 @@ def kpi_row_full(df_asistencia, centro):
     kc3.markdown(f"<div class='kpi'><h3>Mes actual</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
 
 # ======================================================
-# PESTAÑA: CARGA DIARIA
+# PESTAÑA: CARGA DIARIA CON FILTRO POR TALLER INTERACTIVO
 # ======================================================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>Carga Diaria</h3>", unsafe_allow_html=True)
@@ -518,13 +533,21 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         return
     fecha_str = fecha.isoformat()
     
-    col_e, col_m = st.columns(2)
-    with col_e: 
-        espacio = DEFAULT_ESPACIO 
-        st.info(f"Espacio asignado institucional: {espacio}")
-    with col_m: 
-        modo = st.selectbox("Modo / Actividad", ["Día habitual", "Actividad especial", "Cerrado"])
+    # Renderizar el monitor de estado específico del día
+    show_workshop_monitor(df_asistencia, centro_seleccionado, fecha)
     
+    # ✅ ASIGNACIÓN DINÁMICA DE ESPACIOS POR TALLER
+    if centro_seleccionado == C_MARANATHA:
+        dia_semana_idx = fecha.weekday()
+        opciones_espacio = CALENDARIO_MARANATHA.get(dia_semana_idx, ["General"])
+        col_e, col_m = st.columns(2)
+        with col_e: espacio = st.selectbox("Actividad / Taller del Día", opciones_espacio)
+        with col_m: modo = st.selectbox("Modo / Actividad", ["Día habitual", "Actividad especial", "Cerrado"])
+    else:
+        espacio = DEFAULT_ESPACIO
+        col_m = st.columns(1)[0]
+        with col_m: modo = st.selectbox("Modo / Actividad", ["Día habitual", "Actividad especial", "Cerrado"])
+
     notas = st.text_area("Notas generales del día (Opcional)", height=70)
 
     df_centro = filter_personas_centro(df_personas, centro_seleccionado)
@@ -545,9 +568,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
             
         with st.spinner("Procesando en Supabase..."):
             try:
-                # ✅ MEJORA 2: Al guardar, forzamos de forma proactiva el vaciado de la caché para Supabase
                 st.cache_data.clear()
-                
                 if forrar_reemplazo:
                     supabase.table("asistencia_diaria").delete().eq("fecha", fecha_str).eq("centro", centro_seleccionado).eq("espacio", espacio).execute()
                     supabase.table("asistencia_personas").delete().eq("fecha", fecha_str).eq("centro", centro_seleccionado).eq("espacio", espacio).execute()
@@ -895,7 +916,6 @@ def page_global(df_asistencia, df_personas, df_ap):
 
     st.markdown("<br>#### Auditoría y Registro de Planillas", unsafe_allow_html=True)
     if not df_asistencia.empty:
-        # ✅ MEJORA 3: Agregamos una columna de control visual para identificar planillas corregidas mediante estilos condicionales en DataFrame
         df_audit = df_asistencia.copy().sort_values("created_at", ascending=False)
         
         df_audit_clean = df_audit[["fecha", "centro", "espacio", "presentes", "coordinador", "modo", "accion"]].rename(
