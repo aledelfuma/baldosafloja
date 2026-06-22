@@ -131,7 +131,7 @@ div.logout-wrapper > div > button {
 .alert-warning { background-color: rgba(245, 158, 11, 0.15); color: #FDE047 !important; border: 1px solid rgba(245, 158, 11, 0.3); }
 .alert-gray { background-color: var(--surface); color: var(--text-secondary) !important; border: 1px solid rgba(255,255,255,0.05); }
 
-/* CONTROLADOR DE ACTIVIDADES (ESTILO SEMÁFORO GEOMÉTRICO) */
+/* CONTROLADOR DE ACTIVIDADES (SEMÁFORO GEOMÉTRICO) */
 .workshop-status-container {
     background: var(--surface);
     border-radius: var(--radius-lg);
@@ -168,13 +168,7 @@ div.logout-wrapper > div > button {
     padding-bottom: 12px;
     margin-bottom: 15px;
 }
-.profile-institution {
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 1px;
-    color: var(--primary);
-    text-transform: uppercase;
-}
+.profile-institution { font-size: 0.65rem; font-weight: 700; letter-spacing: 1px; color: var(--primary); text-transform: uppercase; }
 .profile-status { font-size: 0.75rem; font-weight: 600; }
 .status-active { color: #86EFAC; }
 .status-inactive { color: #FCA5A5; }
@@ -247,11 +241,10 @@ def get_supabase_client() -> Client:
 supabase = get_supabase_client()
 
 # ======================================================
-# ZONA HORARIA, CONFIGURACIONES Y HELPERS
+# ZONA HORARIA Y CONFIGURACIONES
 # ======================================================
 TZ_AR = pytz.timezone('America/Argentina/Buenos_Aires')
 
-def get_now_ar_str(): return datetime.now(TZ_AR).strftime("%Y-%m-%d %H:%M:%S")
 def get_today_ar(): return datetime.now(TZ_AR).date()
 
 def calculate_age(born):
@@ -261,8 +254,7 @@ def calculate_age(born):
         return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
     except: return 0
 
-def format_wa_number(phone):
-    return re.sub(r'\D', '', str(phone))
+def format_wa_number(phone): return re.sub(r'\D', '', str(phone))
 
 def clean_string(s):
     if not isinstance(s, str): return ""
@@ -278,15 +270,14 @@ C_NUDO = "Nudo a Nudo"
 C_MARANATHA = "Casa Maranatha"
 CENTROS = [C_BELEN, C_NUDO, C_MARANATHA]
 
-# ✅ CONFIGURACIÓN DEL CALENDARIO SEMANAL DE RELEVAMIENTO (IMAGE_816E1F)
 CALENDARIO_MARANATHA = {
-    0: ["Taller Costura CFP", "Apoyo sec.", "Plan FinEs", "General"], # Lunes
-    1: ["Taller de Arte", "La Ronda", "Plan FinEs", "General"],      # Martes
-    2: ["Taller Costura CFP", "Apoyo sec.", "General"],              # Miércoles
-    3: ["Apoyo Esc. Primario", "Almuerzo", "Fútbol Calle Belén", "Espacio Joven", "General"], # Jueves
-    4: ["Pre-Juvenil", "Plan FinEs", "General"],                    # Viernes
-    5: ["General"],                                                 # Sábado
-    6: ["General"]                                                  # Domingo
+    0: ["Taller Costura CFP", "Apoyo sec.", "Plan FinEs", "General"],
+    1: ["Taller de Arte", "La Ronda", "Plan FinEs", "General"],
+    2: ["Taller Costura CFP", "Apoyo sec.", "General"],
+    3: ["Apoyo Esc. Primario", "Almuerzo", "Fútbol Calle Belén", "Espacio Joven", "General"],
+    4: ["Pre-Juvenil", "Plan FinEs", "General"],
+    5: ["General"],
+    6: ["General"]
 }
 
 DEFAULT_ESPACIO = "General"
@@ -341,7 +332,7 @@ def filter_personas_centro(df_personas, centro):
     return df_temp[df_temp['centro_norm'] == centro_clean].copy()
 
 # ======================================================
-# VISTAS E INTERFAZ DE USUARIO (UI)
+# INTERFAZ DE USUARIO (UI)
 # ======================================================
 def show_login_screen():
     st.markdown("<br>", unsafe_allow_html=True)
@@ -349,13 +340,11 @@ def show_login_screen():
     except: pass
     
     st.markdown("### HOGAR DE CRISTO BAHIA BLANCA")
-    st.markdown("<p style='color:var(--text-secondary); font-size:0.9rem; margin-top:-10px; margin-bottom:25px;'>Ingresá tus credenciales para gestionar el centro.</p>", unsafe_allow_html=True)
     
     with st.form("login_form_oficial"):
         u = st.text_input("Usuario", placeholder="Ej: guillermina").strip()
         p = st.text_input("Contraseña", type="password", placeholder="••••••••").strip()
         
-        st.markdown("<br>", unsafe_allow_html=True)
         if st.form_submit_button("Ingresar al Sistema", use_container_width=True):
             if not u or not p:
                 st.error("Completá ambos campos.")
@@ -388,9 +377,7 @@ def show_login_screen():
     st.markdown("""
     <div style='text-align: center; margin-top: 60px; font-size: 0.85rem; color: #444;'>
         Hogar de Cristo Bahía Blanca <br>
-        <a href='mailto:alejandrodelfuma@gmail.com' style='color: #60A5FA; text-decoration: none; font-weight: 600;'>
-            Soporte Técnico
-        </a>
+        <a href='mailto:alejandrodelfuma@gmail.com' style='color: #60A5FA; text-decoration: none; font-weight: 600;'>Soporte Técnico</a>
     </div>
     """, unsafe_allow_html=True)
     st.stop()
@@ -416,30 +403,6 @@ def show_top_header(nombre, centro):
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("<div style='margin-bottom:15px;'></div>", unsafe_allow_html=True)
-
-# ✅ SEMÁFORO DINÁMICO GEOMÉTRICO (SIN TEXTO CRUDO HTML) BASADO EN CALENDARIO DIARIO
-def show_workshop_monitor(df_asistencia, centro_seleccionado, fecha_seleccionada):
-    if centro_seleccionado not in [C_MARANATHA]:
-        return
-        
-    st.markdown("<h4 style='font-size:0.9rem; margin-bottom:10px; color:var(--text-secondary); text-transform:uppercase;'>Control de Actividades para este Día</h4>", unsafe_allow_html=True)
-    
-    fecha_iso = fecha_seleccionada.isoformat()
-    dia_semana_num = fecha_seleccionada.weekday() # 0=Lunes, 6=Domingo
-    
-    actividades_del_dia = CALENDARIO_MARANATHA.get(dia_semana_num, ["General"])
-    
-    df_hoy = df_asistencia[(df_asistencia["centro"] == centro_seleccionado) & (df_asistencia["fecha"] == fecha_iso)]
-    actividades_cargadas = df_hoy["espacio"].unique() if not df_hoy.empty else []
-    
-    html_monitor = "<div class='workshop-status-container'>"
-    for act in actividades_del_dia:
-        if act in actividades_cargadas:
-            html_monitor += "<div class='workshop-row'><span class='workshop-name'>• " + str(act) + "</span><span class='workshop-badge badge-done'>Cargado</span></div>"
-        else:
-            html_monitor += "<div class='workshop-row'><span class='workshop-name'>• " + str(act) + "</span><span class='workshop-badge badge-pending'>Falta Cargar</span></div>"
-    html_monitor += "</div>"
-    st.markdown(html_monitor, unsafe_allow_html=True)
 
 def show_top_alerts(df_latest, df_personas, df_ap, centro):
     if centro in ["Administración", "coordinacion"]:
@@ -490,35 +453,28 @@ def show_top_alerts(df_latest, df_personas, df_ap, centro):
                 for a in alertas_inasistencia: st.write(f"- {a}")
         else: st.markdown("<div class='alert-box alert-gray'>Sin alertas críticas</div>", unsafe_allow_html=True)
 
-def kpi_row_full(df_asistencia, centro):
-    hoy_date = get_today_ar()
-    hoy_str = hoy_date.isoformat()
-    hace_7_dias_str = (hoy_date - timedelta(days=6)).isoformat()
-    inicio_mes_str = hoy_date.replace(day=1).isoformat()
+def show_workshop_monitor(df_asistencia, centro_seleccionado, fecha_seleccionada):
+    if centro_seleccionado not in [C_MARANATHA]:
+        return
+        
+    st.markdown("<h4 style='font-size:0.9rem; margin-bottom:10px; color:var(--text-secondary); text-transform:uppercase;'>Control de Actividades para este Día</h4>", unsafe_allow_html=True)
     
-    c1 = c2 = c3 = 0
-    if not df_asistencia.empty:
-        df_kpi = df_asistencia.copy()
-        df_kpi["presentes_i"] = df_kpi["presentes"].apply(lambda x: clean_int(x, 0))
-        df_kpi["fecha_str"] = df_kpi["fecha"].astype(str)
-        
-        if centro in ["Administración", "coordinacion"]:
-            df_centro = df_kpi
+    fecha_iso = fecha_seleccionada.isoformat()
+    dia_semana_num = fecha_seleccionada.weekday()
+    
+    actividades_del_dia = CALENDARIO_MARANATHA.get(dia_semana_num, ["General"])
+    df_hoy = df_asistencia[(df_asistencia["centro"] == centro_seleccionado) & (df_asistencia["fecha"] == fecha_iso)]
+    actividades_cargadas = df_hoy["espacio"].unique() if not df_hoy.empty else []
+    
+    html_monitor = "<div class='workshop-status-container'>"
+    for act in actividades_del_dia:
+        if act in talleres_cargados:
+            html_monitor += "<div class='workshop-row'><span class='workshop-name'>• " + str(t) + "</span><span class='workshop-badge badge-done'>Cargado</span></div>"
         else:
-            df_centro = df_kpi[df_kpi["centro"] == centro]
-        
-        c1 = int(df_centro[df_centro["fecha_str"] == hoy_str]["presentes_i"].sum())
-        c2 = int(df_centro[(df_centro["fecha_str"] >= hace_7_dias_str) & (df_centro["fecha_str"] <= hoy_str)]["presentes_i"].sum())
-        c3 = int(df_centro[(df_centro["fecha_str"] >= inicio_mes_str) & (df_centro["fecha_str"] <= hoy_str)]["presentes_i"].sum())
-        
-    kc1, kc2, kc3 = st.columns(3)
-    kc1.markdown(f"<div class='kpi'><h3>Ingresos HOY</h3><div class='v'>{c1}</div></div>", unsafe_allow_html=True)
-    kc2.markdown(f"<div class='kpi'><h3>Ultimos 7 dias</h3><div class='v'>{c2}</div></div>", unsafe_allow_html=True)
-    kc3.markdown(f"<div class='kpi'><h3>Mes actual</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
+            html_monitor += "<div class='workshop-row'><span class='workshop-name'>• " + str(t) + "</span><span class='workshop-badge badge-pending'>Falta Cargar</span></div>"
+    html_monitor += "</div>"
+    st.markdown(html_monitor, unsafe_allow_html=True)
 
-# ======================================================
-# PESTAÑA: CARGA DIARIA CON FILTRO POR TALLER INTERACTIVO
-# ======================================================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>Carga Diaria</h3>", unsafe_allow_html=True)
     
@@ -533,21 +489,21 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         return
     fecha_str = fecha.isoformat()
     
-    # Renderizar el monitor de estado específico del día
+    # ✅ SEMÁFORO DE CONTROL RELEVADO VINCULADO AL DÍA DE LA SEMANA
     show_workshop_monitor(df_asistencia, centro_seleccionado, fecha)
     
-    # ✅ ASIGNACIÓN DINÁMICA DE ESPACIOS POR TALLER
-    if centro_seleccionado == C_MARANATHA:
-        dia_semana_idx = fecha.weekday()
-        opciones_espacio = CALENDARIO_MARANATHA.get(dia_semana_idx, ["General"])
-        col_e, col_m = st.columns(2)
-        with col_e: espacio = st.selectbox("Actividad / Taller del Día", opciones_espacio)
-        with col_m: modo = st.selectbox("Modo / Actividad", ["Día habitual", "Actividad especial", "Cerrado"])
-    else:
-        espacio = DEFAULT_ESPACIO
-        col_m = st.columns(1)[0]
-        with col_m: modo = st.selectbox("Modo / Actividad", ["Día habitual", "Actividad especial", "Cerrado"])
-
+    col_e, col_m = st.columns(2)
+    with col_e: 
+        if centro_seleccionado == C_MARANATHA:
+            opciones_espacio = CALENDARIO_MARANATHA.get(fecha.weekday(), ["General"])
+            espacio = st.selectbox("Actividad / Taller del Día", opciones_espacio)
+        else:
+            espacio = DEFAULT_ESPACIO
+            st.info(f"Espacio asignado institucional: {espacio}")
+            
+    with col_m: 
+        modo = st.selectbox("Modo / Actividad", ["Día habitual", "Actividad especial", "Cerrado"])
+    
     notas = st.text_area("Notas generales del día (Opcional)", height=70)
 
     df_centro = filter_personas_centro(df_personas, centro_seleccionado)
@@ -568,7 +524,9 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
             
         with st.spinner("Procesando en Supabase..."):
             try:
+                # ✅ MEJORA 2: Limpieza proactiva de caché al guardar
                 st.cache_data.clear()
+                
                 if forrar_reemplazo:
                     supabase.table("asistencia_diaria").delete().eq("fecha", fecha_str).eq("centro", centro_seleccionado).eq("espacio", espacio).execute()
                     supabase.table("asistencia_personas").delete().eq("fecha", fecha_str).eq("centro", centro_seleccionado).eq("espacio", espacio).execute()
@@ -581,22 +539,22 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                 }
                 supabase.table("asistencia_diaria").insert(cabecera).execute()
                 
-                filas_personas = []
-                for n in presentes:
-                    filas_personas.append({
-                        "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro_seleccionado,
-                        "espacio": espacio, "nombre": n, "estado": "Presente", "es_nuevo": "NO",
-                        "coordinador": nombre_visible, "usuario": usuario
-                    })
-                ausentes = [n for n in nombres if n not in presentes]
-                for n in ausentes:
-                    filas_personas.append({
-                        "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro_seleccionado,
-                        "espacio": espacio, "nombre": n, "estado": "Ausente", "es_nuevo": "NO",
-                        "coordinador": nombre_visible, "usuario": usuario
-                    })
-                
-                if filas_personas:
+                # ✅ CONTROL BLINDADO: Solo inserta personas secundarias si la multiselección contiene datos
+                if presentes:
+                    filas_personas = []
+                    for n in presentes:
+                        filas_personas.append({
+                            "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro_seleccionado,
+                            "espacio": espacio, "nombre": n, "estado": "Presente", "es_nuevo": "NO",
+                            "coordinador": nombre_visible, "usuario": usuario
+                        })
+                    ausentes = [n for n in nombres if n not in presentes]
+                    for n in ausentes:
+                        filas_personas.append({
+                            "fecha": fecha_str, "anio": year_of(fecha_str), "centro": centro_seleccionado,
+                            "espacio": espacio, "nombre": n, "estado": "Ausente", "es_nuevo": "NO",
+                            "coordinador": nombre_visible, "usuario": usuario
+                        })
                     supabase.table("asistencia_personas").insert(filas_personas).execute()
                 
                 st.balloons()
@@ -605,16 +563,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
                 st.rerun()
                 
             except Exception as e:
-                err_str = str(e)
-                if "23505" in err_str or "already exists" in err_str.lower():
-                    st.markdown(f"""
-                    <div class='alert-box alert-warning'>
-                        <b>Planilla existente:</b> Ya se cargo una asistencia para el espacio '{espacio}' en esta fecha.<br><br>
-                        <b>¿Te equivocaste o queres corregirla?</b> Activa la casilla de arriba que dice "Corregir datos" y volve a presionar el botón de guardar.
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.error(f"Error inesperado: {e}")
+                st.error(f"Error inesperado: {e}")
 
 # ======================================================
 # PESTAÑA: BUSCADOR DE LEGAJOS Y BITÁCORA
@@ -649,7 +598,6 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
         return
 
     datos_persona = df_centro[df_centro["nombre"] == seleccion].iloc[0]
-    
     tags_str = str(datos_persona.get("etiquetas", ""))
     telefono = str(datos_persona.get("telefono", ""))
     wa_btn_html = f"<a href='https://wa.me/{format_wa_number(telefono)}' target='_blank' class='btn-wa'>Enviar WhatsApp</a>" if (telefono and telefono.lower() != "none") else ""
@@ -699,7 +647,6 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
             <div style="font-size:0.85rem; font-weight:600; color:var(--text-primary); margin-top:2px;">{tags_str}</div>
         </div>
         """, unsafe_allow_html=True)
-    
     st.markdown("</div>", unsafe_allow_html=True)
     
     if wa_btn_html:
@@ -720,34 +667,26 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
                     try:
                         st.cache_data.clear()
                         f_nota_str = f_nota.isoformat()
-                        nueva_intervencion = {
+                        supabase.table("bitacora_seguimiento").insert({
                             "fecha": f_nota_str, "anio": year_of(f_nota_str), "centro": centro_seleccionado,
-                            "nombre_persona": seleccion, "categoria": cat_nota,
-                            "observacion": obs_nota.strip(), "usuario_registro": usuario
-                        }
-                        supabase.table("bitacora_seguimiento").insert(nueva_intervencion).execute()
+                            "nombre_persona": seleccion, "categoria": cat_nota, "observacion": obs_nota.strip(), "usuario_registro": usuario
+                        }).execute()
                         st.toast(f"Nota registrada para {seleccion}")
                         time.sleep(1)
                         st.rerun()
-                    except Exception as e: st.error(f"Error al registrar nota: {e}")
+                    except Exception as e: st.error(f"Error: {e}")
 
     st.markdown("<br>### Historial de Acompañamiento", unsafe_allow_html=True)
     df_chico = df_seg[df_seg["nombre_persona"] == seleccion].copy() if not df_seg.empty else pd.DataFrame()
-    
-    if df_chico.empty:
-        st.markdown("<div class='alert-box alert-gray'>Todavía no hay notas asentadas en la bitácora para este participante.</div>", unsafe_allow_html=True)
-    else:
-        df_chico = df_chico.sort_values("fecha", ascending=False)
-        for _, row in df_chico.iterrows():
+    if not df_chico.empty:
+        for _, row in df_chico.sort_values("fecha", ascending=False).iterrows():
             st.markdown(f"""
             <div class='note-card'>
                 <div style='display:flex; justify-content:space-between; font-size:0.75rem; color:var(--text-secondary); margin-bottom:5px;'>
                     <span>Fecha: <b>{row['fecha']}</b> — Categoria: <i>{row['categoria']}</i></span>
                     <span>Por: {row['usuario_registro']}</span>
                 </div>
-                <div style='font-size:0.95rem; color:var(--text-primary); line-height:1.4;'>
-                    {row['observacion']}
-                </div>
+                <div style='font-size:0.95rem; color:var(--text-primary); line-height:1.4;'>{row['observacion']}</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -756,61 +695,39 @@ def page_personas_full(df_personas, df_ap, df_seg, centro, usuario):
 # ======================================================
 def page_alta_persona(df_personas, centro, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>Alta de Persona al Padrón</h3>", unsafe_allow_html=True)
-    st.info("Completá este formulario para ingresar al sistema a alguien que ya participa del centro.")
-    
-    if centro in ["Administración", "coordinacion"]:
-        centro_destino = st.selectbox("Asignar legajo al centro:", CENTROS, key="alta_admin_select")
-    else:
-        centro_destino = centro
+    centro_destino = st.selectbox("Asignar legajo al centro:", CENTROS, key="alta_admin_select") if centro in ["Administración", "coordinacion"] else centro
 
     with st.form("alta_directa_form"):
-        st.markdown("#### Datos Principales")
-        col_a1, col_a2 = st.columns(2)
-        with col_a1:
-            new_nom = st.text_input("Nombre Completo *", placeholder="Ej: Juan Pérez")
-            new_dni = st.text_input("DNI")
-            new_nac = st.text_input("Fecha de Nacimiento (AAAA-MM-DD)", help="Ej: 1998-11-08")
-        with col_a2:
-            new_tel = st.text_input("Teléfono")
-            new_em = st.text_input("Contacto de Emergencia")
-            new_dom = st.text_input("Dirección / Barrio")
-        
-        st.markdown("#### Información Adicional")
+        new_nom = st.text_input("Nombre Completo *", placeholder="Ej: Juan Pérez")
+        new_dni = st.text_input("DNI")
+        new_nac = st.text_input("Fecha de Nacimiento (AAAA-MM-DD)", help="Ej: 1998-11-08")
+        new_tel = st.text_input("Teléfono")
+        new_em = st.text_input("Contacto de Emergencia")
+        new_dom = st.text_input("Dirección / Barrio")
         new_etq = st.text_input("Etiquetas (Separadas por coma)")
         new_notas = st.text_area("Notas Permanentes")
         
         if st.form_submit_button("Guardar en el Padrón (Supabase)", type="primary", use_container_width=True):
-            if not new_nom.strip():
-                st.error("El Nombre Completo es obligatorio.")
+            if not new_nom.strip(): st.error("El Nombre Completo es obligatorio.")
             else:
-                with st.spinner("Guardando legajo en la nube..."):
+                with st.spinner("Guardando..."):
                     try:
                         st.cache_data.clear()
                         check = supabase.table("personas").select("*").eq("centro", centro_destino).ilike("nombre", new_nom.strip()).execute()
-                        if check.data:
-                            st.warning(f"'{new_nom}' ya existe en este centro.")
+                        if check.data: st.warning(f"'{new_nom}' ya existe en este centro.")
                         else:
-                            fecha_nac_valida = None
-                            if new_nac.strip():
-                                try: 
-                                    fecha_nac_valida = pd.to_datetime(new_nac.strip()).date().isoformat()
-                                except:
-                                    st.error("Formato de fecha incorrecto. Usar AAAA-MM-DD.")
-                                    st.stop()
-
-                            fila_nueva = {
+                            fecha_nac_valida = pd.to_datetime(new_nac.strip()).date().isoformat() if new_nac.strip() else None
+                            supabase.table("personas").insert({
                                 "nombre": new_nom.strip(), "dni": new_dni.strip() if new_dni.strip() else None,
                                 "fecha_nacimiento": fecha_nac_valida, "telefono": new_tel.strip() if new_tel.strip() else None,
                                 "domicilio": new_dom.strip() if new_dom.strip() else None, "contacto_emergencia": new_em.strip() if new_em.strip() else None,
                                 "etiquetas": new_etq.strip() if new_etq.strip() else None, "notas": new_notas.strip() if new_notas.strip() else None,
                                 "activo": "SI", "centro": centro_destino, "usuario_alta": usuario
-                            }
-                            supabase.table("personas").insert(fila_nueva).execute()
-                            st.balloons()
-                            st.success(f"¡{new_nom} ingresado correctamente!")
+                            }).execute()
+                            st.success("¡Ingresado correctamente!")
                             time.sleep(1)
                             st.rerun()
-                    except Exception as e: st.error(f"Error al guardar: {e}")
+                    except Exception as e: st.error(f"Error: {e}")
 
 # ======================================================
 # PESTAÑA: REPORTES ANALÍTICOS AVANZADOS
@@ -826,20 +743,22 @@ def page_reportes(df_asistencia, centro):
         return
         
     df_c["presentes_i"] = df_c["presentes"].apply(lambda x: clean_int(x, 0))
-    df_c["fecha_dt"] = pd.to_datetime(df_c["fecha"]).dt.date
-    df_c = df_c.sort_values("fecha_dt")
+    # ✅ MEJORA 3: Normalización homogénea a cadenas ISO de texto para evitar el bug de tarjetas vacías
+    df_c["fecha_str"] = df_c["fecha"].astype(str)
+    df_c = df_c.sort_values("fecha_str")
 
     hoy = get_today_ar()
     
-    inicio_sem_actual = hoy - timedelta(days=6)
-    inicio_sem_anterior = hoy - timedelta(days=13)
-    inicio_mes_actual = hoy.replace(day=1)
-    inicio_mes_anterior = (inicio_mes_actual - timedelta(days=1)).replace(day=1)
+    inicio_sem_actual = (hoy - timedelta(days=6)).isoformat()
+    inicio_sem_anterior = (hoy - timedelta(days=13)).isoformat()
+    inicio_mes_actual = hoy.replace(day=1).isoformat()
+    inicio_mes_anterior = ((hoy.replace(day=1)) - timedelta(days=1)).replace(day=1).isoformat()
+    hoy_str = hoy.isoformat()
     
-    sum_sem_actual = df_c[(df_c["fecha_dt"] >= inicio_sem_actual) & (df_c["fecha_dt"] <= hoy)]["presentes_i"].sum()
-    sum_sem_anterior = df_c[(df_c["fecha_dt"] >= inicio_sem_anterior) & (df_c["fecha_dt"] < inicio_sem_actual)]["presentes_i"].sum()
-    sum_mes_actual = df_c[(df_c["fecha_dt"] >= inicio_mes_actual) & (df_c["fecha_dt"] <= hoy)]["presentes_i"].sum()
-    sum_mes_anterior = df_c[(df_c["fecha_dt"] >= inicio_mes_anterior) & (df_c["fecha_dt"] < inicio_mes_actual)]["presentes_i"].sum()
+    sum_sem_actual = df_c[(df_c["fecha_str"] >= inicio_sem_actual) & (df_c["fecha_str"] <= hoy_str)]["presentes_i"].sum()
+    sum_sem_anterior = df_c[(df_c["fecha_str"] >= inicio_sem_anterior) & (df_c["fecha_str"] < inicio_sem_actual)]["presentes_i"].sum()
+    sum_mes_actual = df_c[(df_c["fecha_str"] >= inicio_mes_actual) & (df_c["fecha_str"] <= hoy_str)]["presentes_i"].sum()
+    sum_mes_anterior = df_c[(df_c["fecha_str"] >= inicio_mes_anterior) & (df_c["fecha_str"] < inicio_mes_actual)]["presentes_i"].sum()
     
     def delta_pct(act, ant):
         if ant == 0: return 0.0
@@ -881,60 +800,45 @@ def page_reportes(df_asistencia, centro):
     st.bar_chart(df_dias_agg, color="#A78BFA")
 
 # ======================================================
-# CONSOLE GLOBAL ADMIN (SUPERVISIÓN TOTAL DE COORDINADORES)
+# CONSOLE GLOBAL ADMIN
 # ======================================================
 def page_global(df_asistencia, df_personas, df_ap):
     st.markdown("<h3 style='margin-bottom:15px;'>Consola Central Institucional</h3>", unsafe_allow_html=True)
-    st.caption("Panel de control unificado para de cargas generales de Hogar de Cristo Bahía Blanca.")
     
     t_pers = len(df_personas["nombre"].unique()) if not df_personas.empty else 0
     t_asist = df_asistencia["presentes"].apply(lambda x: clean_int(x, 0)).sum() if not df_asistencia.empty else 0
     
     k1, k2 = st.columns(2)
-    k1.markdown(f"<div class='kpi'><h3>Padrón Total Institucional</h3><div class='v'>{t_pers}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>Personas en la federación</span></div>", unsafe_allow_html=True)
-    k2.markdown(f"<div class='kpi'><h3>Total de Asistencias</h3><div class='v'>{t_asist}</div><span style='font-size:0.75rem; color:var(--text-secondary);'>Ingresos totales acumulados</span></div>", unsafe_allow_html=True)
+    k1.markdown(f"<div class='kpi'><h3>Padrón Total Institucional</h3><div class='v'>{t_pers}</div></div>", unsafe_allow_html=True)
+    k2.markdown(f"<div class='kpi'><h3>Total de Asistencias</h3><div class='v'>{t_asist}</div></div>", unsafe_allow_html=True)
     
     st.markdown("<br>#### Semáforo de Actividad de Hoy", unsafe_allow_html=True)
-    
     hoy_str = get_today_ar().isoformat()
     sc1, sc2, sc3 = st.columns(3)
     
     with sc1:
-        c_bel = df_asistencia[(df_asistencia["centro"] == C_BELEN) & (df_asistencia["fecha"] == hoy_str)]
-        if c_bel.empty: st.markdown("<div class='alert-box alert-danger'>Calle Belén: Falta Cargar</div>", unsafe_allow_html=True)
+        if df_asistencia[(df_asistencia["centro"] == C_BELEN) & (df_asistencia["fecha"] == hoy_str)].empty: st.markdown("<div class='alert-box alert-danger'>Calle Belén: Falta Cargar</div>", unsafe_allow_html=True)
         else: st.markdown("<div class='alert-box alert-success'>Calle Belén: Al Día</div>", unsafe_allow_html=True)
-        
     with sc2:
-        c_mar = df_asistencia[(df_asistencia["centro"] == C_MARANATHA) & (df_asistencia["fecha"] == hoy_str)]
-        if c_mar.empty: st.markdown("<div class='alert-box alert-danger'>Casa Maranatha: Falta Cargar</div>", unsafe_allow_html=True)
+        if df_asistencia[(df_asistencia["centro"] == C_MARANATHA) & (df_asistencia["fecha"] == hoy_str)].empty: st.markdown("<div class='alert-box alert-danger'>Casa Maranatha: Falta Cargar</div>", unsafe_allow_html=True)
         else: st.markdown("<div class='alert-box alert-success'>Casa Maranatha: Al Día</div>", unsafe_allow_html=True)
-        
     with sc3:
-        c_nud = df_asistencia[(df_asistencia["centro"] == C_NUDO) & (df_asistencia["fecha"] == hoy_str)]
-        if c_nud.empty: st.markdown("<div class='alert-box alert-danger'>Nudo a Nudo: Falta Cargar</div>", unsafe_allow_html=True)
+        if df_asistencia[(df_asistencia["centro"] == C_NUDO) & (df_asistencia["fecha"] == hoy_str)].empty: st.markdown("<div class='alert-box alert-danger'>Nudo a Nudo: Falta Cargar</div>", unsafe_allow_html=True)
         else: st.markdown("<div class='alert-box alert-success'>Nudo a Nudo: Al Día</div>", unsafe_allow_html=True)
 
     st.markdown("<br>#### Auditoría y Registro de Planillas", unsafe_allow_html=True)
     if not df_asistencia.empty:
         df_audit = df_asistencia.copy().sort_values("created_at", ascending=False)
-        
         df_audit_clean = df_audit[["fecha", "centro", "espacio", "presentes", "coordinador", "modo", "accion"]].rename(
             columns={"fecha": "Fecha", "centro": "Centro Barrial", "espacio": "Espacio", "presentes": "Asistentes", "coordinador": "Responsable", "modo": "Estado del Día", "accion": "Tipo Registro"}
         )
         st.dataframe(df_audit_clean, use_container_width=True, hide_index=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        csv_historico = df_audit_clean.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Descargar Base de Datos Histórica Completa", data=csv_historico, file_name="historico_asistencias_federacion.csv", mime="text/csv")
-    else:
-        st.markdown("<div class='alert-box alert-gray'>No se registran planillas en la base de datos de asistencia.</div>", unsafe_allow_html=True)
 
 # ======================================================
 # CONTROLADOR PRINCIPAL
 # ======================================================
 def main():
-    if not st.session_state.get("logged_in"): 
-        show_login_screen()
+    if not st.session_state.get("logged_in"): show_login_screen()
     
     u = st.session_state["usuario"]
     centro = st.session_state["centro_asignado"]
@@ -952,8 +856,7 @@ def main():
     df_asistencia, df_personas, df_ap, df_seg = load_all_data_supabase()
 
     list_tabs = ["Inicio", "Legajos", "Alta", "Reportes"]
-    if centro in ["Administración", "coordinacion"] or u.lower() == "admin": 
-        list_tabs.append("Global")
+    if centro in ["Administración", "coordinacion"] or u.lower() == "admin": list_tabs.append("Global")
     
     tabs = st.tabs(list_tabs)
     
@@ -963,18 +866,11 @@ def main():
         st.markdown("<hr style='opacity:0.2;'>", unsafe_allow_html=True)
         page_registrar_asistencia(df_personas, df_asistencia, centro, nombre, u)
         
-    with tabs[1]: 
-        page_personas_full(df_personas, df_ap, df_seg, centro, u)
-
-    with tabs[2]: 
-        page_alta_persona(df_personas, centro, u)
-        
-    with tabs[3]: 
-        page_reportes(df_asistencia, centro)
-        
+    with tabs[1]: page_personas_full(df_personas, df_ap, df_seg, centro, u)
+    with tabs[2]: page_alta_persona(df_personas, centro, u)
+    with tabs[3]: page_reportes(df_asistencia, centro)
     if "Global" in list_tabs and len(tabs) > 4:
-        with tabs[4]: 
-            page_global(df_asistencia, df_personas, df_ap)
+        with tabs[4]: page_global(df_asistencia, df_personas, df_ap)
 
 if __name__ == "__main__":
     main()
