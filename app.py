@@ -153,7 +153,7 @@ div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-second
 st.markdown(CSS, unsafe_allow_html=True)
 
 # ======================================================
-# CONEXIÓN SECURA A SUPABASE
+# CONEXIÓN SEGURA A SUPABASE
 # ======================================================
 @st.cache_resource
 def get_supabase_client() -> Client:
@@ -164,7 +164,7 @@ TZ_AR = pytz.timezone('America/Argentina/Buenos_Aires')
 def get_today_ar(): return datetime.now(TZ_AR).date()
 
 # ======================================================
-# METADATOS COMPLETA DE CALENDARIO DIARIO (Maranatha)
+# METADATOS COMPLETA DE CALENDARIO DIARIO
 # ======================================================
 C_BELEN = "Calle Belén"
 C_NUDO = "Nudo a Nudo"
@@ -323,7 +323,7 @@ def kpi_row_full(df_asistencia, centro):
     k3.markdown(f"<div class='kpi'><h3>Mes Actual</h3><div class='v'>{c3}</div></div>", unsafe_allow_html=True)
 
 # ======================================================
-# GESTIÓN OPERATIVA DE PESTAÑAS (Maranatha x Actividad)
+# GESTIÓN OPERATIVA DE PESTAÑAS
 # ======================================================
 def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible, usuario):
     st.markdown("<h3 style='margin-bottom:15px;'>Carga Diaria</h3>", unsafe_allow_html=True)
@@ -357,7 +357,7 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
             return
         with st.spinner("Guardando..."):
             try:
-                st.cache_data.clear() # ✅ Limpiador inmediato
+                st.cache_data.clear()
                 if forrar_reemplazo:
                     supabase.table("asistencia_diaria").delete().eq("fecha", fecha_str).eq("centro", centro_seleccionado).eq("espacio", espacio).execute()
                     supabase.table("asistencia_personas").delete().eq("fecha", fecha_str).eq("centro", centro_seleccionado).eq("espacio", espacio).execute()
@@ -434,7 +434,21 @@ def page_alta_persona(df_personas, centro, usuario):
         if st.form_submit_button("Registrar Legajo"):
             if nom.strip():
                 st.cache_data.clear()
-                supabase.table("personas").insert({"nombre": nom.strip(), "dni": dni.strip() if dni.strip() else None, "fecha_nacimiento": nac.strip() if jac := nac.strip() else None, "telefono": tel.strip() if tel.strip() else None, "domicilio": dom.strip() if dom.strip() else None, "etiquetas": etq.strip() if etq.strip() else None, "notas": not_p.strip() if not_p.strip() else None, "activo": "SI", "centro": c_dest, "usuario_alta": usuario}).execute()
+                # ✅ SOLUCIÓN AL SYNTAXERROR: Extraemos la fecha limpia antes de meterla en el diccionario plano
+                fecha_nac_final = nac.strip() if nac.strip() else None
+                
+                supabase.table("personas").insert({
+                    "nombre": nom.strip(), 
+                    "dni": dni.strip() if dni.strip() else None, 
+                    "fecha_nacimiento": fecha_nac_final, 
+                    "telefono": tel.strip() if tel.strip() else None, 
+                    "domicilio": dom.strip() if dom.strip() else None, 
+                    "etiquetas": etq.strip() if etq.strip() else None, 
+                    "notes": not_p.strip() if not_p.strip() else None, 
+                    "activo": "SI", 
+                    "centro": c_dest, 
+                    "usuario_alta": usuario
+                }).execute()
                 st.success("Alta dada de forma exitosa"); time.sleep(0.5); st.rerun()
 
 def page_reportes(df_asistencia, centro):
