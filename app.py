@@ -9,7 +9,7 @@ import re
 from supabase import create_client, Client
 
 # ======================================================
-# CONFIGURACIÓN DE TEMA OSCURO PREMIUM Y MOBILE
+# CONFIGURACIÓN DE TEMA CLARO PREMIUM Y MOBILE (ABSTRACCIÓN PURA)
 # ======================================================
 st.set_page_config(
     page_title="Hogar de Cristo Bahía Blanca",
@@ -20,12 +20,12 @@ st.set_page_config(
 CSS = """
 <style>
 :root {
-  --primary: #60A5FA;
-  --secondary: #A78BFA;
-  --background: #121212;
-  --surface: #1E1E1E;
-  --text-primary: #FFFFFF;
-  --text-secondary: #AAAAAA;
+  --primary: #2563EB;
+  --secondary: #7C3AED;
+  --background: #F8FAFC;
+  --surface: #FFFFFF;
+  --text-primary: #0F172A;
+  --text-secondary: #64748B;
   --radius-sm: 12px;
   --radius-lg: 18px;
 }
@@ -66,43 +66,46 @@ footer {visibility: hidden;}
     padding: 15px 20px;
     border-radius: var(--radius-lg);
     margin-bottom: 20px;
-    border: 1px solid rgba(255,255,255,0.05);
+    border: 1px solid rgba(0,0,0,0.05);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
-div.user-info { font-size: 1.1rem; font-weight: 700; line-height: 1.2; }
+div.user-info { font-size: 1.1rem; font-weight: 700; line-height: 1.2; color: var(--text-primary); }
 div.center-info { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary) !important; margin-top: 2px; }
 
-/* BOTONES PREMIUM */
+/* BOTONES PREMIUM (MODO CLARO ELEVADO) */
 .stButton>button, .stDownloadButton>button {
     background-color: var(--primary) !important;
-    color: #000000 !important;
+    color: #FFFFFF !important;
     border-radius: var(--radius-sm) !important;
     border: none !important;
-    font-weight: 800 !important;
+    font-weight: 700 !important;
     padding: 0.7rem 1rem !important;
     transition: 0.2s !important;
     width: 100% !important;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
 }
 .stButton>button:active, .stDownloadButton>button:active { transform: scale(0.98); } 
 
 /* Botón de salida sutil */
 div.logout-wrapper > div > button {
-    background-color: rgba(239, 68, 68, 0.15) !important;
-    color: #FCA5A5 !important;
-    border: 1px solid rgba(239, 68, 68, 0.2) !important;
+    background-color: rgba(239, 68, 68, 0.08) !important;
+    color: #EF4444 !important;
+    border: 1px solid rgba(239, 68, 68, 0.15) !important;
     padding: 0.4rem 0.8rem !important;
     font-size: 0.8rem !important;
     font-weight: 700 !important;
     border-radius: 10px !important;
     width: auto !important;
+    box-shadow: none !important;
 }
 
 .stTextInput>div>div>input, .stSelectbox>div>div>div, .stDateInput>div>div>input, .stTextArea>div>div>textarea, .stMultiSelect>div>div>div {
     border-radius: var(--radius-sm) !important;
-    border: 1px solid rgba(255,255,255,0.08) !important;
-    background-color: #1A1A1A !important;
+    border: 1px solid #E2E8F0 !important;
+    background-color: var(--surface) !important;
     color: var(--text-primary) !important;
     padding: 0.6rem;
 }
@@ -116,55 +119,57 @@ div.logout-wrapper > div > button {
 /* KPIs GEOMÉTRICOS */
 .kpi {
   border-radius: var(--radius-lg);
-  padding: 12px;
+  padding: 16px 12px;
   background: var(--surface);
-  border: 1px solid rgba(255,255,255,0.05);
+  border: 1px solid rgba(0,0,0,0.04);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.01);
   text-align: center;
   height: 100%;
 }
 .kpi h3 { margin: 0; font-size: 0.6rem; color: var(--text-secondary) !important; text-transform: uppercase; letter-spacing: 0.5px; }
-.kpi .v { font-size: 1.8rem; font-weight: 800; color: var(--primary) !important; line-height: 1; margin-top: 5px; }
+.kpi .v { font-size: 1.8rem; font-weight: 800; color: var(--primary) !important; line-height: 1; margin-top: 6px; }
 
-.alert-box { padding: 12px 15px; border-radius: var(--radius-sm); margin-bottom: 10px; font-size: 0.9rem; font-weight: 600; }
-.alert-danger { background-color: rgba(239, 68, 68, 0.15); color: #FCA5A5 !important; border: 1px solid rgba(239, 68, 68, 0.3); }
-.alert-success { background-color: rgba(34, 197, 94, 0.15); color: #86EFAC !important; border: 1px solid rgba(34, 197, 94, 0.3); }
-.alert-warning { background-color: rgba(245, 158, 11, 0.15); color: #FDE047 !important; border: 1px solid rgba(245, 158, 11, 0.3); }
-.alert-gray { background-color: var(--surface); color: var(--text-secondary) !important; border: 1px solid rgba(255,255,255,0.05); }
+.alert-box { padding: 12px 15px; border-radius: var(--radius-sm); margin-bottom: 10px; font-size: 0.9rem; font-weight: 600; text-align: center; }
+.alert-danger { background-color: #FEE2E2; color: #991B1B !important; border: 1px solid #FCA5A5; }
+.alert-success { background-color: #DCFCE7; color: #166534 !important; border: 1px solid #86EFAC; }
+.alert-warning { background-color: #FEF3C7; color: #92400E !important; border: 1px solid #FDE047; }
+.alert-gray { background-color: var(--surface); color: var(--text-secondary) !important; border: 1px solid #E2E8F0; }
 
-/* CONTROLADOR DE ACTIVIDADES (ESTILO SEMÁFORO GEOMÉTRICO) */
+/* CONTROLADOR DE ACTIVIDADES (ESTILO SEMÁFORO GEOMÉTRICO MODERNO) */
 .workshop-status-container {
     background: var(--surface);
     border-radius: var(--radius-lg);
     padding: 15px;
-    border: 1px solid rgba(255,255,255,0.05);
+    border: 1px solid #E2E8F0;
     margin-bottom: 20px;
 }
 .workshop-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.04);
+    padding: 10px 0;
+    border-bottom: 1px solid #F1F5F9;
 }
 .workshop-row:last-child { border-bottom: none; }
-.workshop-name { font-size: 0.85rem; font-weight: 600; color: #FFFFFF; }
-.workshop-badge { font-size: 0.7rem; font-weight: 700; padding: 3px 8px; border-radius: 6px; text-transform: uppercase; }
-.badge-done { background: rgba(34, 197, 94, 0.15); color: #86EFAC; border: 1px solid rgba(34, 197, 94, 0.2); }
-.badge-pending { background: rgba(239, 68, 68, 0.15); color: #FCA5A5; border: 1px solid rgba(239, 68, 68, 0.2); }
+.workshop-name { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+.workshop-badge { font-size: 0.7rem; font-weight: 700; padding: 4px 10px; border-radius: 6px; text-transform: uppercase; }
+.badge-done { background: #DCFCE7; color: #166534; border: 1px solid #86EFAC; }
+.badge-pending { background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; }
 
 /* FICHA DE LEGAJO MINIMALISTA Y GEOMÉTRICA */
 .profile-card {
     background-color: var(--surface);
     border-radius: var(--radius-lg);
     padding: 20px;
-    border: 1px solid rgba(255,255,255,0.06);
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.01);
     margin-bottom: 20px;
 }
 .profile-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
+    border-bottom: 1px solid #F1F5F9;
     padding-bottom: 12px;
     margin-bottom: 15px;
 }
@@ -176,31 +181,31 @@ div.logout-wrapper > div > button {
     text-transform: uppercase;
 }
 .profile-status { font-size: 0.75rem; font-weight: 600; }
-.status-active { color: #86EFAC; }
-.status-inactive { color: #FCA5A5; }
+.status-active { color: #166534; }
+.status-inactive { color: #991B1B; }
 .profile-name { font-size: 1.4rem; font-weight: 800; line-height: 1.1; margin-top: 2px; color: var(--text-primary); }
 .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
 .profile-meta-item { display: flex; flex-direction: column; }
 .profile-meta-label { font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
 .profile-meta-value { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); }
-.profile-footer-data { background-color: rgba(0, 0, 0, 0.15); padding: 12px; border-radius: var(--radius-sm); border: 1px solid rgba(255,255,255,0.03); }
+.profile-footer-data { background-color: #F8FAFC; padding: 12px; border-radius: var(--radius-sm); border: 1px solid #E2E8F0; }
 
-/* MENÚ FLOTANTE ELEVADO */
+/* MENÚ FLOTANTE ELEVADO MODO CLARO BLUR */
 .stTabs [data-baseweb="tab-list"] {
     position: fixed; 
     bottom: 50px !important; 
     left: 15px !important; 
     right: 15px !important;
-    background-color: rgba(30, 30, 30, 0.95) !important; 
+    background-color: rgba(255, 255, 255, 0.92) !important; 
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255,255,255,0.08) !important;
+    border: 1px solid #E2E8F0 !important;
     border-radius: 20px !important; 
     display: flex;
     justify-content: space-around;
     padding: 8px 5px !important; 
     z-index: 999999 !important; 
-    box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.08) !important;
 }
 .stTabs [data-baseweb="tab"] {
     flex-grow: 1; text-align: center; justify-content: center;
@@ -211,7 +216,7 @@ div.logout-wrapper > div > button {
 }
 .stTabs [aria-selected="true"] {
     color: var(--primary) !important; 
-    background-color: rgba(96, 165, 250, 0.12) !important; 
+    background-color: rgba(37, 99, 235, 0.08) !important; 
     border-radius: 14px;
 }
 .stTabs [aria-selected="true"]::after { display: none; }
@@ -222,14 +227,16 @@ div.logout-wrapper > div > button {
     padding: 12px 15px;
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
     margin-bottom: 12px;
-    border-top: 1px solid rgba(255,255,255,0.02);
-    border-right: 1px solid rgba(255,255,255,0.02);
-    border-bottom: 1px solid rgba(255,255,255,0.02);
+    border-top: 1px solid #F1F5F9;
+    border-right: 1px solid #F1F5F9;
+    border-bottom: 1px solid #F1F5F9;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.01);
 }
 
 .btn-wa {
     display: block; text-align: center; background-color: #25D366 !important; color: white !important;
     padding: 10px; border-radius: var(--radius-sm); text-decoration: none; font-weight: 700; font-size: 0.9rem; margin-top: 10px;
+    box-shadow: 0 4px 12px rgba(37, 211, 102, 0.2);
 }
 </style>
 """
@@ -278,15 +285,15 @@ C_NUDO = "Nudo a Nudo"
 C_MARANATHA = "Casa Maranatha"
 CENTROS = [C_BELEN, C_NUDO, C_MARANATHA]
 
-# ✅ CONFIGURACIÓN DEL CALENDARIO SEMANAL DE RELEVAMIENTO (IMAGE_816E1F)
+# ✅ CALENDARIO SEMANAL RELEVADO
 CALENDARIO_MARANATHA = {
-    0: ["Taller Costura CFP", "Apoyo sec.", "Plan FinEs", "General"], # Lunes
-    1: ["Taller de Arte", "La Ronda", "Plan FinEs", "General"],      # Martes
-    2: ["Taller Costura CFP", "Apoyo sec.", "General"],              # Miércoles
-    3: ["Apoyo Esc. Primario", "Almuerzo", "Fútbol Calle Belén", "Espacio Joven", "General"], # Jueves
-    4: ["Pre-Juvenil", "Plan FinEs", "General"],                    # Viernes
-    5: ["General"],                                                 # Sábado
-    6: ["General"]                                                  # Domingo
+    0: ["Taller Costura CFP", "Apoyo sec.", "Plan FinEs", "General"], 
+    1: ["Taller de Arte", "La Ronda", "Plan FinEs", "General"],      
+    2: ["Taller Costura CFP", "Apoyo sec.", "General"],              
+    3: ["Apoyo Esc. Primario", "Almuerzo", "Fútbol Calle Belén", "Espacio Joven", "General"], 
+    4: ["Pre-Juvenil", "Plan FinEs", "General"],                    
+    5: ["General"],                                                 
+    6: ["General"]                                                  
 }
 
 DEFAULT_ESPACIO = "General"
@@ -386,9 +393,9 @@ def show_login_screen():
                     except Exception as e: st.error(f"Error de conexión: {e}")
                     
     st.markdown("""
-    <div style='text-align: center; margin-top: 60px; font-size: 0.85rem; color: #444;'>
+    <div style='text-align: center; margin-top: 60px; font-size: 0.85rem; color: #64748B;'>
         Hogar de Cristo Bahía Blanca <br>
-        <a href='mailto:alejandrodelfuma@gmail.com' style='color: #60A5FA; text-decoration: none; font-weight: 600;'>
+        <a href='mailto:alejandrodelfuma@gmail.com' style='color: #2563EB; text-decoration: none; font-weight: 600;'>
             Soporte Técnico
         </a>
     </div>
@@ -399,8 +406,8 @@ def show_top_header(nombre, centro):
     col_inf, col_out = st.columns([3, 1])
     with col_inf:
         st.markdown(f"""
-        <div style='display:flex; align-items:center; gap:12px; background-color: var(--surface); padding: 10px 15px; border-radius: var(--radius-lg); border: 1px solid rgba(255,255,255,0.05);'>
-            <div style='background-color: var(--primary); width: 38px; height: 35px; border-radius: 50%; display:flex; align-items:center; justify-content:center; color:black; font-weight:bold; font-size:1rem;'>
+        <div style='display:flex; align-items:center; gap:12px; background-color: var(--surface); padding: 10px 15px; border-radius: var(--radius-lg); border: 1px solid rgba(0,0,0,0.05); box-shadow: 0 1px 2px rgba(0,0,0,0.02);'>
+            <div style='background-color: var(--primary); width: 38px; height: 35px; border-radius: 50%; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold; font-size:1rem;'>
                 {nombre[0].upper() if nombre else 'U'}
             </div>
             <div>
@@ -417,7 +424,7 @@ def show_top_header(nombre, centro):
         st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("<div style='margin-bottom:15px;'></div>", unsafe_allow_html=True)
 
-# ✅ SEMÁFORO DINÁMICO GEOMÉTRICO (SIN TEXTO CRUDO HTML) BASADO EN CALENDARIO DIARIO
+# ✅ SEMÁFORO DIARIO ADAPTADO A MODO CLARO NATIVO
 def show_workshop_monitor(df_asistencia, centro_seleccionado, fecha_seleccionada):
     if centro_seleccionado not in [C_MARANATHA]:
         return
@@ -425,7 +432,7 @@ def show_workshop_monitor(df_asistencia, centro_seleccionado, fecha_seleccionada
     st.markdown("<h4 style='font-size:0.9rem; margin-bottom:10px; color:var(--text-secondary); text-transform:uppercase;'>Control de Actividades para este Día</h4>", unsafe_allow_html=True)
     
     fecha_iso = fecha_seleccionada.isoformat()
-    dia_semana_num = fecha_seleccionada.weekday() # 0=Lunes, 6=Domingo
+    dia_semana_num = fecha_seleccionada.weekday() 
     
     actividades_del_dia = CALENDARIO_MARANATHA.get(dia_semana_num, ["General"])
     
@@ -533,10 +540,8 @@ def page_registrar_asistencia(df_personas, df_asistencia, centro, nombre_visible
         return
     fecha_str = fecha.isoformat()
     
-    # Renderizar el monitor de estado específico del día
     show_workshop_monitor(df_asistencia, centro_seleccionado, fecha)
     
-    # ✅ ASIGNACIÓN DINÁMICA DE ESPACIOS POR TALLER
     if centro_seleccionado == C_MARANATHA:
         dia_semana_idx = fecha.weekday()
         opciones_espacio = CALENDARIO_MARANATHA.get(dia_semana_idx, ["General"])
@@ -850,7 +855,7 @@ def page_reportes(df_asistencia, centro):
     
     m1, m2 = st.columns(2)
     with m1:
-        c_wow = "#86EFAC" if wow_pct >= 0 else "#FCA5A5"
+        c_wow = "#166534" if wow_pct >= 0 else "#991B1B"
         st.markdown(f"""
         <div class='kpi'>
             <h3>Semana vs Semana Anterior (WoW)</h3>
@@ -859,7 +864,7 @@ def page_reportes(df_asistencia, centro):
         </div>
         """, unsafe_allow_html=True)
     with m2:
-        c_mom = "#86EFAC" if mom_pct >= 0 else "#FCA5A5"
+        c_mom = "#166534" if mom_pct >= 0 else "#991B1B"
         st.markdown(f"""
         <div class='kpi'>
             <h3>Mes Actual vs Mes Anterior (MoM)</h3>
@@ -870,7 +875,7 @@ def page_reportes(df_asistencia, centro):
 
     st.markdown("<br>#### Evolución Lineal de Concurrencia", unsafe_allow_html=True)
     df_linea = df_c.groupby("fecha")["presentes_i"].sum().reset_index()
-    st.line_chart(df_linea.set_index("fecha")["presentes_i"], color="#60A5FA")
+    st.line_chart(df_linea.set_index("fecha")["presentes_i"], color="#2563EB")
 
     st.markdown("<br>#### Análisis del Flujo por Día de la Semana", unsafe_allow_html=True)
     df_c["dia_nombre"] = pd.to_datetime(df_c["fecha"]).dt.day_name()
@@ -878,7 +883,7 @@ def page_reportes(df_asistencia, centro):
     df_c["dia_nombre"] = df_c["dia_nombre"].map(map_dias)
     
     df_dias_agg = df_c.groupby("dia_nombre")["presentes_i"].mean().reindex(['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo']).fillna(0)
-    st.bar_chart(df_dias_agg, color="#A78BFA")
+    st.bar_chart(df_dias_agg, color="#7C3AED")
 
 # ======================================================
 # CONSOLE GLOBAL ADMIN (SUPERVISIÓN TOTAL DE COORDINADORES)
